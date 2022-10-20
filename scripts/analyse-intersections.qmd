@@ -1,0 +1,410 @@
+---
+title: "Analyse Kawakami and Freedman's intersections and create train, test, validation splits for both datasets"
+author: "Temi"
+date: 'Wednesday September 28 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+
+```{r import libraries}
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
+
+rm(list=ls())
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+```
+
+```{r}
+# pick a transcription factor
+TF <- 'FOXA1' #
+cell_line <- 'LuCaP' # a prostrate cancer cell line
+foxa1_motif <- 'foxa1.lncap.motif'
+
+# where is the TF chip-seq data, as well as other directories
+work_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+common_files_dir <- glue('{work_dir}/data/common-files/{TF}')
+
+#kawakami_dir <- glue('{work_dir}/data/kawakami-human')
+kawakami_impact_dir <- glue('{work_dir}/data/kawakami-human')
+kawakami_impact_split_dir <- glue('{kawakami_impact_dir}/kawakami-impact-split')
+
+freedman_dir <- glue('{work_dir}/data/freedman')
+freedman_impact_dir <- glue('{work_dir}/data/freedman')
+freedman_impact_split_dir <- glue('{freedman_dir}/freedman-impact-split')
+```
+
+
+## Here, I analyse the kawakami files
+```{r}
+allfiles <- list.files(glue("{kawakami_impact_split_dir}"))
+positive_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_positive_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tp_list <- lapply(positive_files, function(filename){
+    read.table(glue("{kawakami_impact_split_dir}/{filename}"))
+})
+
+names(tp_list) <- sapply(strsplit(positive_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+
+```
+
+Read in the peak info and chip peak files
+```{r}
+peak_info <- data.table::fread(glue("{kawakami_impact_split_dir}/FOXA1_LuCaP_true_positive_peak_info.txt"))
+
+# read in the intersected file
+chip_peak_headers <- c('chrom', 'start', 'end', 'num')
+chip_peak_file <- data.table::fread(glue('{kawakami_impact_split_dir}/../{TF}_intersected_files.bed'), select=chip_peak_headers)
+chip_peak_file[, 'strand'] <- '*'
+# split by num
+chip_peak_file_split <- split(chip_peak_file, f=chip_peak_file$num)
+```
+
+
+```{r}
+peak_distribution <- lapply(tp_list, function(each_tp){
+
+    peak_info_details <- peak_info[peak_info$peak_id %in% each_tp$V4, ]
+    peak_distribution <- sapply(strsplit(peak_info_details$data_id, split='_'), getElement, 2)
+    peak_distribution <- table(peak_distribution) |> as.data.frame() 
+    colnames(peak_distribution) <- c('count', 'freq')
+    return(peak_distribution)
+
+})
+
+names(peak_distribution) <- names(tp_list)
+pkd <- do.call(rbind, peak_distribution)
+```
+
+```{r}
+pkd$count <- sapply(strsplit(rownames(pkd), split='_'), function(each){
+    getElement(each, 2)
+})
+
+pkd <- pkd %>% dplyr::mutate(count=as.numeric(count)) %>% dplyr::arrange(count)
+```
+
+```{r}
+chip_distribution <- sapply(chip_peak_file_split, nrow) |> as.data.frame()
+chip_distribution$count <- row.names(chip_distribution)
+colnames(chip_distribution) <- c('freq_chip', 'count')
+
+pkd_kawakami <- merge(pkd, chip_distribution, by='count')
+
+row.names(pkd_kawakami) <- pkd_kawakami$count
+pkd_kawakami$count <- NULL
+
+colnames(pkd_kawakami) <- c('chip+motif', 'chip')
+
+```
+
+```{r}
+bp_kawakami <- barplot(t(pkd_kawakami), ylab='Number of peaks', xlab='Number of files intersected', beside=T, legend = colnames(pkd_kawakami), ylim=c(0, max(pkd_kawakami)), font.axis=2)
+
+mtext('Kawakami (FOXA1): Number of ChIP-seq peaks overlapped with true, known motifs')
+```
+
+
+```{r}
+# bp_kawakami <- barplot(pkd$freq, names.arg=pkd$count, 
+#     ylim=c(0, max(pkd$freq + 30000)), 
+#     ylab='No. of overlapping true ChIP peaks', xlab='Number of files')
+
+# #bp <- axis(1, at=1:length(bedfiles_names), labels=F, tick=T)
+# text(x=bp_kawakami, y=pkd$freq, label=pkd$freq, cex=0.8, pos=4, srt=90) 
+# mtext('Kawakami: Number of ChIP-seq peaks overlapped with known motifs')
+```
+
+```{r}
+# ====
+true_positives <- lapply(seq_along(tp_list), function(i){
+    each_tp <- tp_list[[i]][, 1:3]
+    each_tp$binding_count <- getElement(strsplit(names(tp_list)[i], split='_'), 1)[2]
+    return(each_tp)
+})
+
+true_positives <- do.call(rbind, true_positives)
+colnames(true_positives) <- c('chr', 'start', 'end', 'binding_counts')
+
+true_positives <- true_positives %>% dplyr::arrange(chr, start)
+
+# false positives
+false_positives <- chip_peak_file[, 1:3]
+
+fp <- false_positives[!(chrom %in% true_positives$chr & start %in% true_positives$start & end %in% true_positives$end), ]
+```
+
+
+
+## Freedman data
+```{r}
+# =======================
+# read in the peak files
+peak_info <- data.table::fread(glue("{freedman_impact_split_dir}/{TF}_{cell_line}_true_positive_peak_info.txt"))
+
+allfiles <- list.files(glue("{freedman_impact_split_dir}"))
+positive_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_positive_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tp_list <- lapply(positive_files, function(filename){
+    read.table(glue("{freedman_impact_split_dir}/{filename}"))
+})
+
+names(tp_list) <- sapply(strsplit(positive_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+```
+
+```{r}
+peak_distribution <- lapply(tp_list, function(each_tp){
+
+    peak_info_details <- peak_info[peak_info$peak_id %in% each_tp$V4, ]
+    peak_distribution <- sapply(strsplit(peak_info_details$data_id, split='_'), getElement, 2)
+    peak_distribution <- table(peak_distribution) |> as.data.frame() 
+    colnames(peak_distribution) <- c('count', 'freq')
+    return(peak_distribution)
+
+})
+
+names(peak_distribution) <- names(tp_list)
+pkd <- do.call(rbind, peak_distribution)
+
+```
+
+```{r}
+# read in the intersected file
+chip_peak_headers <- c('chrom', 'start', 'end', 'num')
+chip_peak_file <- data.table::fread(glue('{freedman_impact_dir}/{TF}_intersected_chip.bed'), select=chip_peak_headers)
+chip_peak_file[, 'strand'] <- '*'
+# split by num
+chip_peak_file_split <- split(chip_peak_file, f=chip_peak_file$num)
+```
+
+```{r}
+
+pkd$count <- sapply(strsplit(names(peak_distribution), split='_'), function(each){
+    getElement(each, 2)
+})
+
+pkd <- pkd %>% dplyr::mutate(count=as.numeric(count)) %>% dplyr::arrange(count)
+```
+
+```{r}
+chip_distribution <- sapply(chip_peak_file_split, nrow) |> as.data.frame()
+chip_distribution$count <- row.names(chip_distribution)
+colnames(chip_distribution) <- c('freq_chip', 'count')
+
+pkd_freedman <- merge(pkd, chip_distribution, by='count')
+
+row.names(pkd_freedman) <- pkd_freedman$count
+pkd_freedman$count <- NULL
+
+colnames(pkd_freedman) <- c('chip+motif', 'chip')
+```
+
+```{r}
+bp_freedman <- barplot(t(pkd_freedman), ylab='Number of peaks', xlab='Number of files intersected', beside=T, legend = colnames(pkd_freedman), ylim=c(0, max(pkd_freedman)), font.axis=2)
+
+mtext('Freedman (FOXA1): Number of ChIP-seq peaks overlapped with true, known motifs')
+```
+
+```{r}
+options(scipen=10000)
+```
+
+```{r}
+
+layout(matrix(c(1, 2), nrow=2, ncol=1))
+#par(mar = c(5, 4, 0, 0))
+
+bp_kawakami <- barplot(t(pkd_kawakami), ylab='Number of peaks', xlab='Number of files intersected', beside=T, legend = colnames(pkd_kawakami), ylim=c(0, max(pkd_kawakami)), font.axis=2, yaxt='n')
+mtext('Kawakami (FOXA1): Number of ChIP-seq peaks overlapped with true, known motifs')
+axis(2, at=pkd_kawakami$chip, labels=pkd_kawakami$chip)
+
+
+bp_freedman <- barplot(t(pkd_freedman), ylab='Number of peaks', xlab='Number of individuals intersected', beside=T, legend = colnames(pkd_freedman), ylim=c(0, max(pkd_freedman)), font.axis=2, yaxt='n')
+mtext('Freedman (FOXA1): Number of ChIP-seq peaks overlapped with true, known motifs')
+axis(2, at=pkd_freedman$chip, labels=pkd_freedman$chip)
+```
+
+```{r}
+pkd_kawakami$perc_overall <- (pkd_kawakami$`chip+motif` / pkd_kawakami$chip) * 100
+pkd_freedman$perc_overall <- (pkd_freedman$`chip+motif` / pkd_freedman$chip) * 100
+```
+
+```{r}
+layout(matrix(c(1, 2), nrow=2, ncol=1))
+
+perc_kawakami <- barplot(pkd_kawakami$perc_overall, ylab='% of chip+motif out of chip only', xlab='Number of files intersected', ylim=c(0, max(pkd_kawakami$perc_overall + 10)), font.axis=2, col='chocolate3', names.arg=row.names(pkd_kawakami))
+
+text(x=perc_kawakami, y=pkd_kawakami$perc_overall + 1, pos=3, label=round(pkd_kawakami$perc_overall, 2), cex=0.6, srt=90)
+
+mtext('Kawakami (FOXA1): proportion of truly bound regions per intersected files')
+
+perc_freedman <- barplot(pkd_freedman$perc_overall, ylab='% of chip+motif out of chip only', xlab='Number of individuals intersected', ylim=c(0, max(pkd_freedman$perc_overall + 10)), font.axis=2, col='darkslategrey', names.arg=row.names(pkd_freedman))
+
+text(x=perc_freedman, y=pkd_freedman$perc_overall + 1, pos=3, label=round(pkd_freedman$perc_overall, 2), cex=0.6)
+
+mtext('Freedman (FOXA1): proportion of truly bound regions per intersected individual ChIP-seq data')
+
+```
+
+
+
+
+
+# Kawakami True positives and negatives
+
+```{r}
+allfiles <- list.files(glue("{kawakami_impact_split_dir}"))
+positive_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_positive_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tp_list <- lapply(positive_files, function(filename){
+    read.table(glue("{kawakami_impact_split_dir}/{filename}"))
+})
+
+names(tp_list) <- sapply(strsplit(positive_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+
+```
+
+```{r}
+negative_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_negative_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tn_list <- lapply(negative_files, function(filename){
+    read.table(glue("{kawakami_impact_split_dir}/{filename}"))
+})
+
+names(tn_list) <- sapply(strsplit(negative_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+```
+
+
+```{r}
+true_positives <- lapply(seq_along(tp_list), function(i){
+    each_tp <- tp_list[[i]][, 1:3]
+    each_tp$binding_count <- getElement(strsplit(names(tp_list)[i], split='_'), 1)[2]
+    return(each_tp)
+})
+
+true_negatives <- lapply(seq_along(tn_list), function(i){
+    each_tp <- tn_list[[i]][, 1:3]
+    each_tp$binding_count <- 0
+    return(each_tp)
+})
+
+true_positives <- do.call(rbind, true_positives)
+colnames(true_positives) <- c('chr', 'start', 'end', 'binding_counts')
+true_positives <- true_positives %>% dplyr::arrange(chr, start)
+true_positives$name <- paste('TP', 1:nrow(true_positives), sep='')
+
+true_negatives <- do.call(rbind, true_negatives)
+colnames(true_negatives) <- c('chr', 'start', 'end', 'binding_counts')
+true_negatives <- true_negatives %>% dplyr::arrange(chr, start) %>% distinct()
+true_negatives$name <- paste('TN', 1:nrow(true_negatives), sep='')
+```
+
+Select 5000 TPs and TNs for training and 1000 TPs and TNs for test and 1000 TPs and TNs for validation
+
+First randomly select 7000 regions
+
+```{r}
+train_set <- 5000
+test_set <- 1000
+val_set <- 1000
+
+set.seed(2022) # shuffle the data
+tp_7000 <- true_positives[sample(1:nrow(true_positives), size=7000, replace=F), ]
+tn_7000 <- true_negatives[sample(1:nrow(true_negatives), size=7000, replace=F), ]
+
+# select the train, test and validation indices etc
+split_indices <- base::split(1:7000, sample(rep(1:3, c(train_set, test_set, val_set)), replace=F))
+```
+
+```{r}
+save_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/train-test-val/kawakami'
+if(! dir.exists(save_dir)){
+    dir.create(save_dir)
+}
+```
+
+
+```{r}
+data_designations <- lapply(seq_along(split_indices), function(i){
+
+    a <- tp_7000[split_indices[[i]], ]
+    b <- tn_7000[split_indices[[i]], ]
+    c <- rbind(a, b)
+    return(c)
+
+    #write.csv(c, file=glue('{save_dir}/kawakami_{split_names[i]}_data.csv'), quote=F, row.names=F)
+})
+```
+
+```{r}
+gsize <- read.table(glue('/projects/covid-ct/imlab/users/temi/projects/TFXcan/data/hg19.sizes'))
+
+expand_region <- function(dt, genome_size, both=128, left=NULL, right=NULL, create_granges=F, save_as_bed=T){
+    colnames(dt) <- c('chr','motif_center_start','motif_center_end','binding_count','motif_name')
+    colnames(genome_size) <- c('chr', 'size')
+    
+    if(both){
+        left <- both/2
+        right <- both/2
+    }
+    
+    center <- (dt[, 'motif_center_start'] + dt[, 'motif_center_end'])/2
+    dt$start <- center - left
+    dt$end <- center + right
+    
+    # check if any is greater than the chromosome size
+    #dt_split <- split(dt, f = dt[, 'chr'])
+    dt_list <- lapply(genome_size$chr, function(each_chr){
+        which_chr <- dt[dt$chr == each_chr, ]
+        chr_size <- genome_size$size[genome_size$chr == each_chr]
+        which_greater <- which(which_chr$end > chr_size)
+        if(length(which_greater) > 0){
+            which_chr[which_greater, ]$end <- chr_size
+        }
+        
+        return(which_chr)
+    })
+    
+    dt <- do.call(rbind, dt_list)
+    
+    return(dt)
+}
+
+# extend both the TP and TN by 
+training_data <- expand_region(data_designations[[1]], gsize, both = 393216)
+test_data <- expand_region(data_designations[[2]], gsize, both = 393216)
+validation_data <- expand_region(data_designations[[3]], gsize, both = 393216)
+```
+
+```{r}
+split_names <- c('training', 'test', 'validation')
+data <- list(training_data, test_data, validation_data)
+
+lapply(seq_along(split_names), function(i){
+
+    dt <- data[[i]]
+
+    write.table(x=dt[!dt$chr %in% 'chrY', ], file=glue('{save_dir}/kawakami_{split_names[i]}_motif_regions.txt'), quote = F, row.names = F, col.names = T)
+})
+```
+
+
+
+
+

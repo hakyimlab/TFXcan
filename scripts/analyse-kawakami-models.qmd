@@ -1,0 +1,516 @@
+---
+title: "Build Kawakami models to be concordant with Freedman's and compare"
+author: "Temi"
+date: 'Wednesday Oct 19 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+rm(list=ls())
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(glmnet)
+library(doMC)
+library(ROCR)
+library(Matrix)
+library(reshape2)
+library(tidyverse)
+library(foreach)
+library(doParallel)
+```
+
+```{r}
+plots_dir <- '../plots'
+data_dir <- '../enformer_predictions/train-test-val'
+models_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/models'
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+```
+```{r}
+# pick a transcription factor
+TF <- 'FOXA1' #
+cell_line <- 'LuCaP' # a prostrate cancer cell line
+foxa1_motif <- 'foxa1.lncap.motif'
+
+# where is the TF chip-seq data, as well as other directories
+work_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+common_files_dir <- glue('{work_dir}/data/common-files/{TF}')
+
+#kawakami_dir <- glue('{work_dir}/data/kawakami-human')
+kawakami_impact_dir <- glue('{work_dir}/data/kawakami-human')
+kawakami_impact_split_dir <- glue('{kawakami_impact_dir}/kawakami-impact-split')
+
+freedman_dir <- glue('{work_dir}/data/freedman')
+freedman_impact_dir <- glue('{work_dir}/data/freedman')
+freedman_impact_split_dir <- glue('{freedman_dir}/freedman-impact-split')
+```
+For plotting, I need to load in the enformer annotations
+```{r}
+enformer_annotations <- data.table::fread('../info-files/enformer_tracks_annotated-resaved.txt')
+enformer_annotations <- enformer_annotations[!is.na(enformer_annotations$assay), ]
+```
+
+```{r}
+# read in the saved models
+kawakami_rdata <- readRDS(glue('{models_dir}/kawakami_small_models.RData'))
+```
+
+Kawakami small data models
+```{r}
+test_data_list <- kawakami_rdata$test_data
+kawakami_models <- kawakami_rdata$models
+```
+
+### Here I need to test the kawakami models on Freedman's regions or peaks and see how they correlates
+```{r}
+# where are the Kawakami defined peaks?
+#peak_info <- data.table::fread(glue("{kawakami_impact_split_dir}/FOXA1_LuCaP_true_positive_peak_info.txt"))
+
+# read in the intersected file
+chip_peak_headers <- c('chrom', 'start', 'end', 'num')
+kawakami_chip_peak_file <- data.table::fread(glue('{kawakami_impact_split_dir}/../{TF}_intersected_files.bed'), select=chip_peak_headers)
+kawakami_chip_peak_file[, 'strand'] <- '*'
+
+```
+
+### Freedman defined peaks (positive and negative)
+```{r}
+# where are the Freedman defined peaks : these ones have been intersected with motifs
+#peak_info <- data.table::fread(glue("{freedman_impact_split_dir}/FOXA1_LuCaP_true_positive_peak_info.txt"))
+
+# read in the intersected file
+chip_peak_headers <- c('chrom', 'start', 'end', 'num')
+freedman_chip_peak_file <- data.table::fread(glue('{freedman_impact_split_dir}/../{TF}_intersected_chip.bed'), select=chip_peak_headers)
+freedman_chip_peak_file[, 'strand'] <- '*'
+```
+
+```{r}
+# these are negatives only (look at tn_list, ignore the others)
+allfiles <- list.files(glue("{freedman_impact_split_dir}"))
+positive_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_positive_bed.txt')]
+negative_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_negative_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tp_list <- lapply(positive_files, function(filename){
+    read.table(glue("{freedman_impact_split_dir}/{filename}"))
+})
+tn_list <- lapply(negative_files, function(filename){
+    read.table(glue("{freedman_impact_split_dir}/{filename}"))
+})
+
+names(tp_list) <- sapply(strsplit(positive_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+names(tn_list) <- sapply(strsplit(negative_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+```
+```{r}
+
+```
+
+
+### what Kawakami regions were used for training? (these have well-define train and test sets already)
+```{r}
+save_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/data/train-test-val'
+kawakami_train_data <- data.table::fread(glue("{save_dir}/kawakami_training_motif_regions.txt"))
+kawakami_test_data <- data.table::fread(glue("{save_dir}/kawakami_test_motif_regions.txt"))
+head(kawakami_train_data)
+dim(kawakami_train_data)
+```
+
+```{r}
+# need the prediction log to know what ENFORMER predictions are available
+kawakami_training_prediction_log = data.table::fread(glue('{work_dir}/log/log_ref_kawakami_{TF}_{cell_line}.csv'))
+kawakami_test_prediction_log = data.table::fread(glue('{work_dir}/log/log_ref_kawakami-test_{TF}_{cell_line}.csv'))
+```
+
+### Naming conventions need to be similar
+```{r}
+# rbind all the freedman negatives and reduce them and make a granges object out of them
+all_negatives <- do.call('rbind', tn_list)
+all_negatives <- all_negatives[c('V1', 'V2', 'V3')]
+rownames(all_negatives) <- NULL
+colnames(all_negatives) <- c('chr', 'start', 'end')
+
+freedman_granges_neg <- with(all_negatives, GRanges(seqnames=chr, IRanges(start = start, end = end))) |> GenomicRanges::reduce()
+freedman_granges_neg
+```
+
+```{r}
+colnames(freedman_chip_peak_file)[1] <- 'chr'
+freedman_granges_pos <- with(freedman_chip_peak_file, 
+    GenomicRanges::GRanges(seqnames=chr, IRanges(start = start, end = end)))
+freedman_granges_pos
+```
+
+
+```{r}
+# for these, I have predictions
+ttv_dir <- '../data/train-test-val'
+kawakami_region_info <- data.table::fread(glue('{ttv_dir}/kawakami_test_motif_regions.txt'))
+head(kawakami_region_info)
+```
+
+Need to find regions in kawakami regions info that are in freedman chip peak file
+```{r}
+# make both into a granges
+#kawakami_iranges = base::with(kawakami_region_info |> as.data.frame(), IRanges(start = motif_center_start, end = motif_center_end, names = motif_name))
+
+# I have the train and test sets, so I can apply my functions on the list
+kawakami_data <- list(kawakami_train_data[kawakami_train_data$motif_name %in% kawakami_training_prediction_log$motif, ], kawakami_test_data[kawakami_test_data$motif_name %in% kawakami_test_prediction_log$motif, ])
+kawakami_data_type <- c('training', 'test')
+```
+
+```{r}
+save_dir <- '../defined_regions'
+
+lapply(seq_along(kawakami_data), function(i){
+
+    tt <- kawakami_data[[i]]
+
+    # kawakami_granges <- GenomicRanges::makeGRangesFromDataFrame(df=tt |> as.data.frame(), seqnames.field="chr", start.field='motif_center_start', end.field='motif_center_end', keep.extra.columns=F, ignore.strand=T, seqinfo=NULL)
+
+    kawakami_granges <- with(tt, GenomicRanges::GRanges(seqnames=chr, IRanges(start = motif_center_start, end = motif_center_end, names = motif_name)))
+    # since the kawakami granges are smaller (defined by the motifs), check if they are within freedman granges - those, you will select from freedman
+
+    # getting the negatives 
+    complete_overlaps_neg <- findOverlaps(query=kawakami_granges, subject=freedman_granges_neg, type='within')
+    common_overlaps_neg <- data.frame(tt[queryHits(complete_overlaps_neg), ], all_negatives[subjectHits(complete_overlaps_neg), ])
+
+    complete_overlaps_pos <- findOverlaps(query=kawakami_granges, subject=freedman_granges_pos, type='within')
+    common_overlaps_pos <- data.frame(tt[queryHits(complete_overlaps_pos), ], freedman_chip_peak_file[subjectHits(complete_overlaps_pos), ])
+
+    # select the positives and negatives
+    freedman_negatives <- common_overlaps_neg[c('chr.1', 'start.1', 'end.1', 'motif_name')]
+    rownames(freedman_negatives) <- NULL
+    colnames(freedman_negatives) <- c('chr', 'start', 'end', 'motif_name')
+    freedman_negatives$num <- 0
+    freedman_negatives$class <- 'TN'
+
+    freedman_positives <- common_overlaps_pos[c('chr.1', 'start.1', 'end.1', 'motif_name')]
+    rownames(freedman_positives) <- NULL
+    colnames(freedman_positives) <- c('chr', 'start', 'end', 'motif_name')
+    freedman_positives$num <- common_overlaps_pos$num
+    freedman_positives$class <- 'TP'
+
+    # bind and save
+    write.table(rbind(freedman_negatives, freedman_positives), file=glue('{save_dir}/freedman_{kawakami_data_type[i]}_regions.txt'), row.names=F, quote=F)
+
+    # select the positives and negatives
+    kawakami_negatives <- common_overlaps_neg[c('chr', 'motif_center_start', 'motif_center_end', 'binding_count', 'motif_name')]
+    rownames(kawakami_negatives) <- NULL
+    colnames(kawakami_negatives) <- c('chr', 'start', 'end', 'num', 'motif_name')
+    kawakami_negatives$class <- 'TN'
+
+    kawakami_positives <- common_overlaps_pos[c('chr', 'motif_center_start', 'motif_center_end', 'binding_count', 'motif_name')]
+    rownames(kawakami_positives) <- NULL
+    colnames(kawakami_positives) <- c('chr', 'start', 'end', 'num', 'motif_name')
+    kawakami_positives$class <- 'TP'
+
+    # bind and save
+    write.table(rbind(kawakami_negatives, kawakami_positives), file=glue('{save_dir}/kawakami_{kawakami_data_type[i]}_regions.txt'), row.names=F, quote=F)
+
+
+}) |> suppressWarnings()
+
+# freedman_granges <- with(freedman_chip_peak_file, GenomicRanges::Granges(chrom, IRanges(start = start, end = end, names = motif_name))
+```
+
+```{r}
+kawakami_granges <- with(kawakami_region_info, 
+    GenomicRanges::GRanges(seqnames=chr, IRanges(start = motif_center_start, end = motif_center_end, names = motif_name)))
+
+# freedman_granges_pos <- with(freedman_chip_peak_file, 
+#     GenomicRanges::GRanges(seqnames=chrom, IRanges(start = start, end = end)))
+```
+
+```{r}
+# helpful link: https://www.biostars.org/p/98151/
+
+# since the kawakami granges are smaller (defined by the motifs), check if they are within freedman granges - those, you will select from freedman
+complete_overlaps_neg <- findOverlaps(query=kawakami_granges, subject=freedman_granges_neg, type='within')
+common_overlaps_neg <- data.frame(kawakami_region_info[queryHits(complete_overlaps_neg), ], all_negatives[subjectHits(complete_overlaps_neg), ])
+```
+
+```{r}
+complete_overlaps_pos <- findOverlaps(query=kawakami_granges, subject=freedman_granges_pos, type='within')
+common_overlaps_pos <- data.frame(kawakami_region_info[queryHits(complete_overlaps_pos), ], freedman_chip_peak_file[subjectHits(complete_overlaps_pos), ])
+```
+
+```{r}
+
+```
+
+```{r}
+# select the positives and negatives
+freedman_negatives <- common_overlaps_neg[c('V1', 'V2', 'V3')]
+rownames(freedman_negatives) <- NULL
+colnames(freedman_negatives) <- c('chr', 'start', 'end')
+freedman_negatives$num <- 0
+freedman_negatives$class <- 'TN'
+
+freedman_positives <- common_overlaps_pos[c('chrom', 'start.1', 'end.1', 'num')]
+rownames(freedman_positives) <- NULL
+colnames(freedman_positives) <- c('chr', 'start', 'end', 'num')
+freedman_positives$class <- 'TP'
+
+# bind and save
+# write.table(rbind(freedman_negatives, freedman_positives), file=glue('{save_dir}/freedman_tp_tn_regions.txt'), row.names=F, quote=F)
+```
+
+```{r}
+# select the positives and negatives
+kawakami_negatives <- common_overlaps_neg[c('chr', 'motif_center_start', 'motif_center_end', 'binding_count', 'motif_name')]
+rownames(kawakami_negatives) <- NULL
+colnames(kawakami_negatives) <- c('chr', 'start', 'end', 'num', 'motif_name')
+kawakami_negatives$class <- 'TN'
+
+kawakami_positives <- common_overlaps_pos[c('chr', 'motif_center_start', 'motif_center_end', 'binding_count', 'motif_name')]
+rownames(kawakami_positives) <- NULL
+colnames(kawakami_positives) <- c('chr', 'start', 'end', 'num', 'motif_name')
+kawakami_positives$class <- 'TP'
+
+# bind and save
+write.table(rbind(kawakami_negatives, kawakami_positives), file=glue('{save_dir}/kawakami_tp_tn_regions.txt'), row.names=F, quote=F)
+```
+
+\newpage
+
+## testing the models across
+```{r}
+save_dir <- '../defined_regions'
+kawakami_regions <- data.table::fread(glue('{save_dir}/kawakami_training_regions.txt'))
+freedman_regions <- data.table::fread(glue('{save_dir}/freedman_training_regions.txt'))
+```
+
+```{r}
+# first I can just correlate the observed values in the predictions
+plot(kawakami_regions$num, freedman_regions$num)
+abline(lm(kawakami_regions$num ~ freedman_regions$num), col='red')
+#lines(lowess(kawakami_regions$num ~ freedman_regions$num), col='blue') # use loess later
+```
+
+```{r}
+a <- ifelse(kawakami_regions$num > 0, 1, 0)
+b <- ifelse(freedman_regions$num > 0, 1, 0)
+# convert to 1s and zeros and do the same thing
+plot(a, b)
+#abline(lm(kawakami_regions$num ~ freedman_regions$num), col='red')
+#lines(lowess(kawakami_regions$num, freedman_regions$num), col='blue')
+```
+
+\newpage
+# Build Kawakami models (have to do this again)
+```{r}
+motifs_path <- '../data/train-test-val'
+plots_dir <- '../plots'
+data_dir <- '../defined_regions/train-test-val'
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+
+train_motifs <- data.table::fread(glue('{motifs_path}/kawakami_training_motif_regions.txt'))
+test_motifs <- data.table::fread(glue('{motifs_path}/kawakami_test_motif_regions.txt'))
+```
+
+```{r}
+enformer_annotations <- data.table::fread('../info-files/enformer_tracks_annotated-resaved.txt')
+enformer_annotations <- enformer_annotations[!is.na(enformer_annotations$assay), ]
+```
+
+```{r}
+test_models <- function(model, X_test_set, y_test_set){
+    features <- model$glmnet.fit$beta |> rownames()
+    X_test_set <- X_test_set[, features]
+    assess.glmnet(model, newx = X_test_set, newy = y_test_set) |> unlist()
+}
+```
+
+### Find a way to deal with the duplicates
+for now, remove them
+
+```{r}
+freedman_train_motifs <- data.table::fread(glue('{data_dir}/../freedman_training_regions.txt'))
+freedman_test_motifs <- data.table::fread(glue('{data_dir}/../freedman_test_regions.txt'))
+```
+
+```{r}
+n_occur <- freedman_test_motifs$motif_name |> table() |> as.data.frame()
+duplicates_1 <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+freedman_test_motifs[freedman_test_motifs$motif_name %in% n_occur$Var1[n_occur$Freq > 1], ]
+```
+
+```{r}
+n_occur <- freedman_train_motifs$motif_name |> table() |> as.data.frame()
+duplicates_2 <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+freedman_train_motifs[freedman_train_motifs$motif_name %in% n_occur$Var1[n_occur$Freq > 1], ]
+```
+
+```{r}
+duplicates_occur <- c(duplicates_1, duplicates_2) #|> unfactor()
+```
+
+
+## just using the aggByCenter data
+```{r}
+dt_center <- data.table::fread(glue('{data_dir}/aggByCenter_{TF}_{cell_line}.csv'))
+dt_center_train <- dt_center[(dt_center$training_type == 'train') & (! dt_center$target %in% duplicates_occur), ]
+dt_center_test <- dt_center[(dt_center$training_type == 'test') & (! dt_center$target %in% duplicates_occur), ]
+```
+
+
+```{r}
+dt_center_train$binary_counts |> table(); dt_center_test$binary_counts |> table()
+```
+
+### I have more test data than training data because I haven't yet made enough predictions from ENFORMER for the training set. So, I will switch the training set for the test and vice versa (nothing has changed, but just which data I use for training vs testing)
+
+```{r}
+new_center_train <- as.data.frame(dt_center_test)
+new_center_test <- as.data.frame(dt_center_train)
+new_center_train$binary_counts |> table(); new_center_test$binary_counts |> table()
+```
+
+I may also want to model the binding counts. Since I have not shuffled the data before now, I can 
+
+```{r}
+# shuffle the data
+set.seed(2022)
+new_center_train <- new_center_train[sample(1:nrow(new_center_train)), ]
+new_center_test <- new_center_test[sample(1:nrow(new_center_test)), ]
+
+X_train <- new_center_train[, -c(1,2,3,4)] |> as.matrix()
+y_train <- new_center_train[, c(1,2,3,4)] |> as.data.frame()
+
+X_test <- new_center_test[, -c(1,2,3,4)] |> as.matrix()
+y_test <- new_center_test[, c(1,2,3,4)] |> as.data.frame()
+```
+
+or combine the train and test into one large data anyway, since this is just to test on Freedman and see
+
+```{r}
+big_X_train <- rbind(X_train, X_test)
+big_y_train <- rbind(y_train, y_test) |> as.data.frame()
+```
+
+### Modeling
+
+```{r}
+# register a parallel backend 
+#registerDoMC(cores = 4)
+```
+
+```{r}
+enet_center_binary <- glmnet::cv.glmnet(x=big_X_train[complete.cases(big_X_train),], y=big_y_train[,'binary_counts'][complete.cases(big_X_train)], family = "binomial", 
+type.measure = "auc", alpha = 0.5, keep=T)
+
+# normalizing the log of these values + 1
+ylinear_train <- log10(big_y_train[,'binding_counts'][complete.cases(big_X_train)] + 1 )/sum(log10(big_y_train[,'binding_counts'][complete.cases(big_X_train)] + 1 ))
+
+enet_center_linear <- glmnet::cv.glmnet(x=big_X_train[complete.cases(big_X_train),], y=ylinear_train, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T) #alpha: mixing term, lasso, 1-alpha ridge.
+```
+
+
+```{r}
+enet_center_binary <- glmnet::cv.glmnet(x=X_train[complete.cases(X_train),], y=y_train[,'binary_counts'][complete.cases(X_train)], family = "binomial", 
+type.measure = "auc", alpha = 0.5, keep=T) #alpha: mixing term, lasso, 1-alpha ridge.
+```
+
+```{r}
+# enet_center_multinomial <- glmnet::cv.glmnet(x=X_train[complete.cases(X_train),], y=y_train[,'binding_counts'][complete.cases(X_train)] + 1, family = "multinomial", 
+# type.measure = "auc", alpha = 0.5, parallel=T, keep=T) #alpha: mixing term, lasso, 1-alpha ridge.
+
+# normalizing the log of these values + 1
+ylinear_train <- log10(y_train[,'binding_counts'][complete.cases(X_train)] + 1 )/sum(log10(y_train[,'binding_counts'][complete.cases(X_train)] + 1 ))
+
+enet_center_linear <- glmnet::cv.glmnet(x=X_train[complete.cases(X_train),], y=ylinear_train, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T) #alpha: mixing term, lasso, 1-alpha ridge.
+```
+
+```{r}
+test_models(enet_center_binary, X_test, y_test[, 'binary_counts'])
+```
+
+```{r}
+ylinear_test <- log10(y_test[,'binding_counts'][complete.cases(X_test)] + 1 )/sum(log10(y_test[,'binding_counts'][complete.cases(X_test)] + 1 ))
+test_models(enet_center_linear, X_test, ylinear_test)
+```
+
+# I can predict on the same training Kawakami and compare with Freedman
+
+```{r}
+freedman_truth <- rbind(freedman_test_motifs[!freedman_test_motifs$motif_name %in% duplicates_occur, ], freedman_train_motifs[!freedman_train_motifs$motif_name %in% duplicates_occur, ])
+```
+
+
+```{r}
+enet_binary_predict <- predict(enet_center_binary, newx=big_X_train, type='class') |> as.numeric()
+binary_ground_truth <- big_y_train[,c('target', 'binary_counts')] #[complete.cases(big_X_train)]
+binary_exp <- cbind(enet_binary_predict, binary_ground_truth) |> as.data.frame()
+freedman_binary_truth <- freedman_truth[, c('motif_name', 'num')]
+
+all_values <- merge(binary_exp, freedman_binary_truth, by.x='target', by.y='motif_name')
+all_values$num <- ifelse(all_values$num > 0, 1, 0)
+```
+
+### plots and all
+
+```{r}
+with(all_values, table(enet_binary_predict, num)) |> mosaicplot(xlab='TFpred (Kawakami) predictions', ylab='Freedman ground truth', main='TFpred-binary self-prediction vs Freedman\'s ground truth for the same sites')
+```
+
+```{r}
+plot(predict(enet_center_linear, newx=big_X_train), ylinear_train)
+```
+
+```{r}
+enet_linear_predict <- predict(enet_center_linear, newx=big_X_train)
+linear_ground_truth <- big_y_train[,c('target', 'binding_counts')] #[complete.cases(big_X_train)]
+
+linear_exp <- cbind(enet_linear_predict, linear_ground_truth) |> as.data.frame()
+linear_exp$binding_counts <- log10(linear_exp$binding_counts + 1)/sum(log10(linear_exp$binding_counts + 1))
+
+freedman_linear_truth <- freedman_truth[, c('motif_name', 'num')]
+freedman_linear_truth$num <- log10(freedman_linear_truth$num + 1)/sum(log10(freedman_linear_truth$num + 1))
+
+all_values <- merge(linear_exp, freedman_linear_truth, by.x='target', by.y='motif_name')
+
+```
+
+```{r}
+a <- all_values$binding_counts
+b <- all_values$num
+plot(a, b, xlab='TFpred-linear (Kawakami) predictions', ylab='Kawakami ground truth [normalized(log10(counts) + 1)]', main='TFpred-linear self-prediction vs Kawakami\'s ground truth for the same sites')
+abline(lm(b ~ a), col='red')
+```
+
+
+```{r}
+a <- all_values$`lambda.1se`
+b <- all_values$num
+plot(a, b, xlab='TFpred-linear (Kawakami) predictions', ylab='Freedman ground truth [normalized(log10(counts) + 1)]', main='TFpred-linear self-prediction vs Freedman\'s ground truth for the same sites')
+abline(lm(b ~ a), col='red')
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,18 @@
+# exclude everything except directory foo/bar
+code_arguments/*
+enformer_predictions/*
+info-files/*
+models/*
+plots/
+data/*
+explore-freedman/*
+log/*
+output/*
+processed-data/*
+defined_regions/*
+train-test-val/*
+
+# include
+!scripts/
+!README
+!.gitignore
