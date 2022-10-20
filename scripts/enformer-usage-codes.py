@@ -1,27 +1,21 @@
 
-<<<<<<< HEAD
-#from __future__ import absolute_import, division, print_function, unicode_literals
+
+# === This script contains all codes used to apply ENFORMER on genome sequences to predict ENCODE tracks
+# === Modified by Temi from Deepmind people
 
 import subprocess
 # subprocess.call('type python', shell=True)
 # print('\n\n From usage-codes.py')
 
+# for some reason, kipoiseq has to be loaded first
 import kipoiseq # for manipulating fasta files
 # print(f'\nLoaded kipoiseq from {kipoiseq.__file__}\n')
 
 import time
-=======
-from __future__ import absolute_import, division, print_function, unicode_literals
-
->>>>>>> e15d2c58b1ffd0f4fd0508b4b72f37aad9dbebf7
 import tensorflow as tf
 import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
 import joblib
 import gzip # for manipulating compressed files
-<<<<<<< HEAD
-=======
-import kipoiseq # for manipulating fasta files
->>>>>>> e15d2c58b1ffd0f4fd0508b4b72f37aad9dbebf7
 from kipoiseq import Interval # same as above, really
 import pyfaidx # to index our reference genome file
 import pandas as pd # for manipulating dataframes
@@ -38,12 +32,8 @@ SEQUENCE_LENGTH = 393216
 class Enformer:
 
     def __init__(self, tfhub_url):
-<<<<<<< HEAD
         #self._model = hub.load(tfhub_url).model
         self._model = tf.saved_model.load(tfhub_url).model
-=======
-        self._model = hub.load(tfhub_url).model
->>>>>>> e15d2c58b1ffd0f4fd0508b4b72f37aad9dbebf7
 
     def predict_on_batch(self, inputs):
         predictions = self._model.predict_on_batch(inputs)
@@ -150,4 +140,3 @@ def plot_tracks(tracks, interval, height=1.5, vline=True):
         sns.despine(top=True, right=True, bottom=True)
     ax.set_xlabel(str(interval))
     plt.tight_layout()
-

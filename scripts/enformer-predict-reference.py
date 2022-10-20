@@ -1,10 +1,12 @@
 
+# === This script contains all codes used to apply ENFORMER on genome sequences to predict ENCODE tracks
+# === Modified by Temi from Deepmind people
+
 # import the enformer-usage_codes.py file
 exec(open('/home/temi/imlab_folder/users/temi/projects/TFXcan/scripts/enformer-usage-codes.py').read())
-<<<<<<< HEAD
 
 transform_path = 'gs://dm-enformer/models/enformer.finetuned.SAD.robustscaler-PCA500-robustscaler.transform.pkl'
-#model_path = 'https://tfhub.dev/deepmind/enformer/1'
+#model_path = 'https://tfhub.dev/deepmind/enformer/1' # we no longer need tf.hub for this
 model_path = '/projects/covid-ct/imlab/data/enformer/raw'
 fasta_file_directory = '/projects/covid-ct/imlab/data/hg19_genome'
 bed_files_directory = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/processed-data/motif-bed'
@@ -12,8 +14,6 @@ bed_files_directory = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/proce
 # Helps to quickly generate variant bed files
 
 import tabix, csv, h5py
-=======
->>>>>>> e15d2c58b1ffd0f4fd0508b4b72f37aad9dbebf7
 
 def create_intervals(motif_region_path):
     #collect_intervals()
