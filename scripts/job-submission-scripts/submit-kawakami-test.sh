@@ -1,12 +1,12 @@
 #!/bin/bash
 #COBALT -n 1
-#COBALT -t 1:00:00
+#COBALT -t 12:00:00
 #COBALT -A covid-ct
 #COBALT --jobname=PREDICT-REFERENCE-KAWAKAMI-TEST
 #COBALT -O /home/temi/imlab_folder/users/temi/projects/TFXcan/log/predict_kawakami_test_reference 
 #COBALT --mode script
 #COBALT --attrs filesystems=theta-fs0
-#COBALT -q single-gpu
+#COBALT -q full-node
 
 
 echo 'Starting to run\n'

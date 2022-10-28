@@ -489,13 +489,64 @@ plot(a, b, xlab='TFpred-linear (Kawakami) predictions', ylab='Kawakami ground tr
 abline(lm(b ~ a), col='red')
 ```
 
-
 ```{r}
 a <- all_values$`lambda.1se`
 b <- all_values$num
 plot(a, b, xlab='TFpred-linear (Kawakami) predictions', ylab='Freedman ground truth [normalized(log10(counts) + 1)]', main='TFpred-linear self-prediction vs Freedman\'s ground truth for the same sites')
 abline(lm(b ~ a), col='red')
 ```
+
+Read in the test set
+```{r}
+save_dir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/defined_regions/freedman/LuCaP_145_aggByCenter_FOXA1.csv'
+test_data <- data.table::fread(save_dir)
+```
+
+```{r}
+X_test <- test_data[, -c(1:2)] |> as.matrix()
+y_test <- test_data[, c(1:2)]
+```
+
+```{r}
+test_models(enet_center_binary, X_test, y_test$class)
+```
+
+```{r}
+test_predictions <- predict(enet_center_binary, X_test, type='class')
+test_predictions <- as.numeric(test_predictions[, 1])
+```
+
+```{r}
+table(test_predictions, y_test$class) |> mosaicplot()
+```
+
+```{r}
+library(vcd)
+```
+
+```{r}
+mc <- cbind(test_predictions, y_test$class)
+colnames(mc) <- c('prediction', 'truth')
+mc <- as.data.frame(mc)
+head(mc)
+```
+
+```{r}
+mtable <- table(mc$prediction, mc$truth)
+dimnames(mtable) <- list(prediction = c('neg', 'pos'), truth=c('neg', 'pos'))
+# prop <-  |> prop.table()
+
+mosaic(mtable, highlighting = "truth", highlighting_fill = c("pink", "lightblue"), pop=F)
+
+labeling_cells(text = mtable, margin=0)(mtable)
+```
+
+
+
+
+
+
+
 
 
 

@@ -1,0 +1,529 @@
+---
+title: "After annotating with IMPACT, prepare regions txt file for ENFORMER to predict on"
+author: "Temi"
+date: 'Wednesday Oct 26 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts')
+
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+```
+
+
+# This section prepares target regions for Freedman data
+```{r}
+freedman_metadata_dir <- '/lus-projects/covid-ct/imlab/users/temi/projects/TFXcan/data/freedman'
+```
+
+```{r}
+merge_info <- read.table(glue('{freedman_metadata_dir}/merge_info.txt'))
+srr_info <- data.table::fread(glue('{freedman_metadata_dir}/SraRunTable.txt'), select=c('Run', 'Assay Type', 'GEO_Accession (exp)'))
+```
+
+Select geo with the SRR
+
+```{r}
+all_srr <- vector('character')
+for(i in 1:nrow(merge_info)){
+    all_srr <- c(all_srr, strsplit(merge_info[i, 'V2'], split=',')[[1]])
+    #sapply(strsplit(merge_info[i, 'V2'], split=','), getElement, 1)
+    #all_srr <- c(all_srr, sapply(strsplit(merge_info[i, 'V2'], split=','), getElement, 1))
+}
+all_srr
+```
+
+```{r}
+srr_peak_file_info <- srr_info[srr_info$Run %in% all_srr, ]
+```
+
+```{r}
+peak_dir <- '/lus-projects/covid-ct/imlab/data/freedman-data/sorted_bed_files/FOXA1'
+```
+
+Combine the peaks per individual
+```{r}
+# first create a grouping information
+# crs are not used
+subgroups <- sapply(strsplit(list.files(peak_dir), '_'), getElement, 3)
+groups <- sapply(strsplit(subgroups, '\\.'), getElement, 1)
+grouping_info <- cbind(groups, subgroups) |> as.data.frame()
+grouping_info <- grouping_info[!endsWith(grouping_info$groups, 'CR') & (grouping_info$groups %in% sapply(strsplit(merge_info$V1, '_'), getElement, 2)), ]
+grouping_info
+```
+
+```{r}
+FOXA1_peaks <- list.files(peak_dir)
+```
+
+```{r}
+file_names <- lapply(split(grouping_info, f=grouping_info$groups), function(each_sg){
+    sgs <- each_sg['subgroups'] |> unlist() |> unname()
+    paste0('*_LuCaP_', sgs, '_FOXA1.bed', sep='')
+})
+
+file_names
+```
+
+```{r}
+files_read <- lapply(file_names, function(each_grp){
+
+    cols_names <- c('chr','start','end','id','score')
+
+    if(length(each_grp) > 1){
+        out <- lapply(each_grp, function(e){
+            read.table(list.files(peak_dir, pattern=e, full.names=T))
+        })
+
+        # rbind these
+        out <- do.call('rbind', out) |> as.data.frame()
+        colnames(out) <- cols_names
+
+    } else{
+        out <- read.table(list.files(peak_dir, pattern=each_grp, full.names=T))
+        colnames(out) <- cols_names
+    }
+
+    return(out)
+})
+names(files_read) <- names(file_names)
+```
+
+Next, I need to prepare these files to annotate their TF peaks for regions for ENFORMER
+
+I can convert these into granges objects and reduce them
+
+```{r}
+files_granges <- lapply(files_read, function(temp){
+    temp$strand <- '*'
+    bed_Granges <- with(temp, GenomicRanges::GRanges(chr, IRanges(start, end), strand, score, id = id))
+    bed_Granges <- GenomicRanges::reduce(bed_Granges)
+    
+    return(bed_Granges)
+})
+names(files_granges) <- names(file_names)
+```
+
+```{r}
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+common_dir <- '/lus-projects/covid-ct/imlab/users/temi/projects/TFXcan/data/common-files/FOXA1'
+output_dir <- '/lus-projects/covid-ct/imlab/users/temi/projects/TFXcan/data/freedman/freedman-individuals'
+homer_dir <- glue('~/miniconda3/envs/homer-env/share/homer')
+project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+```
+
+```{r}
+source('./impact-annotate.R')
+```
+
+```{r}
+# test if one can work
+annotate_with_impact(granges_object=files_granges[[1]], individual=names(files_granges)[1], output_dir=output_dir, common_dir=common_dir)
+```
+
+This should run for all of them at a time, IN PARALLEL ! GORGEOUS!
+
+```{r}
+cl <- makeCluster(detectCores() - 12)
+```
+
+```{r}
+clusterEvalQ(cl, library(parallel))
+clusterEvalQ(cl, library(GenomicRanges))
+clusterEvalQ(cl, library(data.table))
+clusterEvalQ(cl, library(glue))
+
+clusterExport(cl, c("files_granges", 'output_dir', 'common_dir', 'annotate_with_impact', 'TF', 'cell_line', 'homer_dir', 'project_dir'))
+```
+
+```{r}
+parLapply(cl, seq_along(files_granges), function(i){
+    annotate_with_impact(granges_object=files_granges[[i]], individual=names(files_granges)[i], output_dir=output_dir, common_dir=common_dir)
+})
+```
+```{r}
+stopCluster(cl)
+```
+
+```{r}
+lapply(seq_along(files_granges), function(i){
+    annotate_with_impact(granges_object=files_granges[[i]], individual=names(files_granges)[i], output_dir=output_dir, common_dir=common_dir)
+})
+```
+
+### This proceeds from after defining training sets i.e. true positives and true negatives
+
+Collect the positive and negative sets by individual and define
+
+```{r}
+output_dir
+```
+
+```{r}
+negatives <- lapply(list.files(output_dir, pattern='*_train_test_negative_bed.txt', full.names=T), data.table::fread)
+positives <- lapply(list.files(output_dir, pattern='*_train_test_positive_bed.txt', full.names=T), data.table::fread)
+```
+
+```{r}
+valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
+# select for only these 
+negatives <- lapply(negatives, function(each_negative){
+    each_negative <- each_negative[each_negative$V1 %in% valid_chromosomes, ]
+})
+
+positives <- lapply(positives, function(each_positive){
+    each_positive <- each_positive[each_positive$V1 %in% valid_chromosomes, ]
+})
+```
+
+
+need the names
+
+```{r}
+negatives_id <- sapply(list.files(output_dir, pattern='*_train_test_negative_bed.txt', full.names=F), function(each_filename){
+    paste0('LuCaP_', strsplit(each_filename, '_')[[1]][1], sep='')
+}) |> unname()
+
+positives_id <- sapply(list.files(output_dir, pattern='*_train_test_positive_bed.txt', full.names=F), function(each_filename){
+    paste0('LuCaP_', strsplit(each_filename, '_')[[1]][1], sep='')
+}) |> unname()
+```
+
+
+```{r}
+# the negatives and positives don't have a unique id
+negatives <- lapply(negatives, function(each_negative){
+    each_negative$V4 <- paste0('neg_peak', 1:nrow(each_negative), sep='')
+    return(each_negative)
+})
+
+positives <- lapply(positives, function(each_positive){
+    each_positive$V4 <- paste0('pos_', each_positive$V4, sep='')
+    return(each_positive)
+})
+```
+
+
+```{r}
+sapply(positives, dim) ; sapply(negatives, dim)
+```
+
+For now, select 2500 negatives and 1500 positives
+
+```{r}
+#set.seed(25102022)
+
+selected_negatives <- lapply(negatives, function(each_negative){
+    set.seed(25102022)
+    select_indices <- sample(1:nrow(each_negative), size=2500, replace=F)
+    return(each_negative[select_indices, ])
+})
+
+selected_positives <- lapply(positives, function(each_positive){
+    set.seed(25102022)
+    select_indices <- sample(1:nrow(each_positive), size=1500, replace=F)
+    return(each_positive[select_indices, ])
+})
+
+# check
+sapply(selected_positives, dim) ; sapply(selected_negatives, dim)
+```
+
+Match by the names, rbind, and shuffle, and save
+```{r}
+names(selected_positives) <- positives_id
+names(selected_negatives) <- negatives_id
+```
+
+```{r}
+peaks_merged <- lapply(positives_id, function(each_name){
+    a <- selected_positives[[each_name]]
+    b <- selected_negatives[[each_name]]
+    c <- rbind(a, b) |> as.data.frame()
+    set.seed(25102022)
+    c <- c[sample(1:nrow(c)), ]
+    return(c)
+})
+
+names(peaks_merged) <- positives_id
+```
+
+Check that the files make sense 
+
+```{r}
+peaks_merged$LuCaP_136 |> head(15)
+```
+
+```{r}
+save_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/data/freedman/intervals_bed'
+
+# save and name by individual
+sapply(seq_along(peaks_merged), function(i){
+    write.table(peaks_merged[[i]], glue('{save_dir}/{names(peaks_merged)[i]}_{TF}.txt'), col.names=F, quote=F, row.names=F)
+})
+```
+
+
+I don't need to define the regions myself - I will let my enformer pipeline do that for me
+```{r}
+
+gsize <- read.table(glue('{output_dir}/../../hg19.sizes'))
+dt <- selected_positives[[1]] |> head()
+genome_size <- gsize
+
+expand_region <- function(dt, genome_size, both=128, left=NULL, right=NULL, create_granges=F, save_as_bed=T){
+    colnames(dt) <- c('chr','start','end','id','score','strand')
+    colnames(genome_size) <- c('chr', 'size')
+    
+    if(both){
+        left <- both/2
+        right <- both/2
+    }
+    
+    
+    center <- (dt[, 'start'] + dt[, 'end'])/2
+    dt[, 'start'] <- center - left
+    dt[, 'end'] <- center + right
+    
+    # check if any is greater than the chromosome size
+    #dt_split <- split(dt, f = dt[, 'chr'])
+    dt_list <- lapply(genome_size$chr, function(each_chr){
+        which_chr <- dt[dt$chr == each_chr, ]
+        chr_size <- genome_size$size[genome_size$chr == each_chr]
+        which_greater <- which(which_chr$end > chr_size)
+        if(length(which_greater) > 0){
+            which_chr[which_greater, ]$end <- chr_size
+        }
+        
+        return(which_chr)
+    })
+    
+    dt <- do.call(rbind, dt_list)
+    
+    return(dt)
+}
+
+# extend both the TP and TN by 
+tp_dt <- cbind(expand_region(dt, gsize, both = 393216), set='TP')
+# tn_dt <- cbind(expand_region(tn, gsize, both = 393216), set='TN')
+
+# dt <- rbind(tp_dt, tn_dt)
+# dt <- cbind(dt, pos=1:nrow(dt))
+
+# write.table(x=dt, file=glue('{OUTPUT_DIR}/{TF}_motif_regions.txt'), quote = F, row.names = F, col.names = F)
+
+
+# write.table(x=rbind(dt[1:5, ], tail(dt, 5)), file=glue('{OUTPUT_DIR}/{TF}_motif_regions_TEMP.txt'), quote = F, row.names = F, col.names = F)
+```
+
+
+# This section prepares Kawakami-human target regions
+
+```{r}
+project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+kawakami_intersect_dir <- glue('{project_dir}/data/kawakami-human/kawakami-impact-split')
+```
+
+```{r}
+negatives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=T), data.table::fread)
+positives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=T), data.table::fread)
+```
+
+```{r}
+# select valid chromosomes chr1 to 22 and X
+valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
+# select for only these 
+negatives <- lapply(negatives, function(each_negative){
+    each_negative <- each_negative[each_negative$V1 %in% valid_chromosomes, ]
+})
+
+positives <- lapply(positives, function(each_positive){
+    each_positive <- each_positive[each_positive$V1 %in% valid_chromosomes, ]
+})
+
+# collect the names
+negatives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=F), function(each_filename){
+    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
+}) |> unname()
+
+positives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=F), function(each_filename){
+    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
+}) |> unname()
+```
+
+```{r}
+sapply(positives, dim) ; sapply(negatives, dim)
+```
+
+You need to 
+- collapse them into one
+- select 50000 negatives and 50000 positives
+
+Match by the names, rbind, and shuffle, and save
+```{r}
+names(positives) <- positives_id
+names(negatives) <- negatives_id
+```
+
+```{r}
+all_negatives <- lapply(seq_along(negatives), function(i){
+    negatives[[i]]$binding_counts <- 0
+    return(negatives[[i]])
+    
+})
+
+all_negatives <- do.call('rbind', all_negatives)
+
+all_positives <- lapply(seq_along(positives), function(i){
+    positives[[i]]$binding_counts <- positives_id[i]
+    return(positives[[i]])
+})
+
+all_positives <- do.call('rbind', all_positives)
+```
+
+```{r}
+dim(all_negatives); dim(all_positives)
+```
+
+to ensure there are not duplicated peaks
+```{r}
+# the negatives and positives don't have a unique id
+all_negatives$V4 <- paste0('neg_peak', 1:nrow(all_negatives), sep='')
+all_positives$V4 <- paste0('pos_peak', 1:nrow(all_positives), sep='')
+
+```
+
+It will be more intelligent to select the most bound regions, downwards
+- no need to shuffle the positive set
+
+```{r}
+decreasing_counts <- sapply(strsplit(all_positives$binding_counts, '_'), getElement, 2) |> as.numeric() |> order(decreasing=T)
+selected_positives <- all_positives[decreasing_counts[1:20000], ]
+```
+
+```{r}
+set.seed(26102022)
+select_indices <- sample(1:nrow(all_negatives), size=20000, replace=F)
+selected_negatives <- all_negatives[select_indices, ]
+```
+
+```{r}
+dim(selected_positives); dim(selected_negatives)
+```
+
+```{r}
+peaks_merged <- rbind(selected_positives, selected_negatives)
+peaks_merged <- peaks_merged[sample(1:nrow(peaks_merged)), ]
+peaks_merged |> head(10)
+```
+
+### there may be duplicates
+
+```{r}
+n_occur <- peaks_merged$V4 |> table() |> as.data.frame()
+duplicates <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+#
+length(duplicates)
+```
+
+
+```{r}
+save_dir <- glue('{project_dir}/defined_regions/kawakami-human')
+TF <- 'FOXA1'
+write.table(peaks_merged, glue('{save_dir}/kawakami-human_{TF}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+```{r}
+peaks_merged[peaks_merged$V4 == 'pos_peak5450', ]
+```
+
+
+
+
+
+```{r}
+peaks_merged <- lapply(positives_id, function(each_name){
+    a <- selected_positives[[each_name]]
+    b <- selected_negatives[[each_name]]
+    c <- rbind(a, b) |> as.data.frame()
+    set.seed(25102022)
+    c <- c[sample(1:nrow(c)), ]
+    return(c)
+})
+
+names(peaks_merged) <- positives_id
+```
+
+```{r}
+#set.seed(25102022)
+
+selected_negatives <- lapply(negatives, function(each_negative){
+    set.seed(25102022)
+    select_indices <- sample(1:nrow(each_negative), size=2500, replace=F)
+    return(each_negative[select_indices, ])
+})
+
+selected_positives <- lapply(positives, function(each_positive){
+    set.seed(25102022)
+    select_indices <- sample(1:nrow(each_positive), size=1500, replace=F)
+    return(each_positive[select_indices, ])
+})
+
+# check
+sapply(selected_positives, dim) ; sapply(selected_negatives, dim)
+```
+
+
+
+
+
+Check that the files make sense 
+
+```{r}
+peaks_merged$LuCaP_136 |> head(15)
+```
+
+```{r}
+save_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/data/freedman/intervals_bed'
+
+# save and name by individual
+sapply(seq_along(peaks_merged), function(i){
+    write.table(peaks_merged[[i]], glue('{save_dir}/{names(peaks_merged)[i]}_{TF}.txt'), col.names=F, quote=F, row.names=F)
+})
+```
+
+
+```{r}
+allfiles <- list.files(glue("{kawakami_impact_split_dir}"))
+positive_files <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_train_test_positive_bed.txt')]
+#peak_info <- allfiles[endsWith(x=allfiles, suffix='FOXA1_LuCaP_true_positive_peak_info.txt')]
+
+# create enformer beds =====
+tp_list <- lapply(positive_files, function(filename){
+    read.table(glue("{kawakami_impact_split_dir}/{filename}"))
+})
+
+names(tp_list) <- sapply(strsplit(positive_files, split='_'), function(each){paste(each[1], each[2], sep='_')})
+```
+
+
+
+
+
+
+
+
+
+
+

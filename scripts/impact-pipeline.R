@@ -1,25 +1,15 @@
 
 
-<<<<<<< HEAD
 #rstudioapi::getActiveDocumentContext()$path |> dirname() |> setwd()
 
 setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
 getwd()
-=======
-rstudioapi::getActiveDocumentContext()$path |> dirname() |> setwd()
-
-setwd('~/imlab_folder/users/temi/projects/TFXcan/scripts/')
-
->>>>>>> 435f3a119b45722200d2bfa0887ac044811be129
 
 rm(list=ls())
 
 library(glue)
 library(GenomicRanges)
-<<<<<<< HEAD
 library(reticulate)
-=======
->>>>>>> 435f3a119b45722200d2bfa0887ac044811be129
 
 # ARGUMENTS
 make_motifs <- T

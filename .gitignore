@@ -11,6 +11,12 @@ output/*
 processed-data/*
 defined_regions/*
 train-test-val/*
+bcftools_regions/*
+prj6_genotypes/*
+temp/*
+defined_regions/*
+old-scripts/*
+test_enformer/*
 
 # include
 !scripts/

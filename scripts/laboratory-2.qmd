@@ -1,4 +1,13 @@
-
+---
+title: "Analyse Kawakami and Freedman's intersections and create train, test, validation splits for both datasets"
+author: "Temi"
+date: 'Wednesday September 28 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
 
 ```{r}
 setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')

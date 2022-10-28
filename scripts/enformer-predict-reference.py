@@ -1,216 +1,152 @@
 
-# === This script contains all codes used to apply ENFORMER on genome sequences to predict ENCODE tracks
-# === Modified by Temi from Deepmind people
+# === This script contains all codes to test if tensorflow and ENFORMER are working accurately  
+# Modified by Temi from Deepmind people 
+# DATE: Thursday Oct 20 2022
 
-# import the enformer-usage_codes.py file
-exec(open('/home/temi/imlab_folder/users/temi/projects/TFXcan/scripts/enformer-usage-codes.py').read())
+from __future__ import absolute_import, division, print_function, unicode_literals
+import os, re, sys, json, h5py, csv, warnings
+# import parsl
+# from parsl.app.app import python_app, bash_app
 
-transform_path = 'gs://dm-enformer/models/enformer.finetuned.SAD.robustscaler-PCA500-robustscaler.transform.pkl'
-#model_path = 'https://tfhub.dev/deepmind/enformer/1' # we no longer need tf.hub for this
-model_path = '/projects/covid-ct/imlab/data/enformer/raw'
-fasta_file_directory = '/projects/covid-ct/imlab/data/hg19_genome'
-bed_files_directory = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/processed-data/motif-bed'
+def check_query_reference(sample, query_name, output_dir, logfile):
+    '''
+    Checks of predictions are available for an individual or sample
+    '''
 
-# Helps to quickly generate variant bed files
+    if isinstance(logfile, pd.DataFrame):# should have read it>
 
-import tabix, csv, h5py
+        # check if the motif has been saved and if the status is `completed`
+        query_saved = str(f'{output_dir}/{query_name}_predictions.h5')
 
-def create_intervals(motif_region_path):
-    #collect_intervals()
-    try:
-        motif_regions = pd.read_table(motif_region_path, sep=' ')
-    except:
-        motif_regions = pd.read_csv(motif_region_path)
-    print(motif_regions.head(5))
-    #motif_regions['motif_name'] = motif_regions['set'] + motif_regions['num'].astype(str)
+        motif_in_logfile = logfile.motif.values
+        individual_in_logfile = logfile.individual.values
 
-    temp_chr = [re.sub(pattern='chr', repl='', string=cc) for cc in motif_regions.chr.tolist()]
-    temp_motif_list = motif_regions.motif_name.tolist()
-    
-    return (temp_chr, temp_motif_list)
+        if (query_name in motif_in_logfile) and (sample in individual_in_logfile): # both the individual and motifs are present
+            if (logfile.loc[(logfile.motif==query_name) & (logfile.individual==sample), 'status'].values[0] == 'completed') and os.path.isfile(query_saved):
+                return(0)
+            elif (logfile.loc[(logfile.motif==query_name) & (logfile.individual==sample), 'status'].values[0] != 'completed') or (not os.path.isfile(query_saved)):
+                return(1)
 
-def collect_intervals(reg, chromosomes = ["1"], motif_list=['TP1']):
-
-    motif_intervals = {} # Collect intervals for our genes of interest
-    try:
-        motif_regions = pd.read_table(reg, sep=' ') # names=['chr', 'motif_center_start', 'motif_center_end', 'id', 'score', 'strand', 'start', 'end', 'motif_name']
-    except:
-        motif_regions = pd.read_csv(reg) # names=['chr', 'motif_center_start', 'motif_center_end', 'id', 'score', 'strand', 'start', 'end', 'motif_name']
-
-    print(motif_regions.head(5))
-
-    #motif_regions['motif_name'] = motif_regions['set'] + motif_regions['num'].astype(str)
-    for i, motif in enumerate(motif_list):
-        temp = motif_regions.loc[motif_regions['motif_name'] == motif]
-        motif_intervals[motif] = [chromosomes[i], temp['motif_center_start'].values[0], temp['motif_center_end'].values[0]]
-    return(motif_intervals)
+    elif isinstance(logfile, type(None)):
+        return(2)
 
 
-def run_predictions(motif_intervals, model, fasta_extractor, experiment_details, TF='', cell_line='', path_to_save='/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predictions', SEQUENCE_LENGTH = 393216):
+def predict_query_reference(query, output_dir, model, fasta_extractor, SEQUENCE_LENGTH = 393216):
+
     '''
     Parameters :
-    gene_intervals : the results from calling `collect_intervals`
-    tss_dataframe : a list of the TSSs dataframes i.e. the TSS for the genes in the chromosomes
-    individuals_list : a list of individuals on which we want to make predictions; defaults to None
+    query : a list [chr, start, end, unique_id]
+    model : the path to the ENFORMER Model
+    fasta_extractor : fasta extractor
 
     Returns :
     A list of predictions; the first element is the predictions around the TSS for each gene. The second is the prediction across CAGE tracks
     '''
+    query_chr = query[0]
+    query_start, query_end = int(query[1]), int(query[2])
+    query_id = query[3]
 
-    #current_motif = 0
-    path_to_save = path_to_save + '/' + experiment_details
-    # create the folder
-    if not os.path.exists(path_to_save):
-        os.makedirs(path_to_save)
+
+    try:
+        target_interval = kipoiseq.Interval(query_chr, query_start, query_end) # creates an interval to select the right sequences
+        target_fa = fasta_extractor.extract(target_interval.resize(SEQUENCE_LENGTH))  # extracts the fasta sequences, and resizes such that it is compatible with the sequence_length
+        obj_to_save = model.predict_on_batch(one_hot_encode(target_fa)[np.newaxis])['human'][0]
+    except ValueError:
+        return('NA')
     
-    logfile_csv = f'/projects/covid-ct/imlab/users/temi/projects/TFXcan/log/log_ref_{experiment_details}_{TF}_{cell_line}.csv'
-    
-    if os.path.isfile(logfile_csv):
-        # if a log file exists, read it use that to check the files that are completed
-        print('Log file exists. Reading it in ===\n')
-        logfile = pd.read_csv(logfile_csv)
-        motif_in_logfile = logfile.motif.values
-        print('Opening in append mode...\n')
-        open_mode = 'a'
-    else:
-        logfile = None
-        print('No log file. Moving on...')
-        print('Opening in write mode...\n')
-        open_mode = 'w'
-        
-    # if isinstance(logfile, type(None)):
-    #     print('Opening in write mode...\n')
-    #     open_mode = 'w'
-    # elif isinstance(logfile, pd.DataFrame):
-    #     print('Opening in append mode...\n')
-    #     open_mode = 'a'
-    
-    with open(logfile_csv, open_mode, encoding='UTF8') as running_log_file:
-        logwriter = csv.writer(running_log_file)
-        
-        if open_mode == 'w':
-            logwriter.writerow(['motif', 'status']) # write the headers
-        
-        for motif, interval_info in motif_intervals.items():
+    # select 8 bins upstream and downstream the center
+    obj_to_save = obj_to_save[range(448 - 8, (448 + 8 + 1)), : ].squeeze()
 
-            if not isinstance(interval_info, list): # if the value is 'Not found', just skip it
-                continue
+    # make sure to select the 17 bins needed
 
-            # the file to be saved 
-            h5_save = str(f'{path_to_save}/{TF}_{cell_line}_reference_{motif}_predictions.h5')
-            
-            # the file is done running
-            #print(isinstance(logfile, pd.DataFrame))
-            if isinstance(logfile, pd.DataFrame):# should have read it>
-                if motif in motif_in_logfile:
-                    print(f'{motif} in logfile already.\n')
-                    h5_save = str(f'{path_to_save}/{TF}_{cell_line}_reference_{motif}_predictions.h5')
-                    try:
-                        if (logfile.loc[logfile.motif == motif, 'status'].values[0] == 'completed') and os.path.isfile(h5_save):
-                            print(f'{motif} in logfile and predictions available. Moving on...\n')
-                            continue
-                    except:
-                        continue
+    h5_save = str(f'{output_dir}/{query_id}_predictions.h5')
+    with h5py.File(h5_save, 'w') as hf:
+        hf.create_dataset(query_chr, data=obj_to_save)
 
-            #current_motif += 1
-            print(f'Predicting on motif {motif} ===\n')
-
-            motif_interval = motif_intervals[motif]
-            target_interval = kipoiseq.Interval("chr" + interval_info[0],
-                                            interval_info[1],
-                                            interval_info[2]) # creates an interval to select the right sequences
-
-            target_fa = fasta_extractor.extract(target_interval.resize(SEQUENCE_LENGTH))  # extracts the fasta sequences, and resizes such that it is compatible with the sequence_length
-
-            #window_coords = target_interval.resize(SEQUENCE_LENGTH) # we also need information about the start and end locations after resizing
-
-            # predict on the individual's two haplotypes
-            #output[motif] = model.predict_on_batch(one_hot_encode(target_fa)[np.newaxis])['human'][0]
-            obj_to_save = model.predict_on_batch(one_hot_encode(target_fa)[np.newaxis])['human'][0]
-
-            # save the predictions
-            # with open(str(f'{path_to_save}/{TF}_{cell_line}_reference_{motif}_predictions.pkl'), 'wb') as obj:
-            #     pickle.dump(obj_to_save, obj)
-            h5_save = str(f'{path_to_save}/{TF}_{cell_line}_reference_{motif}_predictions.h5')
-            with h5py.File(h5_save, 'w') as hf:
-                hf.create_dataset(experiment_details + ',' + motif, data=obj_to_save)
-
-            # if the file gets saved
-            logwriter.writerow([motif, 'completed'])
-            running_log_file.flush()
-            
-        print('Done with prediction and/or saving\n')
-
-    #return(output)
+    return('ref')
 
 
-# def Save_predictions_as_pickle(obj_to_save, path_to_save='/projects/covid-ct/imlab/users/temi/projects/TFXcan/output/reference_predictions'):
-#     ## Save the results as a pickle object
-
-#     #print(str(f'Saving predictions to {path_to_save}/GATA3_four_motifs_enformer_predictions_2022-07-14.pkl ===\n'))
-
-#     with open(str(f'{path_to_save}/GATA3_reference_motifs_predictions_2022-07-19.pkl'), 'wb') as obj:
-#         pickle.dump(obj_to_save, obj)
-
-#     print('Done saving the predictions')
-
-# def save_predictions_as_hdf5(obj_to_save, path_to_save='/projects/covid-ct/imlab/users/temi/projects/TFXcan/output/reference_predictions'):
-#     ## Save the results as a pickle object
-
-#     #print(str(f'Saving predictions to {path_to_save}/GATA3_four_motifs_enformer_predictions_2022-07-14.pkl ===\n'))
-
-#     with open(str(f'{path_to_save}/GATA3_reference_motifs_predictions_2022-07-19.pkl'), 'wb') as obj:
-#         pickle.dump(obj_to_save, obj)
-
-#     print('Done saving the predictions')
-    
 def main():
-    
-#     TF_motif_regions = sys.argv[1]
-#     print(TF_motif_regions)
-    
-#     individuals = sys.argv[2:]
-#     print(individuals)
 
-    # for Gata3
-    # '/projects/covid-ct/imlab/users/temi/projects/TFXcan/processed-data/Gata3_motif_regions_TEMP.txt'
-    motif_regions = sys.argv[1] # a bed file containing the regions you want to predict for
-    TF = sys.argv[2] # a supplied transcription factor
-    cell_line = sys.argv[3] # cell line
-    experiment_details = sys.argv[4] # another discriminating information
-    
-    # load the model
-    model = Enformer(model_path)
-    print('Model loaded.\n')
+    # get the path of the script as well as parameters         
+    whereis_script = os.path.dirname(sys.argv[0])  
+    script_path = os.path.abspath(whereis_script) 
 
-    # instantiate fasta string extractor
-    fasta_extractor = FastaStringExtractor(fasta_file_directory + '/genome.fa')
-    print(f'Fasta strings extracted from "{fasta_file_directory}/genome.fa".\n')
-    
-    # create the intervals
-    motif_int = create_intervals(motif_regions)
-    print('Intervals created\n')
+    # read the parameters file
+    with open(f'{script_path}/../data/freedman/enformer-reference-parameters.json') as f:
 
-    # collect the intervals
-    motif_int = collect_intervals(motif_regions, motif_int[0], motif_int[1])
-    print('Intervals collected\n')
-    
-    # make predictions
-    print('\nMaking predictions ===\n')
-    
-    #path_to_save='/projects/covid-ct/imlab/users/temi/projects/TFXcan/output/reference_predictions'
-    motif_preds = run_predictions(motif_intervals=motif_int, fasta_extractor=fasta_extractor, model=model, experiment_details=experiment_details, TF=TF, cell_line=cell_line)
+        parameters = json.load(f)
 
-    #return(motif_preds)
-    
-    print('Everything done!')
+        model_path = parameters['model_path']
+        fasta_file = parameters['hg38_fasta_file']
+        output_dir = parameters['output_dir']
+        TF = parameters['TF']
+        logfile_path = parameters['logfile_path']
+        interval_list_dir = parameters['interval_list_dir']
 
+        # additionally
+        base_name = parameters['base_name']
 
-# def main2():
-#     print(__name__)
+        # create directories as needed
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir) 
 
+        if not os.path.exists(logfile_path):
+            os.makedirs(logfile_path) 
+
+        usage_codes = f'{script_path}/enformer-usage-codes.py'
+        #parsl_config = f'{script_path}/parsl-configuration.py'
+
+        # import the enformer-usage_codes.py file
+        exec(open(usage_codes).read(), globals(), globals())
+        #exec(open(parsl_config).read(), globals(), globals())
+
+        enf_model = Enformer(model_path)
+        sequence_extractor = FastaStringExtractor(fasta_file)
+
+        with open(f'{interval_list_dir}/{base_name}_{TF}.txt', 'r') as ind_r:
+            all_intervals = ind_r.readlines()
+
+            # read in the log file for this individual
+            # doind this so that the log file is not opened everytime
+            logfile_csv = f'{logfile_path}/{base_name}_predictions_log.csv'
+
+            if os.path.isfile(logfile_csv):
+                logfile = pd.read_csv(logfile_csv)
+                open_mode = 'a'
+            else:
+                logfile = None
+                open_mode = 'w'
+
+            with open(logfile_csv, open_mode, encoding='UTF8') as running_log_file:
+                logwriter = csv.writer(running_log_file)
+
+                if open_mode == 'w':
+                    logwriter.writerow(['motif', 'individual', 'status', 'sequence_type']) # write the headers
+
+                for line in all_intervals: # for each line (i.e. chr, start, end and query_id or motif)
+                    query = line.strip().split(' ') 
+
+                    print(f"[PREDICTING] {query[3]}")
+
+                    # you should check that the file does not exist here
+                    #print(logfile)
+                    query_exists = check_query_reference(sample=base_name, query_name=query[3], output_dir=output_dir, logfile=logfile)
+
+                    if query_exists == 0: # i.e. both 'completed' and file exists
+                        print(f'[NOTHING TO DO]\n')
+                        continue # to the next interval
+                    else: # i.e. does not exist; and will create a log file if it does not exist, of course
+                        p = predict_query_reference(query=query, output_dir=output_dir, model=enf_model, fasta_extractor=sequence_extractor)
+
+                        print(f"[DONE]\n")
+
+                        # if the file gets saved, write out the status
+                        logwriter.writerow([query[3], base_name, 'completed', p])
+
+                    # always flush
+                    running_log_file.flush()
+                    os.fsync(f)
+                                
 if __name__ == '__main__':
     main()
-    #Save_predictions_as_pickle(res)
-    
-    

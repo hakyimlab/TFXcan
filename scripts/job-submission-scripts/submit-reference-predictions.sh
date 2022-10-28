@@ -21,7 +21,7 @@ module load cobalt/cobalt-gpu
 
 # first enter gpu node : run `ssh thetagpusn1`
 # run: source ~/.bashrc
-# second, request an hour allocation: run `qsub -I -n 1 -t 1:00:00 -q single-gpu -A covid-ct` or `~/.bashrc`
+# second, request an hour allocation: run `qsub -I -n 1 -t 1:00:00 -q single-gpu -A covid-ct` and `~/.bashrc`
 
 ~/miniconda3/bin/python3 /home/temi/imlab_folder/users/temi/projects/TFXcan/scripts/enformer-predict-reference.py '/projects/covid-ct/imlab/users/temi/projects/TFXcan/data/train-test-val/kawakami_training_motif_regions.csv' 'FOXA1' 'LuCaP' 'kawakami-training'
 

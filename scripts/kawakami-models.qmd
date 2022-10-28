@@ -196,7 +196,7 @@ legend(x=0.2, y=0.6, legend=aggMethods, col=colors_, lty=1)
 
 Exploring the aggByCenter model
 ```{r}
-dimensions <- enet_experiment$models$aggByCenter$glmnet.fit$beta@Dim
+dimensions <- enet_experiment$models$aggByCenter
 coef_mat <- as.data.frame(summary(enet_experiment$models$aggByCenter$glmnet.fit$beta))
 colnames(coef_mat)
 
@@ -207,6 +207,33 @@ for(i in 1:nrow(coef_mat)){
 
 temp_mat[is.na(temp_mat)] <- 0
 ```
+
+```{r}
+collate_coefficients <- function(glmnetCVmodel, return_best_beta=T){
+
+    dimensions <- glmnetCVmodel$glmnet.fit$beta@Dim
+    coef_mat <- as.data.frame(summary(glmnetCVmodel$glmnet.fit$beta))
+    
+    temp_mat <- matrix(data=NA, nrow=dimensions[1], ncol=dimensions[2])
+    for(i in 1:nrow(coef_mat)){
+        temp_mat[coef_mat[i, 'i'], coef_mat[i, 'j']] <- coef_mat[i, 'x']
+    }
+
+    temp_mat[is.na(temp_mat)] <- 0
+
+    if(return_best_beta){
+        min_error_index <- glmnetCVmodel$index['min', ]
+        one_sd_index <- glmnetCVmodel$index['1se', ]
+
+        df_beta <- cbind(temp_mat[, min_error_index], temp_mat[, one_sd_index]) |> as.data.frame()
+        colnames(df_beta) <- c('min', '1se')
+        return(df_beta)
+    }
+
+    return(temp_mat)
+}
+```
+
 
 ```{r}
 min_error_index <- enet_experiment$models$aggByCenter$index['min', ]

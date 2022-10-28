@@ -140,3 +140,61 @@ def plot_tracks(tracks, interval, height=1.5, vline=True):
         sns.despine(top=True, right=True, bottom=True)
     ax.set_xlabel(str(interval))
     plt.tight_layout()
+
+
+
+# Temi's defined functions ===
+
+def create_region_file(vcf_file, region, output_dir, individual, software_paths=[]):
+    '''
+    Creates a subsetted vcf file per region
+    
+    
+    '''
+
+    path_to_bcftools = software_paths[0]
+    path_to_tabix = software_paths[1]
+
+    # Center the interval at the region
+    interval = kipoiseq.Interval(region[0], region[1], region[2]).resize(SEQUENCE_LENGTH) # resizing will change the regions
+
+    path = f'{output_dir}/{individual}_{interval.chr}_{interval.start}_{interval.end}_subset_genotypes.vcf.gz'
+
+    region = f'{interval.chr}:{interval.start}-{interval.end}'
+
+    view_cmd = f"{path_to_bcftools} filter {vcf_file} -r {region} --output-type z --output {path} && {path_to_tabix} -p vcf {path}"
+
+    out = subprocess.run(view_cmd, shell=True)
+
+    return {'subset_path':path, 'interval':interval}
+
+def extract_individual_sequence(region_details, individuals, fasta_file_path, fasta_extractor, delete_region=False):
+
+    '''
+    Extracts a sequence from a reference for a region with the variants of an individual applied
+    '''
+
+    kseq_extractor = kipoiseq.extractors.SingleSeqVCFSeqExtractor(fasta_file=fasta_file_path, vcf_file=region_details['subset_path'])
+
+    center = region_details['interval'].center() - region_details['interval'].start
+
+    individuals_sequences = {}
+    for ind in individuals:
+
+        warnings.filterwarnings('error')
+        
+        try:
+            individuals_sequences[ind] = kseq_extractor.extract(interval=region_details['interval'], anchor=center, sample_id=ind)
+            seq_source = 'var'
+        except Warning:
+            warnings.simplefilter("always", category=UserWarning)
+            
+            print('No variants for this region. Using reference genome.\n')
+            individuals_sequences[ind] = fasta_extractor.extract(interval=region_details['interval'], anchor=[])
+            seq_source = 'ref'
+
+    if delete_region == True:
+        os.remove(region_details['subset_path'])
+        os.remove(f"{region_details['subset_path']}.tbi")
+
+    return {'sequence':individuals_sequences, 'sequence_source':seq_source}
