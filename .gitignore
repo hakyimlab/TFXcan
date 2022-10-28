@@ -11,7 +11,7 @@ output/*
 processed-data/*
 defined_regions/*
 train-test-val/*
-bcftools_regions/*
+bcftools_region/*
 prj6_genotypes/*
 temp/*
 defined_regions/*
