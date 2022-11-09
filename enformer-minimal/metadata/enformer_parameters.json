@@ -1,0 +1,13 @@
+{
+    "model_path":"/projects/covid-ct/imlab/data/enformer/raw",
+    "hg38_fasta_file":"/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+    "interval_list_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/intervals",
+    "output_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/outputs",
+    "individuals":["LuCaP_145", "LuCaP_189"],
+    "vcf_file":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/prj6_genotypes/merged_phased_SNPs.vcf.gz",
+    "path_to_bcftools":"/home/temi/miniconda3/envs/compbio-tools/bin/bcftools",
+    "path_to_tabix":"/home/temi/miniconda3/envs/compbio-tools/bin/tabix",
+    "temporary_vcf_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/bcftools_region",
+    "TF":"FOXA1",
+    "logfile_path":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/runlog"
+}

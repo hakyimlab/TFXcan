@@ -17,8 +17,15 @@ temp/*
 defined_regions/*
 old-scripts/*
 test_enformer/*
+parsl-runinfo/*
+enformer-minimal/runinfo/*
+enformer-minimal/log/*
+motif-intervals/*
 
 # include
 !scripts/
+!enformer-minimal/scripts/
+!enformer-minimal/metadata/
+!enformer-minimal/intervals/
 !README
 !.gitignore
