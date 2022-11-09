@@ -4,13 +4,7 @@
 # === Modified by Temi from Deepmind people
 
 import subprocess
-# subprocess.call('type python', shell=True)
-# print('\n\n From usage-codes.py')
-
-# for some reason, kipoiseq has to be loaded first
-import kipoiseq # for manipulating fasta files
-# print(f'\nLoaded kipoiseq from {kipoiseq.__file__}\n')
-
+import kipoiseq # for manipulating fasta files # for some reason, kipoiseq has to be loaded first
 import time
 import tensorflow as tf
 import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
@@ -20,9 +14,6 @@ from kipoiseq import Interval # same as above, really
 import pyfaidx # to index our reference genome file
 import pandas as pd # for manipulating dataframes
 import numpy as np # for numerical computations
-import matplotlib.pyplot as plt # for plotting
-import matplotlib as mpl # for plotting
-import seaborn as sns # for plotting
 import pickle # for saving large objects
 import os, sys, re # functions for interacting with the operating system
 
@@ -122,7 +113,6 @@ class FastaStringExtractor:
     def close(self):
         return self.fasta.close()
 
-
 def one_hot_encode(sequence):
     return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
 
@@ -142,15 +132,25 @@ def plot_tracks(tracks, interval, height=1.5, vline=True):
     plt.tight_layout()
 
 
-
 # Temi's defined functions ===
-
 def create_region_file(vcf_file, region, output_dir, individual, software_paths=[]):
     '''
     Creates a subsetted vcf file per region
-    
-    
     '''
+
+    import subprocess
+    import kipoiseq # for manipulating fasta files # for some reason, kipoiseq has to be loaded first
+    import time
+    import tensorflow as tf
+    import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
+    import joblib
+    import gzip # for manipulating compressed files
+    from kipoiseq import Interval # same as above, really
+    import pyfaidx # to index our reference genome file
+    import pandas as pd # for manipulating dataframes
+    import numpy as np # for numerical computations
+    import pickle # for saving large objects
+    import os, sys, re # functions for interacting with the operating system
 
     path_to_bcftools = software_paths[0]
     path_to_tabix = software_paths[1]
@@ -168,33 +168,47 @@ def create_region_file(vcf_file, region, output_dir, individual, software_paths=
 
     return {'subset_path':path, 'interval':interval}
 
-def extract_individual_sequence(region_details, individuals, fasta_file_path, fasta_extractor, delete_region=False):
+def extract_individual_sequence(region_details, individual, fasta_file_path, fasta_extractor, delete_region=False):
 
     '''
     Extracts a sequence from a reference for a region with the variants of an individual applied
     '''
 
+    import subprocess
+    import kipoiseq # for manipulating fasta files # for some reason, kipoiseq has to be loaded first
+    import time
+    import tensorflow as tf
+    import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
+    import joblib
+    import gzip # for manipulating compressed files
+    from kipoiseq import Interval # same as above, really
+    import pyfaidx # to index our reference genome file
+    import pandas as pd # for manipulating dataframes
+    import numpy as np # for numerical computations
+    import pickle # for saving large objects
+    import os, sys, re # functions for interacting with the operating system
+
     kseq_extractor = kipoiseq.extractors.SingleSeqVCFSeqExtractor(fasta_file=fasta_file_path, vcf_file=region_details['subset_path'])
 
     center = region_details['interval'].center() - region_details['interval'].start
 
-    individuals_sequences = {}
-    for ind in individuals:
+    individual_sequences = {}
+    for ind in [individual]:
 
         warnings.filterwarnings('error')
         
         try:
-            individuals_sequences[ind] = kseq_extractor.extract(interval=region_details['interval'], anchor=center, sample_id=ind)
+            individual_sequences[ind] = kseq_extractor.extract(interval=region_details['interval'], anchor=center, sample_id=ind)
             seq_source = 'var'
         except Warning:
             warnings.simplefilter("always", category=UserWarning)
             
             print('No variants for this region. Using reference genome.\n')
-            individuals_sequences[ind] = fasta_extractor.extract(interval=region_details['interval'], anchor=[])
+            individual_sequences[ind] = fasta_extractor.extract(interval=region_details['interval'], anchor=[])
             seq_source = 'ref'
 
     if delete_region == True:
         os.remove(region_details['subset_path'])
         os.remove(f"{region_details['subset_path']}.tbi")
 
-    return {'sequence':individuals_sequences, 'sequence_source':seq_source}
+    return {'sequence':individual_sequences, 'sequence_source':seq_source}

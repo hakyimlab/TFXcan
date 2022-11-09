@@ -161,12 +161,161 @@ lapply(seq_along(files_granges), function(i){
 })
 ```
 
-### This proceeds from after defining training sets i.e. true positives and true negatives
 
-Collect the positive and negative sets by individual and define
+
+\newpage
+# This section prepares Kawakami-human target regions
 
 ```{r}
-output_dir
+project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+kawakami_intersect_dir <- glue('{project_dir}/data/kawakami-human/kawakami-impact-split')
+```
+
+```{r}
+negatives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=T), data.table::fread)
+positives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=T), data.table::fread)
+```
+
+```{r}
+# select valid chromosomes chr1 to 22 and X
+valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
+# select for only these 
+negatives <- lapply(negatives, function(each_negative){
+    each_negative <- each_negative[each_negative$V1 %in% valid_chromosomes, ]
+})
+
+positives <- lapply(positives, function(each_positive){
+    each_positive <- each_positive[each_positive$V1 %in% valid_chromosomes, ]
+})
+
+# collect the names
+negatives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=F), function(each_filename){
+    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
+}) |> unname()
+
+positives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=F), function(each_filename){
+    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
+}) |> unname()
+```
+
+```{r}
+sapply(positives, dim) ; sapply(negatives, dim)
+```
+
+You need to 
+- collapse them into one
+- select 50000 negatives and 50000 positives
+
+Match by the names, rbind, and shuffle, and save
+```{r}
+names(positives) <- positives_id
+names(negatives) <- negatives_id
+```
+
+```{r}
+all_negatives <- lapply(seq_along(negatives), function(i){
+    negatives[[i]]$binding_counts <- 0
+    return(negatives[[i]])
+    
+})
+
+all_negatives <- do.call('rbind', all_negatives)
+
+all_positives <- lapply(seq_along(positives), function(i){
+    positives[[i]]$binding_counts <- positives_id[i]
+    return(positives[[i]])
+})
+
+all_positives <- do.call('rbind', all_positives)
+```
+
+```{r}
+dim(all_negatives); dim(all_positives)
+```
+
+to ensure there are not duplicated peaks
+```{r}
+# the negatives and positives don't have a unique id
+all_negatives$V4 <- paste0('neg_peak', 1:nrow(all_negatives), sep='')
+all_positives$V4 <- paste0('pos_peak', 1:nrow(all_positives), sep='')
+
+```
+
+It will be more intelligent to select the most bound regions, downwards
+- no need to shuffle the positive set 
+- Here I select the top 200000 bound positives and random 200000 negative regions
+
+```{r}
+decreasing_counts <- sapply(strsplit(all_positives$binding_counts, '_'), getElement, 2) |> as.numeric() |> order(decreasing=T)
+selected_positives <- all_positives[decreasing_counts[1:200000], ]
+```
+
+```{r}
+set.seed(26102022)
+select_indices <- sample(1:nrow(all_negatives), size=200000, replace=F)
+selected_negatives <- all_negatives[select_indices, ]
+```
+
+```{r}
+dim(selected_positives); dim(selected_negatives)
+```
+
+```{r}
+peaks_merged <- rbind(selected_positives, selected_negatives)
+peaks_merged <- peaks_merged[sample(1:nrow(peaks_merged)), ]
+peaks_merged |> head(10)
+```
+
+ there may be duplicates
+
+```{r}
+n_occur <- peaks_merged$V4 |> table() |> as.data.frame()
+duplicates <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+#
+length(duplicates)
+```
+
+Prepare and divide 
+
+```{r}
+predictors <- paste(peaks_merged$V1, (peaks_merged$V2 + 1), sep='_')
+predictors <- predictors |> as.matrix()
+predictors[1:5]
+```
+
+```{r}
+ground_truth <- ifelse(startsWith(peaks_merged$V4, prefix='neg_'), 0, 1)
+ground_truth <- cbind(predictors, ground_truth)
+ground_truth[1:5, ]
+```
+
+```{r}
+save_dir <- glue('{project_dir}/motif-intervals/kawakami')
+TF <- 'FOXA1'
+howmany <- format(400000, scientific=F) # because 200000 positives and negatives each
+write.table(predictors, glue('{save_dir}/predictors/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+write.table(ground_truth, glue('{save_dir}/ground-truth/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+\newpage
+# This proceeds from after defining training sets i.e. true positives and true negatives
+
+Collect the positive and negative sets by individual and define
+Importantly, I want to subset for regions that are common to those in Kawakami, as I have defined earlier
+
+Kawakami's ground truth
+
+```{r}
+project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+save_dir <- glue('{project_dir}/motif-intervals/kawakami')
+TF <- 'FOXA1'
+
+kawakami_ground_truth <- data.table::fread(glue('{save_dir}/ground-truth/kawakami_{TF}_400000.txt'))
+dim(kawakami_ground_truth)
+```
+
+```{r}
+output_dir <- '/lus-projects/covid-ct/imlab/users/temi/projects/TFXcan/data/freedman/freedman-individuals'
 ```
 
 ```{r}
@@ -186,9 +335,7 @@ positives <- lapply(positives, function(each_positive){
 })
 ```
 
-
-need the names
-
+I need the names
 ```{r}
 negatives_id <- sapply(list.files(output_dir, pattern='*_train_test_negative_bed.txt', full.names=F), function(each_filename){
     paste0('LuCaP_', strsplit(each_filename, '_')[[1]][1], sep='')
@@ -198,7 +345,6 @@ positives_id <- sapply(list.files(output_dir, pattern='*_train_test_positive_bed
     paste0('LuCaP_', strsplit(each_filename, '_')[[1]][1], sep='')
 }) |> unname()
 ```
-
 
 ```{r}
 # the negatives and positives don't have a unique id
@@ -213,12 +359,302 @@ positives <- lapply(positives, function(each_positive){
 })
 ```
 
+Match by the names, rbind, and shuffle, and save
+```{r}
+names(positives) <- positives_id
+names(negatives) <- negatives_id
+```
+
+```{r}
+peaks_merged <- lapply(positives_id, function(each_name){
+    a <- positives[[each_name]]
+    b <- negatives[[each_name]]
+    c <- rbind(a, b) |> as.data.frame()
+    set.seed(25102022)
+    c <- c[sample(1:nrow(c)), ]
+    return(c)
+})
+
+names(peaks_merged) <- positives_id
+```
+
+Check that the files make sense 
+```{r}
+peaks_merged$LuCaP_170 |> head(5)
+```
 
 ```{r}
 sapply(positives, dim) ; sapply(negatives, dim)
 ```
 
-For now, select 2500 negatives and 1500 positives
+```{r}
+# all_positives <- do.call('rbind', positives) ; all_negatives <- do.call('rbind', negatives)
+# peaks_merged <- rbind(all_positives, all_negatives)
+
+# dim(peaks_merged)
+```
+
+Define freedman's ground truth - for one individual for now
+
+```{r}
+kawakami_chr <- lapply(strsplit(kawakami_ground_truth[, 1] |> unlist() |> unname(), split='_'), getElement, 1) |> unlist()
+kawakami_loci <- lapply(strsplit(kawakami_ground_truth[, 1] |> unlist() |> unname(), split='_'), getElement, 2) |> as.numeric()
+kawakami_loci_start <- kawakami_loci - 10
+kawakami_loci_end <- kawakami_loci + 10
+
+kawakami_loci_matrix <- cbind(kawakami_chr, kawakami_loci_start, kawakami_loci_end, kawakami_ground_truth) |> as.data.frame()
+kawakami_loci_matrix_split <- base::split(kawakami_loci_matrix, f=kawakami_loci_matrix$kawakami_chr)
+```
+```{r}
+freedman_predictors <- paste(peaks_merged$LuCaP_170$V1, (peaks_merged$LuCaP_170$V2 + 1), sep='_')
+freedman_predictors <- freedman_predictors |> as.matrix()
+
+freedman_ground_truth <- ifelse(startsWith(peaks_merged$LuCaP_170$V4, prefix='neg_'), 0, 1)
+freedman_ground_truth <- cbind(freedman_predictors, freedman_ground_truth)
+freedman_ground_truth[1:5, ]
+```
+```{r}
+freedman_loci <- lapply(strsplit(freedman_ground_truth[, 1] |> unlist() |> unname(), split='_'), getElement, 2) |> as.numeric()
+freedman_chr <- lapply(strsplit(freedman_ground_truth[, 1] |> unlist() |> unname(), split='_'), getElement, 1) |> unlist()
+
+freedman_loci_split <- base::split(freedman_loci, freedman_chr)
+```
+
+Check if any of these individuals' peaks are in Kawakami's ground truth
+
+Here, I use match for the exact motifs i.e. `chr1_123456` with `chr1_123456`
+```{r}
+valid_loci <- lapply(valid_chromosomes, function(each_chr){
+
+    a <- kawakami_ground_truth[, 1] |> unlist() |> unname()
+    a <- a[startsWith(a, paste(each_chr, '_', sep=''))]
+    b <- lapply(strsplit(a, '_'), getElement, 2) |> as.numeric()
+    test1 <- which(freedman_loci_split[[each_chr]] %in% b)
+    return(c(length(b), length(test1)))
+})
+
+names(valid_loci) <- valid_chromosomes
+```
+
+```{r}
+valid_loci <- do.call('rbind', valid_loci)
+colnames(valid_loci) <- c('kawakami', 'LuCaP_170_center')
+valid_loci |> head()
+```
+Looks like we have a few
+
+What if I match using a range or interval of 10bp on either sides? This needs to be done per chromosome
+
+```{r}
+list_int <- lapply(valid_chromosomes, function(each_chr){
+    # takes a bit of time
+    out <- apply(kawakami_loci_matrix_split[[each_chr]], 1, function(each_r){
+
+        freedman_loci <- freedman_loci_split[[each_chr]]
+
+        each_interval <- each_r[c(2:3)]
+
+        inds <- which(!is.na(.bincode(freedman_loci, c(each_interval), right=F, include.lowest=T)))
+        vals <- paste0(freedman_loci[inds], collapse=',')
+        if(vals != ""){
+            return(c(vals, each_r[2:length(each_r)]))
+        }
+    })
+
+    out_nonull <- base::Filter(Negate(is.null), out)
+    #out_nonull <- do.call('rbind', out_nonull) |> as.data.frame()
+    #out_nonull <- out_nonull[, c(1,4,5)]
+
+    return(out_nonull)
+
+})
+
+list_int <- lapply(list_int, function(each_list){
+    do.call('rbind', each_list)
+})
+
+names(list_int) <- valid_chromosomes
+```
+
+```{r}
+list_cnts <- do.call('rbind', lapply(list_int, nrow))
+valid_loci <- cbind(valid_loci, list_cnts)
+colnames(valid_loci) <- c('kawakami', 'LuCaP_170_center', 'LuCaP_170_10bp')
+valid_loci |> head()
+```
+
+```{r}
+barplot(valid_loci |> t(), beside=T, legend=colnames(valid_loci), col=c("darkgrey", "darkblue", "red"))
+mtext(side=3, line=2, at=-0.07, adj=0, cex=1.8, 'Kawakami vs Freedman defined motif regions')
+mtext(side=3, line=1, at=-0.07, adj=0, cex=1, 'Using exact center of motifs vs. 10bp region')
+```
+
+I think it is better to use an interval so that I don't miss many regions just because they are not exact. 
+
+### Running for all individuals
+
+```{r}
+
+valid_individual_regions <- lapply(peaks_merged, function(each_ind){
+
+    freedman_predictors <- paste(each_ind$V1, (each_ind$V2 + 1), sep='_')
+    freedman_predictors <- freedman_predictors |> as.matrix()
+    freedman_ground_truth <- ifelse(startsWith(each_ind$V4, prefix='neg_'), 0, 1)
+    freedman_ground_truth <- cbind(freedman_predictors, freedman_ground_truth)
+
+    list_int <- lapply(valid_chromosomes, function(each_chr){
+        # takes a bit of time
+        freedman_loci <- freedman_loci_split[[each_chr]]
+        out <- apply(kawakami_loci_matrix_split[[each_chr]], 1, function(each_r){
+
+            each_interval <- each_r[c(2:3)]
+
+            inds <- which(!is.na(.bincode(freedman_loci, c(each_interval), right=F, include.lowest=T)))
+            vals <- paste0(freedman_loci[inds], collapse=',')
+            if(vals != ""){
+                return(c(vals, each_r[2:length(each_r)]))
+            }
+        })
+
+        out_nonull <- base::Filter(Negate(is.null), out)
+        out_nonull <- do.call('rbind', out_nonull) |> as.data.frame()
+        out_nonull <- out_nonull[, c(1,4,5)] # select these columns
+
+        return(out_nonull)
+
+    })
+
+    df_int <- do.call('rbind', list_int)
+    df_mat <- cbind(paste(sapply(strsplit(df_int[, 2], '_'), getElement, 1), df_int[, 1], sep='_'), df_int[, 3])
+    return(df_mat)
+})
+
+names(valid_individual_regions) <- names(peaks_merged)
+```
+
+```{r}
+sapply(valid_individual_regions, dim)
+```
+```{r}
+sapply(valid_individual_regions, function(each_el){
+    table(each_el[, 2])
+})
+```
+The same regions seem to be highlighted for all individuals.
+
+Saving these
+
+```{r}
+valid_individual_regions[['LuCaP_170']] |> head()
+```
+
+```{r}
+save_dir <- glue('{project_dir}/motif-intervals/freedman')
+TF <- 'FOXA1'
+howmany <- format(400000, scientific=F) # because 200000 positives and negatives each
+# write.table(predictors, glue('{save_dir}/predictors/{ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+# write.table(ground_truth, glue('{save_dir}/ground-truth/{ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+```{r}
+lapply(names(valid_individual_regions), function(each_ind){
+    write.table(valid_individual_regions[[each_ind]][, 1], glue('{save_dir}/predictors/{each_ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+    write.table(valid_individual_regions[[each_ind]], glue('{save_dir}/ground-truth/{each_ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+})
+```
+
+
+
+
+There seem to be duplicates and I need to remove them such that they don't affect further experiments
+```{r}
+dups <- duplicated(freedman_ground_truth) # returns a vector of booleans
+gh <- freedman_ground_truth[!dups, ]
+dim(gh) ; length(unique(gh[, 1]))
+```
+
+```{r}
+n_occur <- gh[, 1] |> table() |> as.data.frame()
+duplicates <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+#
+if(length(duplicates) < 20){
+    print(duplicates)
+}
+```
+
+Look at the duplicates
+```{r}
+if(length(duplicates) < 20){
+    gh[gh[, 1] %in% duplicates, ]
+}
+#gh[gh[, 1] == "chr1_108171253", ]
+```
+
+Anyway, I need to remove them
+```{r}
+gh <- gh[!gh[, 1] %in% duplicates, ]
+dim(gh)
+```
+
+Find those freedman predictors that are in kawakami's 200000 predictors - use the `ground_truth` objects because it has the predictors and ground truth
+```{r}
+valid_indices <- which(freedman_ground_truth[, 1] %in% kawakami_ground_truth[, 1])
+#valid_predictors <- freedman_ground_truth[valid_indices, ]
+```
+
+
+```{r}
+x <- 2:18
+v <- c(5, 10, 15) # create two bins [5,10) and [10,15)
+cbind(x, findInterval(x, v))
+```
+
+
+
+
+Save them
+```{r}
+save_dir <- glue('{project_dir}/motif-intervals/kawakami')
+TF <- 'FOXA1'
+howmany <- format(400000, scientific=F) # because 200000 positives and negatives each
+write.table(predictors, glue('{save_dir}/predictors/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+write.table(ground_truth, glue('{save_dir}/ground-truth/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+
+
+
+Find those freedman predictors that are in kawakami's 200000 predictors - use the `ground_truth` objects because it has the predictors and ground truth
+```{r}
+valid_indices <- which(freedman_ground_truth[, 1] %in% predictors)
+valid_predictors <- freedman_ground_truth[valid_indices, ]
+```
+
+```{r}
+unique_ids <- unique(valid_predictors[, 1]) # remove duplicates ( I still need to find where or how these duplicates are coming into my data )
+length(unique_ids)
+```
+
+```{r}
+gt <- freedman_ground_truth[freedman_ground_truth[, 1] %in% unique_ids, ]
+```
+
+
+# come back to this later
+
+```{r}
+n_occur <- valid_predictors[, 1] |> table() |> as.data.frame()
+duplicates <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
+#
+length(duplicates)
+```
+
+
+
+
+
+
+For now, select 5000 negatives and 5000 positives
 
 ```{r}
 #set.seed(25102022)
@@ -327,115 +763,7 @@ tp_dt <- cbind(expand_region(dt, gsize, both = 393216), set='TP')
 ```
 
 
-# This section prepares Kawakami-human target regions
 
-```{r}
-project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
-kawakami_intersect_dir <- glue('{project_dir}/data/kawakami-human/kawakami-impact-split')
-```
-
-```{r}
-negatives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=T), data.table::fread)
-positives <- lapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=T), data.table::fread)
-```
-
-```{r}
-# select valid chromosomes chr1 to 22 and X
-valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
-# select for only these 
-negatives <- lapply(negatives, function(each_negative){
-    each_negative <- each_negative[each_negative$V1 %in% valid_chromosomes, ]
-})
-
-positives <- lapply(positives, function(each_positive){
-    each_positive <- each_positive[each_positive$V1 %in% valid_chromosomes, ]
-})
-
-# collect the names
-negatives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_negative_bed.txt', full.names=F), function(each_filename){
-    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
-}) |> unname()
-
-positives_id <- sapply(list.files(kawakami_intersect_dir, pattern='*_train_test_positive_bed.txt', full.names=F), function(each_filename){
-    paste0(strsplit(each_filename, '_')[[1]][1:2], collapse='_')
-}) |> unname()
-```
-
-```{r}
-sapply(positives, dim) ; sapply(negatives, dim)
-```
-
-You need to 
-- collapse them into one
-- select 50000 negatives and 50000 positives
-
-Match by the names, rbind, and shuffle, and save
-```{r}
-names(positives) <- positives_id
-names(negatives) <- negatives_id
-```
-
-```{r}
-all_negatives <- lapply(seq_along(negatives), function(i){
-    negatives[[i]]$binding_counts <- 0
-    return(negatives[[i]])
-    
-})
-
-all_negatives <- do.call('rbind', all_negatives)
-
-all_positives <- lapply(seq_along(positives), function(i){
-    positives[[i]]$binding_counts <- positives_id[i]
-    return(positives[[i]])
-})
-
-all_positives <- do.call('rbind', all_positives)
-```
-
-```{r}
-dim(all_negatives); dim(all_positives)
-```
-
-to ensure there are not duplicated peaks
-```{r}
-# the negatives and positives don't have a unique id
-all_negatives$V4 <- paste0('neg_peak', 1:nrow(all_negatives), sep='')
-all_positives$V4 <- paste0('pos_peak', 1:nrow(all_positives), sep='')
-
-```
-
-It will be more intelligent to select the most bound regions, downwards
-- no need to shuffle the positive set
-
-```{r}
-decreasing_counts <- sapply(strsplit(all_positives$binding_counts, '_'), getElement, 2) |> as.numeric() |> order(decreasing=T)
-selected_positives <- all_positives[decreasing_counts[1:20000], ]
-```
-
-```{r}
-set.seed(26102022)
-select_indices <- sample(1:nrow(all_negatives), size=20000, replace=F)
-selected_negatives <- all_negatives[select_indices, ]
-```
-
-```{r}
-dim(selected_positives); dim(selected_negatives)
-```
-
-```{r}
-peaks_merged <- rbind(selected_positives, selected_negatives)
-peaks_merged <- peaks_merged[sample(1:nrow(peaks_merged)), ]
-peaks_merged |> head(10)
-```
-
-### there may be duplicates
-
-```{r}
-n_occur <- peaks_merged$V4 |> table() |> as.data.frame()
-duplicates <- n_occur$Var1[n_occur$Freq > 1] |> unfactor()
-#
-length(duplicates)
-```
 
 
 ```{r}

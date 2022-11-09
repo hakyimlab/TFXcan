@@ -4,38 +4,49 @@ from parsl.app.app import python_app, bash_app
 from parsl.config import Config
 from parsl.providers import CobaltProvider
 from parsl.launchers import MpiExecLauncher
-from parsl.launchers import AprunLauncher
 from parsl.executors import HighThroughputExecutor
 
-#parsl.set_stream_logger() # <-- log everything to stdout
+print(f'Parsl version: {parsl.__version__}')
 
-print(parsl.__version__)
+# I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
+rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/parsl-runinfo'
+workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts'
 
-config = Config(
+# I want to put the cobalt directives 
+sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
+                '#COBALT --jobname=enformer-predict-personalized',
+                '#COBALT -o /projects/covid-ct/imlab/users/temi/projects/TFXcan/log/enformer-predict-personalized.out',
+                '#COBALT -e /projects/covid-ct/imlab/users/temi/projects/TFXcan/log/enformer-predict-personalized.err',
+                '#COBALT --debuglog /projects/covid-ct/imlab/users/temi/projects/TFXcan/log/enformer-predict-personalized.cobalt'
+]
+
+sch_options = '\n'.join(sch_options)
+
+#just in case there is a config loaded already
+cobalt_htex = Config(
     executors=[
         HighThroughputExecutor(
-            label='theta_local_gpu',
+            label='htex-Cobalt',
             max_workers=8,
-            available_accelerators=8,
+            worker_debug=True,
+            cores_per_worker=2, # how many nodes_per_block, 2 is usually enough or 1.
+            working_dir=workingdir,
             provider=CobaltProvider(
-                queue='full_node',
+                queue='full-node',
                 account='covid-ct',
                 launcher=MpiExecLauncher(),
                 walltime='00:10:00',
-                nodes_per_block=1,
-                init_blocks=1,
-                min_blocks=1,
-                max_blocks=1,
-                # string to prepend to #COBALT blocks in the submit
-                # script to the scheduler eg: '#COBALT -t 50'
-                scheduler_options='#COBALT --attrs enable_ssh=1',
-                # Command to be run before starting a worker, such as:
-                # 'module load Anaconda; source activate parsl_env'.
+                nodes_per_block=1, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
+                min_blocks=0,
+                max_blocks=5,
                 worker_init='source ~/.bashrc; conda activate dl-tools; which python',
-                cmd_timeout=120
+                cmd_timeout=120,
+                scheduler_options=sch_options
             ),
         )   
     ],
+    run_dir=rundir
 )
 
-parsl.load(config)
+# load parsl
+parsl.load(cobalt_htex)
