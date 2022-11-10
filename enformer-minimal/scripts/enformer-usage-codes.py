@@ -14,10 +14,10 @@ from kipoiseq import Interval # same as above, really
 import pyfaidx # to index our reference genome file
 import pandas as pd # for manipulating dataframes
 import numpy as np # for numerical computations
-import pickle # for saving large objects
 import os, sys, re # functions for interacting with the operating system
 import warnings
 from parsl import bash_app, python_app, join_app
+import h5py
 
 # @title `Enformer`, `EnformerScoreVariantsNormalized`, `EnformerScoreVariantsPCANormalized`,
 SEQUENCE_LENGTH = 393216
@@ -45,48 +45,6 @@ class Enformer:
         input_grad = tape.gradient(prediction, input_sequence) * input_sequence
         input_grad = tf.squeeze(input_grad, axis=0)
         return tf.reduce_sum(input_grad, axis=-1)
-    
-class EnformerScoreVariantsRaw:
-
-    def __init__(self, tfhub_url, organism='human'):
-        self._model = Enformer(tfhub_url)
-        self._organism = organism
-
-    def predict_on_batch(self, inputs):
-        ref_prediction = self._model.predict_on_batch(inputs['ref'])[self._organism]
-        alt_prediction = self._model.predict_on_batch(inputs['alt'])[self._organism]
-
-        return alt_prediction.mean(axis=1) - ref_prediction.mean(axis=1)
-
-
-class EnformerScoreVariantsNormalized:
-
-    def __init__(self, tfhub_url, transform_pkl_path,
-               organism='human'):
-        assert organism == 'human', 'Transforms only compatible with organism=human'
-        self._model = EnformerScoreVariantsRaw(tfhub_url, organism)
-        with tf.io.gfile.GFile(transform_pkl_path, 'rb') as f:
-            transform_pipeline = joblib.load(f)
-        self._transform = transform_pipeline.steps[0][1]  # StandardScaler.
-    
-    def predict_on_batch(self, inputs):
-        scores = self._model.predict_on_batch(inputs)
-        return self._transform.transform(scores)
-
-
-class EnformerScoreVariantsPCANormalized:
-
-    def __init__(self, tfhub_url, transform_pkl_path,
-               organism='human', num_top_features=500):
-        self._model = EnformerScoreVariantsRaw(tfhub_url, organism)
-        with tf.io.gfile.GFile(transform_pkl_path, 'rb') as f:
-            self._transform = joblib.load(f)
-        self._num_top_features = num_top_features
-    
-    def predict_on_batch(self, inputs):
-        scores = self._model.predict_on_batch(inputs)
-        return self._transform.transform(scores)[:, :self._num_top_features]
-
 
 # @title `variant_centered_sequences`
 
@@ -115,8 +73,9 @@ class FastaStringExtractor:
     def close(self):
         return self.fasta.close()
 
-def one_hot_encode(sequence):
-    return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
+# @python_app
+# def one_hot_encode(sequence):
+#     return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
 
 # @title `plot_tracks`
 
@@ -157,13 +116,13 @@ def create_region_file(open_vcf, region, subset_vcf_dir, individual, software_pa
 
     path = f'{subset_vcf_dir}/{individual}_{interval.chr}_{interval.start}_{interval.end}_subset_genotypes.vcf.gz'
 
-    region = f'{interval.chr}:{interval.start}-{interval.end}'
+    region_interval = f'{interval.chr}:{interval.start}-{interval.end}'
 
-    view_cmd = f"{path_to_bcftools} filter {open_vcf} -r {region} --output-type z --output {path} && {path_to_tabix} -p vcf {path}"
+    view_cmd = f"{path_to_bcftools} filter {open_vcf} -r {region_interval} --output-type z --output {path} && {path_to_tabix} -p vcf {path}"
 
     out = subprocess.run(view_cmd, shell=True)
 
-    return {'subset_path':path, 'interval':interval, 'individual':individual}
+    return {'subset_path':path, 'interval':interval, 'individual':individual, 'region':region}
 
 
 def extract_individual_sequence(subset_dict, fasta_file_path, fasta_extractor, delete_region=False):
@@ -202,4 +161,7 @@ def extract_individual_sequence(subset_dict, fasta_file_path, fasta_extractor, d
         os.remove(subset_dict['subset_path'])
         os.remove(f"{subset_dict['subset_path']}.tbi")
 
-    return {'sequence':individual_sequences, 'sequence_source':seq_source}
+    return {'sequence':individual_sequences, 'sequence_source':seq_source, 'region':subset_dict['region'][3]}
+
+
+

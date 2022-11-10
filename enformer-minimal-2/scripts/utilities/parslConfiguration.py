@@ -9,8 +9,8 @@ from parsl.executors import HighThroughputExecutor
 print(f'Parsl version: {parsl.__version__}')
 
 # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
-rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/runinfo'
-workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal'
+rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/runinfo'
+workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2'
 
 # I want to put the cobalt directives 
 sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
