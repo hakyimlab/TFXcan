@@ -1,15 +1,5 @@
-# === This script contains all codes to test if tensorflow and ENFORMER are working accurately  
-# Created by Temi
-# DATE: Thursday Oct 20 2022
-
-from __future__ import absolute_import, division, print_function, unicode_literals
-import os, re, sys, json, h5py, csv, warnings
 import parsl
 from parsl.app.app import python_app
-import pandas as pd
-import numpy as np
-
-# ===========
 
 def check_query(sample, query, output_dir, logfile):
     '''
@@ -185,100 +175,61 @@ def run_predictions(region, individual, vcf_file, subset_vcf_dir, fasta_file_pat
 
 
     return(c)
-# =====================
 
-# import user-defined codes
 
-# get the path of the script as well as parameters         
-whereis_script = os.path.dirname(sys.argv[0])  
-script_path = os.path.abspath(whereis_script)
 
-sys.path.append(f'{script_path}/utilities')
 
-from enformerUsageCodes import *
-import personalEnformerUtilities
+#@python_app
+# def create_sequences(sample, region, fasta_file_path, fasta_extractor, open_vcf_file, temporary_vcf_dir, software_paths, script_path):
+#     import pandas as pd
+#     import os
+#     import h5py
+#     import numpy as np
+#     import kipoiseq
 
-def main():
+#     usage_codes = f'{script_path}/enformer-usage-codes.py'
+#     exec(open(usage_codes).read(), globals(), globals())
 
-    # personal_enformer = f'{script_path}/personal-enformer.py'
-    # exec(open(personal_enformer).read(), globals(), globals())
+#     # create the region file
+#     a = create_region_file(open_vcf=open_vcf_file, region=region, subset_vcf_dir=temporary_vcf_dir, individual=sample, software_paths=software_paths)
+#     print(f'Region file is created')
+#     try:
+#         print('Extracting individual sequences')
+#         b = extract_individual_sequence(subset_dict=a, fasta_file_path=fasta_file_path, fasta_extractor=fasta_extractor, delete_region=True)
+#         #b['sequence'][sample] = one_hot_encode(b['sequence'][sample])[np.newaxis]
+#         return(b)
+#     except ValueError:
+#         #status = [0, 'NA'] #evaluate_check(is_query_done, b={'sequence_source':'NA'})
+#         return({'sequence':None, 'sequence_source':'NA', 'region':'NA'})
 
-    # read the parameters file
-    with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
+# def create_input(sample, region, fasta_file_path, fasta_extractor, open_vcf_file, temporary_vcf_dir, software_paths):
 
-        parameters = json.load(f)
+#     # create the region file
+#     a = create_region_file(open_vcf=open_vcf_file, region=region, subset_vcf_dir=temporary_vcf_dir, individual=sample, software_paths=software_paths)
+#     print(f'Region file is created')
+#     try:
+#         print('Extracting individual sequences')
+#         b = extract_individual_sequence(subset_dict=a, fasta_file_path=fasta_file_path, fasta_extractor=fasta_extractor, delete_region=True)
+#         b['sequence'][sample] = one_hot_encode(b['sequence'][sample])[np.newaxis]
+#         return(b)
+#     except ValueError:
+#         #status = [0, 'NA'] #evaluate_check(is_query_done, b={'sequence_source':'NA'})
+#         return({'sequence':None, 'sequence_source':'NA', 'region':'NA'})
+    
+# @bash_app
+# def call_single_enformer_run(call_script, sequence_region, sam, stderr='/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/bashapp_error.err'):
+#     return(' '.join(['bash', call_script, sequence_region, sam]))
 
-        intervals_dir = parameters['interval_list_dir']
-        model_path = parameters['model_path']
-        fasta_file = parameters['hg38_fasta_file']
-        output_dir = parameters['output_dir']
-        individuals = parameters['individuals']
-        vcf_file = parameters['vcf_file']
-        path_to_bcftools = parameters['path_to_bcftools']
-        path_to_tabix = parameters['path_to_tabix']
-        temporary_vcf_dir = parameters['temporary_vcf_dir']
-        TF = parameters['TF']
-        logfile_path = parameters['logfile_path']
-        sequence_folder = parameters['sequence_folder']
 
-    # fasta extractor
-    fasta_extractor = FastaStringExtractor(fasta_file)
-    print('Fasta file extracted')
+# @bash_app
+# def call_single_enformer_run(call_script, model_path, output_dir, sequence_folder, sequence_info, sam, logfile_path, stderr='/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/bashapp_error.err'):
 
-    # load the parsl config file here since you want to distribute across individuals
-    parsl_config = f'{script_path}/utilities/parslConfiguration.py'
-    exec(open(parsl_config).read(), globals(), globals()) 
+#     region_id = sequence_info['region']
+#     sequence_type = sequence_info['sequence_source']
 
-    for each_individual in individuals:
+#     sequence_file = f'{sequence_folder}/{sam}/{region_id}_{sequence_type}.txt'
 
-        # personal_enformer = f'{script_path}/utilities/personalEnformerUtilities.py'
-        # exec(open(personal_enformer).read(), globals(), globals())  
+#     with open(sequence_file, 'w') as f:
+#         f.write(sequence_info['sequence'][sam])
 
-        # usage_codes = f'{script_path}/utilities/enformerUsageCodes.py'
-        # exec(open(usage_codes).read(), globals(), globals())
-
-        # create the directories for this individual 
-        if not os.path.exists(f'{output_dir}/{each_individual}'):
-            print(f'\n[CREATING OUTPUT DIRECTORY] at {output_dir}/{each_individual}')
-            os.makedirs(f'{output_dir}/{each_individual}')
-
-        print(f'[LOADING INTERVALS] {each_individual}')
-        a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}.txt', sep=' ', header=None)
-        list_of_regions = a[0].tolist() # a list of queries
-
-        # I need a log file
-        # read in the log file for this individual ; doing this so that the log file is not opened everytime
-        logfile_csv = f'{logfile_path}/{each_individual}_predictions_log.csv'
-        if os.path.isfile(logfile_csv):
-            logfile = pd.read_csv(logfile_csv)
-            open_mode = 'a'
-        else:
-            logfile = None
-            open_mode = 'w'
-
-        # for each interval check if prediction has been done; will only return these ==> not a parsl app
-        query_status = [check_query(sample=each_individual, query=query, output_dir=output_dir, logfile=logfile) for query in list_of_regions]
-        print(f'Query results are: {query_status}')
-
-        with open(logfile_csv, open_mode, encoding='UTF8') as running_log_file:
-            logwriter = csv.writer(running_log_file)
-            if open_mode == 'w':
-                logwriter.writerow(['motif', 'individual', 'status', 'sequence_type']) # write the headers
-                
-            sequence_list_predictions_run = []
-            for query in query_status:
-                sequence_list_predictions_run.append(run_predictions(region=query, individual=each_individual, vcf_file = vcf_file, subset_vcf_dir=temporary_vcf_dir, fasta_file_path=fasta_file, fasta_extractor=fasta_extractor, model_path=model_path, output_dir=output_dir, software_paths=[path_to_bcftools, path_to_tabix]))
-        
-            predictions_output = [s.result() for s in sequence_list_predictions_run]
-            print(predictions_output)
-
-            running_log_file.writerows(predictions_output)
-
-            running_log_file.flush()
-            os.fsync(running_log_file)
-
-        print(f'[FINISHED] {each_individual}\n')
-    print(f'[FINISHED BOTH INDIVIDUALS]')                  
-                    
-if __name__ == '__main__':
-    main()
+#     return(' '.join(['bash', call_script, model_path, output_dir, sequence_file, region_id, sequence_type, sam, logfile_path]))

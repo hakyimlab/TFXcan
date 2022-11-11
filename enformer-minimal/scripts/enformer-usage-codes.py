@@ -118,7 +118,7 @@ def create_region_file(open_vcf, region, subset_vcf_dir, individual, software_pa
 
     region_interval = f'{interval.chr}:{interval.start}-{interval.end}'
 
-    view_cmd = f"{path_to_bcftools} filter {open_vcf} -r {region_interval} --output-type z --output {path} && {path_to_tabix} -p vcf {path}"
+    view_cmd = f"{path_to_bcftools} view {open_vcf} -r {region_interval} --output-type z --output {path} && {path_to_tabix} -p vcf {path}"
 
     out = subprocess.run(view_cmd, shell=True)
 

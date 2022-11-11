@@ -9,15 +9,15 @@ from parsl.executors import HighThroughputExecutor
 print(f'Parsl version: {parsl.__version__}')
 
 # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
-rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/runinfo'
-workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2'
+rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/runinfo'
+workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal'
 
 # I want to put the cobalt directives 
 sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
                 '#COBALT --jobname=enformer-predict-personalized',
-                '#COBALT -o /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/log/enformer-predict-personalized.out',
-                '#COBALT -e /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/log/enformer-predict-personalized.err',
-                '#COBALT --debuglog /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/log/enformer-predict-personalized.cobalt'
+                '#COBALT -o /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/enformer-predict-personalized.out',
+                '#COBALT -e /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/enformer-predict-personalized.err',
+                '#COBALT --debuglog /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/enformer-predict-personalized.cobalt'
 ]
 
 sch_options = '\n'.join(sch_options)
@@ -36,8 +36,8 @@ cobalt_htex = Config(
                 queue='full-node',
                 account='covid-ct',
                 launcher=MpiExecLauncher(),
-                walltime='00:15:00',
-                nodes_per_block=2, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
+                walltime='00:30:00',
+                nodes_per_block=1, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
                 min_blocks=0,
                 max_blocks=5,
                 worker_init='source ~/.bashrc; conda activate dl-tools; which python',

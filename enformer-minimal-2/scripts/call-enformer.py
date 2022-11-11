@@ -15,9 +15,6 @@ import warnings
 from enformerUsageCodes import *
 import personalEnformerUtilities
 
-parsl_config = f'{script_path}/utilities/parslConfiguration.py'
-exec(open(parsl_config).read(), globals(), globals())
-
 personal_enformer = f'{script_path}/utilities/personalEnformerUtilities.py'
 exec(open(personal_enformer).read(), globals(), globals())
 
@@ -40,6 +37,9 @@ with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 # # load the model
 # enformer_model = Enformer(model_path)
 
+parsl_config = f'{script_path}/utilities/parslConfiguration.py'
+exec(open(parsl_config).read(), globals(), globals())
+
 for each_individual in individuals:
 
     print(sys.path)
@@ -54,10 +54,10 @@ for each_individual in individuals:
 
         sequence_list = [sequence.rstrip() for sequence in f]
 
-        sequence_list_predictions_run = []
-        for i, each_sequence in enumerate(sequence_list):
-            sequence_list_predictions_run.append(run_predictions(sequence=each_sequence, region=str(i), sample=each_individual, seq_type='var', model_path=model_path, output_dir=output_dir))
-        
-        prediction_output = [s.result() for s in sequence_list_predictions_run]
+    sequence_list_predictions_run = []
+    for i, each_sequence in enumerate(sequence_list):
+        sequence_list_predictions_run.append(run_predictions(sequence=each_sequence, region=str(i), sample=each_individual, seq_type='var', model_path=model_path, output_dir=output_dir))
+    
+    prediction_output = [s.result() for s in sequence_list_predictions_run]
 
     print(f'[DONE] prediction_output')

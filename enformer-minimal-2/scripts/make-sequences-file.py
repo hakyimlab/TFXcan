@@ -44,7 +44,6 @@ for each_individual in individuals:
     a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}.txt', sep=' ', header=None)
     each_individual_intervals = a[0].tolist() # a list of queries
 
-
     with open(f'{sequence_folder}/{each_individual}_regions_sequences.txt', 'w') as f:
         
         for each_region in each_individual_intervals:
@@ -54,4 +53,4 @@ for each_individual in individuals:
 
             output = createSequencesList.create_sequences(sample=each_individual, region=region, fasta_file_path=fasta_file, fasta_extractor=sequence_extractor, open_vcf_file=vcf_file, temporary_vcf_dir=temporary_vcf_dir, software_paths=[path_to_bcftools, path_to_tabix], script_path=script_path)
 
-        f.write(output['sequence'][each_individual] + '\n')
+            f.write(output['sequence'][each_individual] + '\n')

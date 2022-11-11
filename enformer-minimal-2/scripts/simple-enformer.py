@@ -1,44 +1,14 @@
 
-import parsl
-from parsl.app.app import python_app, join_app, bash_app
-import kipoiseq
 
-#@python_app
-def create_sequences(sample, region, fasta_file_path, fasta_extractor, open_vcf_file, temporary_vcf_dir, software_paths, script_path):
-    import pandas as pd
-    import os
-    import h5py
-    import numpy as np
-    import kipoiseq
-
-    usage_codes = f'{script_path}/enformer-usage-codes.py'
-    exec(open(usage_codes).read(), globals(), globals())
-
-    # create the region file
-    a = create_region_file(open_vcf=open_vcf_file, region=region, subset_vcf_dir=temporary_vcf_dir, individual=sample, software_paths=software_paths)
-    print(f'Region file is created')
-    try:
-        print('Extracting individual sequences')
-        b = extract_individual_sequence(subset_dict=a, fasta_file_path=fasta_file_path, fasta_extractor=fasta_extractor, delete_region=True)
-        #b['sequence'][sample] = one_hot_encode(b['sequence'][sample])[np.newaxis]
-        return(b)
-    except ValueError:
-        #status = [0, 'NA'] #evaluate_check(is_query_done, b={'sequence_source':'NA'})
-        return({'sequence':None, 'sequence_source':'NA', 'region':'NA'})
-
-def create_input(sample, region, fasta_file_path, fasta_extractor, open_vcf_file, temporary_vcf_dir, software_paths):
-
-    # create the region file
-    a = create_region_file(open_vcf=open_vcf_file, region=region, subset_vcf_dir=temporary_vcf_dir, individual=sample, software_paths=software_paths)
-    print(f'Region file is created')
-    try:
-        print('Extracting individual sequences')
-        b = extract_individual_sequence(subset_dict=a, fasta_file_path=fasta_file_path, fasta_extractor=fasta_extractor, delete_region=True)
-        b['sequence'][sample] = one_hot_encode(b['sequence'][sample])[np.newaxis]
-        return(b)
-    except ValueError:
-        #status = [0, 'NA'] #evaluate_check(is_query_done, b={'sequence_source':'NA'})
-        return({'sequence':None, 'sequence_source':'NA', 'region':'NA'})
+import tensorflow as tf
+import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
+import joblib
+import gzip # for manipulating compressed files
+from kipoiseq import Interval # same as above, really
+import pyfaidx # to index our reference genome file
+import pandas as pd # for manipulating dataframes
+import numpy as np # for numerical computations
+import os, sys, re
 
 def one_hot_encode(sequence):
     return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
@@ -56,7 +26,6 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
 
     return([region, sample, 'completed', seq_type])
 
-@python_app
 def run_predictions(sequence, region, sample, seq_type, model_path, output_dir):
 
     import tensorflow as tf
@@ -93,8 +62,8 @@ def run_predictions(sequence, region, sample, seq_type, model_path, output_dir):
 
         return(prediction_dict['human'][0])
 
-    # gpus = tf.config.list_physical_devices('GPU')
-    # print(f'GPU devices found: {gpus}')
+    gpus = tf.config.list_physical_devices('GPU')
+    print(f'GPU devices found: {gpus}')
 
     # gpus = tf.config.experimental.list_physical_devices('GPU')
     # if gpus:
@@ -108,10 +77,10 @@ def run_predictions(sequence, region, sample, seq_type, model_path, output_dir):
     #         # Memory growth must be set before GPUs have been initialized
     #         print(e)
 
-    #enformer_model = tf.saved_model.load(model_path).model
-    from functools import lru_cache
+    # #enformer_model = tf.saved_model.load(model_path).model
+    # from functools import lru_cache
 
-    @lru_cache(1)
+    # @lru_cache(1)
     def get_model(model_class, model_path):
         return model_class(model_path)
 
@@ -125,9 +94,25 @@ def run_predictions(sequence, region, sample, seq_type, model_path, output_dir):
 
     return(h5result)
 
-@bash_app
-def call_single_enformer_run(call_script, sequence_region, sam, stderr='/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal/log/bashapp_error.err'):
-    return(' '.join(['bash', call_script, sequence_region, sam]))
+def main():
+    sequence_folder = "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/sequence_folder"
+    each_individual = 'LuCaP_145'
+
+    model_path = "/projects/covid-ct/imlab/data/enformer/raw"
+    output_dir = "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-minimal-2/outputs"
+    enformer_model = tf.saved_model.load(model_path).model
+
+    with open(f'{sequence_folder}/{each_individual}_regions_sequences.txt', 'r') as f:
+        sequence_list = [sequence.rstrip() for sequence in f]
+
+    for i, sequence in enumerate(sequence_list):
+        out = run_predictions(sequence, str(i), each_individual, 'var', model_path, output_dir)
+        print(out)
+
+
+                    
+if __name__ == '__main__':
+    main()
 
 
 # @bash_app
