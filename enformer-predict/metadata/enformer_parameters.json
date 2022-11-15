@@ -1,0 +1,15 @@
+{
+    "model_path":"/projects/covid-ct/imlab/data/enformer/raw",
+    "hg38_fasta_file":"/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+    "interval_list_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/motif-intervals/freedman/predictors",
+    "output_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predictions/freedman/matched-predictions",
+    "individuals":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/metadata/individuals.txt",
+    "vcf_file":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/prj6_genotypes/merged_phased_SNPs.vcf.gz",
+    "path_to_bcftools":"/home/temi/miniconda3/envs/compbio-tools/bin/bcftools",
+    "path_to_tabix":"/home/temi/miniconda3/envs/compbio-tools/bin/tabix",
+    "temporary_vcf_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/temp-vcfs",
+    "TF":"FOXA1",
+    "logfile_path":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/predictions-log",
+    "is_ref": "false",
+    "batch_size":100
+}
