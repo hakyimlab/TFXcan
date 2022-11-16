@@ -30,6 +30,7 @@ sys.path.append(f'{script_path}/utilities')
 
 import enformerUsageCodes
 import runPredictionUtilities
+import parslConfiguration
 
 
 def generate_batch(lst, batch_size):
@@ -71,8 +72,11 @@ def main():
         print(individuals)
 
     # load the parsl config file here since you want to distribute across individuals
-    parsl_config = f'{script_path}/utilities/parslConfiguration.py'
-    exec(open(parsl_config).read(), globals(), globals()) 
+    # parsl_config = f'{script_path}/utilities/parslConfiguration.py'
+    # exec(open(parsl_config).read(), globals(), globals()) 
+
+    config_directives = parslConfiguration.create_parsl_configuration()
+    parsl.load(config_directives)
 
     for each_individual in individuals:
 
@@ -80,6 +84,10 @@ def main():
         def get_fastaExtractor(fasta_file_path=fasta_file):
             fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file_path)
             return fasta_extractor
+        
+        @lru_cache(1)
+        def get_model(model_class, model_path):
+            return model_class(model_path)
 
         #fasta_extractor = get_fastaExtractor(fasta_file_path)
         # create the directories for this individual 
@@ -89,7 +97,7 @@ def main():
 
         print(f'\n[INFO] Loading intervals for {each_individual}')
         a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}_400000.txt', sep=' ', header=None)
-        list_of_regions = a[0].tolist() # a list of queries
+        list_of_regions = a[0].tolist()[1:100] # a list of queries
 
         # I need a log file
         # read in the log file for this individual ; doing this so that the log file is not opened everytime
@@ -109,11 +117,14 @@ def main():
         # exec(open(parsl_config).read(), globals(), globals()) 
 
         count = 0
-        for region_batch in predict_batches:
+        for query_batch in predict_batches:
+
+            # run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+            # exec(open(run_predictions_tools).read(), globals(), globals())
 
             print(f'[INFO] Starting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')
 
-            sequence_list_appfutures = (create_input(region=query, individual=each_individual, vcf_file=vcf_file, subset_vcf_dir=temporary_vcf_dir, fasta_file_path=fasta_file, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, software_paths=[path_to_bcftools, path_to_tabix]) for query in tqdm(region_batch, desc='[INFO] Creating futures for inputs'))
+            sequence_list_appfutures = (create_input(region=query, individual=each_individual, vcf_file=vcf_file, subset_vcf_dir=temporary_vcf_dir, fasta_file_path=fasta_file, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, software_paths=[path_to_bcftools, path_to_tabix]) for query in tqdm(query_batch, desc='[INFO] Creating futures for inputs'))
 
             sequence_list = [s.result() for s in sequence_list_appfutures]
             
@@ -123,8 +134,10 @@ def main():
             if not sequence_list:
                 print(f'[INFO] Nothing to do. All predictions are available for batch {count + 1} for {each_individual}')
             else:
-                predictions_appfutures = (enformer_predict(sequence['sequence'], region=sequence['region'], sample=each_individual, seq_type=sequence['sequence_source'], model_path=model_path, output_dir=output_dir, script_path=script_path, logfile_path=logfile_path) for sequence in tqdm(sequence_list, desc='[INFO] Creating futures of predictions'))
-                predictions_output = [p.result() for p in predictions_appfutures]
+                predictions_appfutures = (enformer_predict(sequence['sequence'], region=sequence['region'], sample=each_individual, seq_type=sequence['sequence_source'], model_path=model_path, model_func=get_model, output_dir=output_dir, script_path=script_path, logfile_path=logfile_path) for sequence in tqdm(sequence_list, desc='[INFO] Creating futures of predictions'))
+
+                print(list(predictions_appfutures))
+                #predictions_output = [p.result() for p in predictions_appfutures]
             count = count + 1
         print(f'[INFO] Finished predictions for {each_individual}')
 

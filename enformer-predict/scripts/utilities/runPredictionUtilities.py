@@ -1,5 +1,5 @@
 import parsl
-from parsl.app.app import python_app
+from parsl.app.app import python_app, join_app
 
 # def peek(iterable):
 #     import itertools
@@ -9,7 +9,6 @@ from parsl.app.app import python_app
 #         return None
 
 #     return itertools.chain([first], iterable)
-
 def check_query(sample, query, output_dir, logfile):
     '''
     Checks of predictions are available for an individual or sample
@@ -75,6 +74,7 @@ def create_region_file(vcf_file, region, subset_vcf_dir, individual, software_pa
     return {'subset_path':path, 'interval':interval, 'individual':individual, 'region':region}
 
 
+#@python_app
 def extract_individual_sequence(subset_dict, fasta_file_path, script_path, fasta_func, delete_region=False):
 
     '''
@@ -145,8 +145,8 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     return([region, sample, 'completed', seq_type])
 
 
-@python_app
-def enformer_predict(sequence, region, sample, seq_type, model_path, output_dir, script_path, logfile_path):
+#@python_app
+def enformer_predict(sequence, region, sample, seq_type, model_path, model_func, output_dir, script_path, logfile_path):
 
     import tensorflow as tf
     import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
@@ -204,15 +204,15 @@ def enformer_predict(sequence, region, sample, seq_type, model_path, output_dir,
             running_log_file.flush()
             os.fsync(running_log_file)
 
-    @lru_cache(1)
-    def get_model(model_class, model_path):
-        return model_class(model_path)
+    # @lru_cache(1)
+    # def get_model(model_class, model_path):
+    #     return model_class(model_path)
 
-    enformer_model = get_model(Enformer, model_path)
+    enformer_model = model_func(Enformer, model_path)
     #print('Model loaded')
 
     sequence_encoded = one_hot_encode(sequence)[np.newaxis]
-    print(f'[INFO] {region}: input matrix shape is {sequence_encoded.shape}')
+    #print(f'[INFO] {region}: input matrix shape is {sequence_encoded.shape}')
     target_prediction = enformer_model.predict_on_batch(sequence_encoded)['human'][0]
     obj_to_save = target_prediction[range(448 - 8, (448 + 8 + 1)), : ].squeeze()
     h5result = save_h5_prediction(obj_to_save, sample, region, seq_type, output_dir)
@@ -232,13 +232,18 @@ def create_input(region, individual, vcf_file, subset_vcf_dir, fasta_file_path, 
     import runPredictionUtilities
 
     # first check the query
-    chk = runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile)
-    # #chk_result = chk.result()
+    chk_result = runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile) #for region in region_batch
+    #chk_result = chk_appfuture.result()
     # print(f'[INFO] {region}: length of input sequence is {len(chk['sequence'])}')
 
-    if chk is not None:
+    if chk_result is not None:
         #print(f'{chk} is not None')
-        a = runPredictionUtilities.create_region_file(vcf_file=vcf_file, region=chk, subset_vcf_dir=subset_vcf_dir, individual=individual, software_paths=software_paths)
+        a = runPredictionUtilities.create_region_file(vcf_file=vcf_file, region=chk_result, subset_vcf_dir=subset_vcf_dir, individual=individual, software_paths=software_paths)
         b = runPredictionUtilities.extract_individual_sequence(subset_dict=a, fasta_file_path=fasta_file_path, script_path=script_path, fasta_func=fasta_func, delete_region=True)
-        print(f"[INFO] {region}: length of input sequence is {len(b['sequence'])}")
-        return(b)
+
+        #check that length of sequence is compatible
+        l_sequence = len(b['sequence'])
+        if l_sequence == 393216:
+            return(b)
+        else:
+            print(f"[INFO] {chk_result}: length of input sequence is {l_sequence}")
