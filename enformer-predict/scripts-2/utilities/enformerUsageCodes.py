@@ -9,34 +9,20 @@ import pyfaidx # to index our reference genome file
 import pandas as pd # for manipulating dataframes
 import numpy as np # for numerical computations
 
-# @title `Enformer`, `EnformerScoreVariantsNormalized`, `EnformerScoreVariantsPCANormalized`,
-#SEQUENCE_LENGTH = 393216
+# class Enformer:
 
-class Enformer:
+#     from functools import lru_cache
 
-    def __init__(self, tfhub_url):
-        #self._model = hub.load(tfhub_url).model
-        self._model = tf.saved_model.load(tfhub_url).model
+#     @lru_cache(maxsize=1)
+#     def __init__(self, tfhub_url):
+#         #self._model = hub.load(tfhub_url).model
+#         import tensorflow as tf
+#         self._model = tf.saved_model.load(tfhub_url).model
 
-    def predict_on_batch(self, inputs):
-        predictions = self._model.predict_on_batch(inputs)
-        return {k: v.numpy() for k, v in predictions.items()}
-
-    # @tf.function
-    # def contribution_input_grad(self, input_sequence,
-    #                           target_mask, output_head='human'):
-    #     input_sequence = input_sequence[tf.newaxis]
-
-    #     target_mask_mass = tf.reduce_sum(target_mask)
-    #     with tf.GradientTape() as tape:
-    #         tape.watch(input_sequence)
-    #         prediction = tf.reduce_sum(target_mask[tf.newaxis] * self._model.predict_on_batch(input_sequence)[output_head]) / target_mask_mass
-
-    #     input_grad = tape.gradient(prediction, input_sequence) * input_sequence
-    #     input_grad = tf.squeeze(input_grad, axis=0)
-    #     return tf.reduce_sum(input_grad, axis=-1)
-
-# @title `variant_centered_sequences`
+#     @lru_cache(maxsize=1)
+#     def predict_on_batch(self, inputs):
+#         predictions = self._model.predict_on_batch(inputs)
+#         return {k: v.numpy() for k, v in predictions.items()}
 
 class FastaStringExtractor:
     

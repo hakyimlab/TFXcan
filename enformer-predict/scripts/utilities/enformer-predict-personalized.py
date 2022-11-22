@@ -18,7 +18,9 @@ import pandas as pd # for manipulating dataframes
 import numpy as np # for numerical computations
 import os, sys, re # functions for interacting with the operating system
 from functools import lru_cache
-import math, time, tqdm
+import math, time
+
+from tqdm import tqdm
 
 # get the path of the script as well as parameters         
 whereis_script = os.path.dirname(sys.argv[0])  
@@ -36,10 +38,6 @@ def generate_batch(lst, batch_size):
         return
     for i in range(0, len(lst), batch_size):
         yield lst[i:(i + batch_size)]
-
-
-
-region_range = 80
 
 def main():
 
@@ -72,52 +70,34 @@ def main():
         individuals = pd.read_table(individuals, header=None)[0].tolist()
         print(individuals)
 
+    # load the parsl config file here since you want to distribute across individuals
+    # parsl_config = f'{script_path}/utilities/parslConfiguration.py'
+    # exec(open(parsl_config).read(), globals(), globals()) 
+
     config_directives = parslConfiguration.create_parsl_configuration()
     parsl.load(config_directives)
 
-
-    @lru_cache(1)
-    def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
-
-        import sys
-        sys.path.append(f'{script_path}/utilities')
-        import enformerUsageCodes
-
-        fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file_path)
-        return fasta_extractor
-
-    @lru_cache(12)
-    @python_app
-    def get_model(model_path=model_path):
-        import tensorflow as tf
-        print(f'[INFO] Tensorflow found {tf.config.list_physical_devices()}')
-        return tf.saved_model.load(model_path).model
-
     for each_individual in individuals:
-        # this is specific to an individual but is cached per individual
+
         @lru_cache(1)
-        def make_cyvcf_object(vcf_file=vcf_file, sample=each_individual):
-            import cyvcf2
-            return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+        def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
 
-        # @lru_cache(1)
-        # def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
+            # import sys
+            # sys.path.append(f'{script_path}/utilities')
+            # import enformerUsageCodes
+            usageCodes = f'{script_path}/utilities/enformerUsageCodes.py'
+            exec(open(usageCodes).read(), globals(), globals()) 
 
-        #     # import sys
-        #     # sys.path.append(f'{script_path}/utilities')
-        #     # import enformerUsageCodes
-        #     usageCodes = f'{script_path}/utilities/enformerUsageCodes.py'
-        #     exec(open(usageCodes).read(), globals(), globals()) 
-
-        #     fasta_extractor = FastaStringExtractor(fasta_file_path)
-        #     return fasta_extractor
+            fasta_extractor = FastaStringExtractor(fasta_file_path)
+            return fasta_extractor
         
-        # @lru_cache(1)
-        # def get_model(model_class, model_path):
-        #     return model_class(model_path)
+        @lru_cache(1)
+        def get_model(model_class, model_path):
+            return model_class(model_path)
 
         tic_overhead = time.process_time()
-
+        #fasta_extractor = get_fastaExtractor(fasta_file_path)
+        # create the directories for this individual 
         if not os.path.exists(f'{output_dir}/{each_individual}'):
             print(f'[INFO] Creating output directory at {output_dir}/{each_individual}')
             os.makedirs(f'{output_dir}/{each_individual}')
@@ -134,22 +114,26 @@ def main():
         else:
             logfile = None
 
-        batches = runPredictionUtilities.generate_batch(list_of_regions, batch_size=batch_size)
-        #print(len(list(batches)))
+        run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+        exec(open(run_predictions_tools).read(), globals(), globals())
 
-        count = 0
-        for batch_query in batches:
-            
-            #batch_message = f'[INFO] Starting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')
+        toc_overhead = time.process_time()
+        print(f'[INFO] (time) Overhead time to load modules and set environment is {toc_overhead - tic_overhead}')
 
-            #batch_query = list(batch_query)
+        tic_prediction = time.process_time()
+        query_parsl_appfutures = (run_single_predictions(region=query, individual=each_individual, vcf_file=vcf_file, subset_vcf_dir=temporary_vcf_dir, fasta_file_path=fasta_file, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, model_path=model_path, model_func=get_model, logfile_path=logfile_path, software_paths=[path_to_bcftools, path_to_tabix]) for query in tqdm(list_of_regions, desc='[INFO] Creating futures for input regions'))
+        toc_prediction = time.process_time()
+        print(f'[INFO] (time) to create futures for 100 queries (using a generator) is {toc_prediction - tic_prediction}')
 
-            # load the model 
-            # enformer_model = get_model()
+        tic_parsl_result = time.process_time()
+        query_results = [q.result() for q in tqdm(query_parsl_appfutures, desc='[INFO] Executing futures')]
+        toc_parsl_result = time.process_time()
 
-            query_futures = [runPredictionUtilities.run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, model_path=model_path, model_func=get_model().result(), logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating inputs and predicting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
+        print(f'[INFO] (time) to collect all parsl results on 100 queries is {toc_parsl_result - tic_parsl_result}')
 
-            print(len(query_futures))          
+        print(f'[INFO] Finished predictions for {each_individual}: {query_results[0:20]}...')
+
+    print(f'[INFO] Finished all predictions')                  
                     
 if __name__ == '__main__':
     main()
