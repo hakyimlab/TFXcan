@@ -2,8 +2,7 @@
 # Created by Temi
 # DATE: Sunday Nov 13 2022
 
-#from __future__ import absolute_import, division, print_function, unicode_literals
-
+from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
 import pandas as pd # for manipulating dataframes
 from functools import lru_cache
@@ -11,25 +10,27 @@ import math, time, tqdm
 import parsl
 from parsl.app.app import python_app
 
-region_range = 80
+# how many regions should I predict on 
+region_range = 400
+use_parsl = True
 
-# get the path of the script as well as parameters         
-whereis_script = os.path.dirname(sys.argv[0])  
-script_path = os.path.abspath(whereis_script)
-
-fpath = os.path.join(script_path, 'utilities')
-sys.path.append(fpath)
-print(sys.path)
-
-#import enformerUsageCodes
-import runPredictionUtilities
-import parslConfiguration
+#import runPredictionUtilities
+#import cachedUtilities
 
 def main():
 
-    parsl.load(parslConfiguration.parslConfig())
+    # get the path of the script as well as parameters         
+    whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os.path.dirname(__file__)
+    script_path = os.path.abspath(whereis_script)
+    fpath = os.path.join(script_path, 'utilities')
+    sys.path.append(fpath)
+    print(sys.path)
 
-    #read the parameters file
+    # try:
+    #     import runPredictionUtilities
+    # except ModuleNotFoundError as merr:
+    #     print(f'[MODULE NOT FOUND ERROR] at main')
+
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
@@ -44,59 +45,42 @@ def main():
         logfile_path = parameters['logfile_path']
         batch_size = int(parameters['batch_size'])
 
-    @lru_cache(1)
-    def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
+    # @lru_cache(1)
+    # def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
 
-        import sys
-        sys.path.append(f'{script_path}/utilities')
-        import enformerUsageCodes
+    #     import sys
+    #     sys.path.append(f'{script_path}/utilities')
+    #     import enformerUsageCodes
 
-        fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file_path)
-        return fasta_extractor
+    #     fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file_path)
+    #     return fasta_extractor
 
-    @lru_cache(12)
-    @python_app
-    def get_model(model_path=model_path):
-        import tensorflow as tf
-        print(f'[INFO] Tensorflow found {tf.config.list_physical_devices()}')
-        return tf.saved_model.load(model_path).model
-
-    # @python_app
-    # def tf_version(i):
+    # @lru_cache(1)
+    # def get_model(model_path=model_path):
     #     import tensorflow as tf
-    #     return(f'[INFO {i}] Tensorflow found {tf.config.list_physical_devices()}')
+    #     return tf.saved_model.load(model_path).model
 
-    # mpath = os.path.abspath(os.path.dirname(__file__))
-    # print(mpath)
-    # #sys.path.append(mpath)
-
-    # futures = [tf_version(i) for i in range(0, 20)]
-    # print(futures)
-    # execution = [o.result() for o in futures]
-    # print(execution)
-
-    # #saving
-    # for i, value in enumerate(execution):
-    #     with open(f'{mpath}/output/file_{i}.txt', 'w') as wf:
-    #         wf.writelines(value)
-
-    # individuals can be a list or a txt file of individuals per row
-
-    if isinstance(individuals, list):
-        pass
-    else:
-        individuals = pd.read_table(individuals, header=None)[0].tolist()
-        print(individuals)
+    # individuals can be a given list or a txt file of individuals per row or a single string
+    if use_parsl == True:
+        import parslConfiguration
+        parsl.load(parslConfiguration.htParslConfig())
 
     if isinstance(individuals, list):
         pass
     elif isinstance(individuals, type('str')):
-        individuals = [individuals]
-
-    # config_directives = parslConfiguration.create_parsl_configuration()
-    # parsl.load(config_directives)
+        if os.path.isfile(individuals):
+            individuals = pd.read_table(individuals, header=None)[0].tolist()
+        else:
+            individuals = [individuals]
+        
+    print(f'[INFO] Predicting for these individuals: {individuals}')
 
     for each_individual in individuals:
+
+        #import runPredictionUtilities
+
+        run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+        exec(open(run_predictions_tools).read(), globals(), globals())
         
         # this is specific to an individual but is cached per individual
         @lru_cache(1)
@@ -104,13 +88,11 @@ def main():
             import cyvcf2
             return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
 
-        tic_overhead = time.process_time()
         # create the directories for this individual 
         if not os.path.exists(f'{output_dir}/{each_individual}'):
             print(f'[INFO] Creating output directory at {output_dir}/{each_individual}')
             os.makedirs(f'{output_dir}/{each_individual}')
 
-        print(f'[INFO] Loading intervals for {each_individual}')
         a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}_400000.txt', sep=' ', header=None)
         list_of_regions = a[0].tolist()[0:(region_range + 1)] # a list of queries
 
@@ -119,41 +101,35 @@ def main():
         logfile_csv = f'{logfile_path}/{each_individual}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
-        toc_overhead = time.process_time()
-        print(f'[INFO] (time) Overhead time to load modules and set environment is {toc_overhead - tic_overhead}')
+        tic_prediction = time.perf_counter()
 
-        tic_prediction = time.process_time()
-
-        batches = runPredictionUtilities.generate_batch(list_of_regions, batch_size=batch_size)
-        #print(len(list(batches)))
-
+        batches = generate_batch(list_of_regions, batch_size=batch_size)
         count = 0
         for batch_query in batches:
-            
-            #batch_message = f'[INFO] Starting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')
 
-            #batch_query = list(batch_query)
+            #enformer_model = get_model() # >> results in serialization errors
+            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, model_func=get_model, logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
 
-            # load the model 
-            # enformer_model = get_model()
+            #print(query_futures)
 
-            query_futures = [runPredictionUtilities.run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, model_path=model_path, model_func=get_model().result(), logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating inputs and predicting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
+            if use_parsl == True:
+                query_exec = [q.result() for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
 
-            #print(len(query_futures))
+            # print(f'[CACHE NORMAL INFO] {print_cache_status(get_model)}')
+            # print(f'[CACHE NORMAL INFO] (fasta) {get_fastaExtractor.cache_info()}')
+            # print(f'[CACHE NORMAL INFO] (vcf) {make_cyvcf_object.cache_info()}')
 
-            print(f'[CACHE NORMAL INFO] {get_model.cache_info()}')
-
-            query_exec = [q.result() for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing inputs and predicting on {len(query_futures)} input regions')]
 
             count = count + 1
-            #time.sleep(3)
 
-        toc_prediction = time.process_time()
+        toc_prediction = time.perf_counter()
 
         print(f'[INFO] (time) to create inputs and predict on {region_range} queries is {toc_prediction - tic_prediction}')
-        print(f'[INFO] Finished predictions for {each_individual}: {query_exec[0:11]} ...\n')
 
-        #parsl.clear()
+        if use_parsl == True:
+            print(f'[INFO] Finished predictions for {each_individual}: {query_exec[0:11]} ...\n')
+        else:
+            print(f'[INFO] Finished predictions for {each_individual}: {query_futures[0:11]} ...\n')
 
     print(f'[INFO] Finished all predictions')                  
                     

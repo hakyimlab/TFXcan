@@ -2,12 +2,12 @@
 # === This script contains all codes used to apply ENFORMER on genome sequences to predict ENCODE tracks
 # === Modified by Temi from Deepmind people
 
-import tensorflow as tf
-import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
-from kipoiseq import Interval # same as above, really
-import pyfaidx # to index our reference genome file
-import pandas as pd # for manipulating dataframes
-import numpy as np # for numerical computations
+# import tensorflow as tf
+# import tensorflow_hub as hub # for interacting with saved models and tensorflow hub
+# from kipoiseq import Interval # same as above, really
+# import pyfaidx # to index our reference genome file
+# import pandas as pd # for manipulating dataframes
+# import numpy as np # for numerical computations
 
 # class Enformer:
 
@@ -25,15 +25,21 @@ import numpy as np # for numerical computations
 #         return {k: v.numpy() for k, v in predictions.items()}
 
 class FastaStringExtractor:
-    
+
+    from kipoiseq import Interval
+
     def __init__(self, fasta_file):
+        import pyfaidx
+
         self.fasta = pyfaidx.Fasta(fasta_file)
         self._chromosome_sizes = {k: len(v) for k, v in self.fasta.items()}
 
     def extract(self, interval: Interval, **kwargs) -> str:
         # Truncate interval if it extends beyond the chromosome lengths.
+
+        import kipoiseq
         chromosome_length = self._chromosome_sizes[interval.chrom]
-        trimmed_interval = Interval(interval.chrom,
+        trimmed_interval = kipoiseq.Interval(interval.chrom,
                                     max(interval.start, 0),
                                     min(interval.end, chromosome_length),
                                     )

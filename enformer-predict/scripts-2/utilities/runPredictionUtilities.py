@@ -1,5 +1,46 @@
 import parsl
-from parsl.app.app import python_app, join_app
+from parsl.app.app import python_app
+from functools import lru_cache
+
+import os, sys
+whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os.path.dirname(__file__)
+script_path = os.path.abspath(whereis_script)
+fpath = os.path.join(script_path, 'utilities')
+sys.path.append(fpath)
+
+@lru_cache(5)
+def get_fastaExtractor(script_path=script_path):
+
+    import sys, json, os
+    fpath = os.path.join(script_path, 'utilities')
+    sys.path.append(fpath)
+
+    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+        parameters = json.load(f)
+        fasta_file = parameters['hg38_fasta_file']
+
+    import enformerUsageCodes
+
+    fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file)
+    return fasta_extractor
+
+@lru_cache(5)
+def get_model():
+
+    import sys, json, os
+    fpath = os.path.join(script_path, 'utilities')
+    sys.path.append(fpath)
+
+    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+        parameters = json.load(f)
+        model_path = parameters['model_path']
+
+    import tensorflow as tf
+    
+    return tf.saved_model.load(model_path).model
+
+def print_cache_status(m):
+    return(f'[CACHE NORMAL INFO] (get_model) {m.cache_info()}')
 
 def check_query(sample, query, output_dir, logfile):
     '''
@@ -40,7 +81,7 @@ def extract_reference_sequence(region, fasta_func, resize_for_enformer=True, res
     region_start = int(region_split[1])
     region_end = int(region_split[2])
 
-    fasta_object = fasta_func()
+    fasta_object = get_fastaExtractor()
 
     if resize_for_enformer == True:
         reg_interval = kipoiseq.Interval(region_chr, region_start, region_end).resize(SEQUENCE_LENGTH)
@@ -49,6 +90,7 @@ def extract_reference_sequence(region, fasta_func, resize_for_enformer=True, res
 
     # extract the sequence 
     ref_sequences = fasta_object.extract(interval=reg_interval, anchor=[])
+    print(f'[CACHE INFO] (fasta) {get_fastaExtractor.cache_info()}')
     return({'sequences': ref_sequences, 'interval_object': reg_interval})
     
 def find_variants_in_vcf_file(cyvcf2_object, interval_object):
@@ -82,18 +124,6 @@ def replace_variants_in_reference_sequence(query_sequences, mapping_dict):
 
 def create_individual_input_for_enformer(region, individual, vcf_func, fasta_func, hap_type = 'hap1', resize_for_enformer=True, resize_length=None):
 
-    #import types
-    #import cyvcf2
-
-    # if (isinstance(vcf_object, types.FunctionType)) and (type(vcf_object) != cyvcf2.cyvcf2.VCF): # not a string
-    #     print('VCF object is a function to call load the vcf.')
-    #     vcf_object = vcf_object()
-    # # elif isinstance(vcf_object, type('a')): # or a path to a vcf file
-    # #     import cyvcf2
-    # #     vcf_object = cyvcf2.cyvcf2.VCF(vcf_object, samples=individual)
-    # elif callable(vcf_object) and (type(vcf_object) == cyvcf2.cyvcf2.VCF):
-    #     pass
-
     vcf_object = vcf_func()
 
     a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
@@ -105,40 +135,14 @@ def create_individual_input_for_enformer(region, individual, vcf_func, fasta_fun
     else:
         b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
 
+        vcf_object.close()
+        
         if b: # go on and change the variants by position
             c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
             variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
             return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
         else: # return the reference
             return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
-
-#define the class
-# class Enformer:
-    
-#     def __init__(self, tfhub_url):
-#         #self._model = hub.load(tfhub_url).model
-#         import tensorflow as tf
-#         self._model = tf.saved_model.load(tfhub_url).model
-
-#     def predict_on_batch(self, inputs):
-#         predictions = self._model.predict_on_batch(inputs)
-#         return {k: v.numpy() for k, v in predictions.items()}
-# class Enformer:
-
-#     from functools import lru_cache
-
-#     @classmethod
-#     @lru_cache(maxsize=1)
-#     def __init__(self, tfhub_url):
-#         #self._model = hub.load(tfhub_url).model
-#         import tensorflow as tf
-#         self._model = tf.saved_model.load(tfhub_url).model
-
-#     @classmethod
-#     @lru_cache(maxsize=1)
-#     def predict_on_batch(self, inputs):
-#         predictions = self._model.predict_on_batch(inputs)
-#         return {k: v.numpy() for k, v in predictions.items()}
 
 def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     import h5py
@@ -147,25 +151,9 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
         hf.create_dataset(region, data=prediction)
     return([region, sample, 'completed', seq_type])
 
-def one_hot_encode(sequence):
-    import kipoiseq
-    import numpy as np
-    return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
-
-def convert_to_tensor(one_hot_encoding):
-    import tensorflow as tf
-    return(tf.convert_to_tensor(one_hot_encoding))
-
-def model_predict(input, model):
-    predictions = model.predict_on_batch(input)
-    prediction_dict = {k: v.numpy() for k, v in predictions.items()}
-
-    return(prediction_dict['human'][0])
-
 def write_logfile(logfile_path, each_individual, what_to_write):
 
     import os, csv
-    import pandas as pd
     logfile_csv = f'{logfile_path}/{each_individual}_predictions_log.csv'
     open_mode = 'a' if os.path.isfile(logfile_csv) else 'w'
 
@@ -179,39 +167,43 @@ def write_logfile(logfile_path, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(sequence, region, sample, seq_type, model_path, model_func, output_dir, script_path, logfile_path):
+def enformer_predict(sequence, region, sample, seq_type, model_func, output_dir, script_path, logfile_path):
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
     import tensorflow as tf
+    import kipoiseq, gc
 
     sys.path.append(f'{script_path}/utilities')
-    import runPredictionUtilities
-
     try:
-        #enformer_model = model_func()
-        #print(f'[INFO] Model loaded successfully.')
-        #print('Model loaded')
-
-        #with tf.device('/physical_device:CPU:0'):
-        sequence_encoded = runPredictionUtilities.one_hot_encode(sequence)
-        sequence_tensor = runPredictionUtilities.convert_to_tensor(sequence_encoded)[np.newaxis]
+        import runPredictionUtilities
+    except ModuleNotFoundError as merr:
+        print(f'[MODULE NOT FOUND ERROR] at enformer_predict')
+    try:
+        enformer_model = get_model() #tf.saved_model.load(model_path).model #model_func() # this load the model
+        sequence_encoded = kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32) #one_hot_encode(sequence)
+        sequence_tensor = tf.convert_to_tensor(sequence_encoded)[np.newaxis]
+        predictions = enformer_model.predict_on_batch(sequence_tensor)
         del sequence_encoded
-        #print(f'[INFO] {region}: input matrix shape is {sequence_encoded.shape}')
-    
-        target_prediction = runPredictionUtilities.model_predict(input=sequence_tensor, model=model_func) #['human'][0]
-        #with tf.device('/physical_device:CPU:0'):
+        #del enformer_model 
+        prediction_dict = {k: v.numpy() for k, v in predictions.items()}
+        target_prediction = prediction_dict['human'][0]
         obj_to_save = target_prediction[range(448 - 8, (448 + 8 + 1)), : ].squeeze()
-
+        #print(f'[INFO] Shape of target prediction: {target_prediction.shape}')
         del target_prediction
-
-        if tf.config.list_physical_devices('GPU'):
-            print(f"[MEMORY NORMAL USAGE] {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']}")
-        
-        #print(f'[CACHE NORMAL INFO] {model_func.cache_info()}')
-
         h5result = runPredictionUtilities.save_h5_prediction(obj_to_save, sample, region, seq_type, output_dir)
         runPredictionUtilities.write_logfile(logfile_path=logfile_path, each_individual=sample, what_to_write=h5result)
+
+        # if tf.config.list_physical_devices('GPU'):
+        #     print(f"[GPU MEMORY] (at end of prediction, before clearing session) {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']}")
+
+        tf.keras.backend.clear_session()
+        gc.collect()
+
+        # if tf.config.list_physical_devices('GPU'):
+        #     print(f"[GPU MEMORY] (at end of prediction, after clearing session) {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']}")
+        
+        print(f'[CACHE INFO] (model) {get_model.cache_info()}')
 
         return(0)
         
@@ -221,15 +213,88 @@ def enformer_predict(sequence, region, sample, seq_type, model_path, model_func,
             print(f"[MEMORY ERROR USAGE] {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']}")
 
         print(f'[MEMORY ERROR USAGE] (device placement) for {sample} at {region} of {type(tfe)}')
-        #print(f'[CACHE ERROR INFO] {model_func.cache_info()}')
-        #pass
         return(1)
 
-    
 @python_app
-def run_single_predictions(region, individual, vcf_func, fasta_func, script_path, output_dir, logfile, model_path, model_func, logfile_path): #
+def run_single_predictions(region, individual, vcf_func, fasta_func, script_path, output_dir, logfile, model_func, logfile_path): #
 
-    #import tensorflow as tf
+    import sys, os
+    #sys.path.append(f'{script_path}/utilities')
+    mpath = os.path.join(script_path, 'utilities') #os.path.dirname(__file__) #
+    sys.path.append(mpath)
+    # print(sys.path)
+    
+    try:
+        import runPredictionUtilities
+    except ModuleNotFoundError as merr:
+        print(f'[MODULE NOT FOUND ERROR] at run_single_predictions')
+
+    #first check the query
+    check_result = runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile) #for region in region_batch
+    #print(check_result)
+
+    if check_result is not None:
+        #print(f'{chk} is not None')
+        b = runPredictionUtilities.create_individual_input_for_enformer(region=check_result, individual=individual, vcf_func=vcf_func, fasta_func=fasta_func, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+
+        print(f'[CACHE INFO] (vcf) {vcf_func.cache_info()}')
+
+        if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
+            reg_prediction = runPredictionUtilities.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_func=model_func, output_dir=output_dir, script_path=script_path, logfile_path=logfile_path)
+            
+            return(reg_prediction)
+        else:
+            print(f"[WARNING] {check_result}: Either length of input sequence is invalid (NoneType) or too long or too short")
+
+
+def generate_batch(lst, batch_size):
+    """  Yields batc of specified size """
+    if batch_size <= 0:
+        return
+    for i in range(0, len(lst), batch_size):
+        yield lst[i:(i + batch_size)]
+
+# @python_app
+# def run_batch_predictions(batch_regions, individual, vcf_func, fasta_func, script_path, output_dir, logfile, model_path, logfile_path): #
+
+#     import sys, os
+#     #sys.path.append(f'{script_path}/utilities')
+#     mpath = os.path.join(script_path, 'utilities')
+#     sys.path.append(mpath)
+#     #print(sys.path)
+
+#     @lru_cache(12)
+#     def get_model(model_path=model_path):
+#         import tensorflow as tf
+#         #print(f'[INFO] Tensorflow found {tf.config.list_physical_devices()}')
+#         return tf.saved_model.load(model_path).model
+
+#     import runPredictionUtilities
+
+
+#     #first check the query
+#     check_result = [runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile) for region in batch_regions]
+#     check_result = [c for c in check_result if c is not None]
+#     #print(check_result)
+
+#     output = []
+#     for reg in check_result:
+#         if reg is not None:
+#             #print(f'{chk} is not None')
+#             b = runPredictionUtilities.create_individual_input_for_enformer(region=reg, individual=individual, vcf_func=vcf_func, fasta_func=fasta_func, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+
+#             if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
+#                 reg_prediction = runPredictionUtilities.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_path = model_path, model_func=get_model(), output_dir=output_dir, script_path=script_path, logfile_path=logfile_path)
+
+#                 print(f'[CACHE NORMAL INFO] {get_model.cache_info()}')
+
+#                 output.append(reg_prediction)
+#             else:
+#                 print(f"[WARNING] {reg}: Either length of input sequence is invalid (NoneType) or too long or too short")
+#     return(output)
+
+
+ #import tensorflow as tf
 
     #log the device placement
     # tf.debugging.set_log_device_placement(True)
@@ -246,31 +311,18 @@ def run_single_predictions(region, individual, vcf_func, fasta_func, script_path
     #         # Memory growth must be set before GPUs have been initialized
     #         print(f'[RUNTIME ERROR] {individual} at {region} of {type(e)}')
 
-    import sys, os
-    #sys.path.append(f'{script_path}/utilities')
-    mpath = os.path.join(script_path, 'utilities')
-    sys.path.append(mpath)
-    #print(sys.path)
-    import runPredictionUtilities
 
-    #first check the query
-    check_result = runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile) #for region in region_batch
-    #print(check_result)
+# def one_hot_encode(sequence):
+#     import kipoiseq
+#     import numpy as np
+#     return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
 
-    if check_result is not None:
-        #print(f'{chk} is not None')
-        b = runPredictionUtilities.create_individual_input_for_enformer(region=check_result, individual=individual, vcf_func=vcf_func, fasta_func=fasta_func, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+# def convert_to_tensor(one_hot_encoding):
+#     import tensorflow as tf
+#     return(tf.convert_to_tensor(one_hot_encoding))
 
-        if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
-            reg_prediction = runPredictionUtilities.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_path = model_path, model_func=model_func, output_dir=output_dir, script_path=script_path, logfile_path=logfile_path)
-            return(reg_prediction)
-        else:
-            print(f"[WARNING] {check_result}: Either length of input sequence is invalid (NoneType) or too long or too short")
+# def model_predict(input, model):
+#     predictions = model.predict_on_batch(input)
+#     prediction_dict = {k: v.numpy() for k, v in predictions.items()}
 
-
-def generate_batch(lst, batch_size):
-    """  Yields batc of specified size """
-    if batch_size <= 0:
-        return
-    for i in range(0, len(lst), batch_size):
-        yield lst[i:(i + batch_size)]
+#     return(prediction_dict['human'][0])
