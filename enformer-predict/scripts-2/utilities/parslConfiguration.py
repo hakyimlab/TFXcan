@@ -1,4 +1,3 @@
-
 def localParslConfig():
     from tqdm import tqdm
     from parsl import python_app
@@ -38,7 +37,6 @@ def localParslConfig():
     )
 
     return(local_htex)
-
 
 
 def htParslConfig():
@@ -82,10 +80,10 @@ def htParslConfig():
                     queue='full-node',
                     account='covid-ct',
                     launcher=MpiExecLauncher(),
-                    walltime='00:10:00',
+                    walltime='00:20:00',
                     nodes_per_block=1, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
                     min_blocks=1,
-                    max_blocks=3,
+                    #max_blocks=2,
                     worker_init=workerinit,
                     cmd_timeout=120,
                     scheduler_options=sch_options

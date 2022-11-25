@@ -1,5 +1,5 @@
-# === This script contains all codes to test if tensorflow and ENFORMER are working accurately  
-# Created by Temi
+# This script is used to predict using ENFORMER on individuals' regions
+# AUTHOR: Temi
 # DATE: Sunday Nov 13 2022
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -8,14 +8,10 @@ import pandas as pd # for manipulating dataframes
 from functools import lru_cache
 import math, time, tqdm
 import parsl
-from parsl.app.app import python_app
 
 # how many regions should I predict on 
-region_range = 400
+region_range = 500
 use_parsl = True
-
-#import runPredictionUtilities
-#import cachedUtilities
 
 def main():
 
@@ -26,39 +22,17 @@ def main():
     sys.path.append(fpath)
     print(sys.path)
 
-    # try:
-    #     import runPredictionUtilities
-    # except ModuleNotFoundError as merr:
-    #     print(f'[MODULE NOT FOUND ERROR] at main')
-
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
 
         intervals_dir = parameters['interval_list_dir']
-        model_path = parameters['model_path']
-        fasta_file = parameters['hg38_fasta_file']
         output_dir = parameters['output_dir']
         individuals = parameters['individuals']
         vcf_file = parameters['vcf_file']
         TF = parameters['TF']
         logfile_path = parameters['logfile_path']
         batch_size = int(parameters['batch_size'])
-
-    # @lru_cache(1)
-    # def get_fastaExtractor(fasta_file_path=fasta_file, script_path=script_path):
-
-    #     import sys
-    #     sys.path.append(f'{script_path}/utilities')
-    #     import enformerUsageCodes
-
-    #     fasta_extractor = enformerUsageCodes.FastaStringExtractor(fasta_file_path)
-    #     return fasta_extractor
-
-    # @lru_cache(1)
-    # def get_model(model_path=model_path):
-    #     import tensorflow as tf
-    #     return tf.saved_model.load(model_path).model
 
     # individuals can be a given list or a txt file of individuals per row or a single string
     if use_parsl == True:
@@ -69,7 +43,7 @@ def main():
         pass
     elif isinstance(individuals, type('str')):
         if os.path.isfile(individuals):
-            individuals = pd.read_table(individuals, header=None)[0].tolist()
+            individuals = pd.read_table(individuals, header=None)[0].tolist()[0:2]
         else:
             individuals = [individuals]
         
@@ -77,12 +51,11 @@ def main():
 
     for each_individual in individuals:
 
-        #import runPredictionUtilities
-
         run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
         exec(open(run_predictions_tools).read(), globals(), globals())
         
         # this is specific to an individual but is cached per individual
+        # I want to cache this but it is a bit tricky to do for now
         @lru_cache(1)
         def make_cyvcf_object(vcf_file=vcf_file, sample=each_individual):
             import cyvcf2
@@ -101,28 +74,22 @@ def main():
         logfile_csv = f'{logfile_path}/{each_individual}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
-        tic_prediction = time.perf_counter()
+        tic_prediction = time.process_time() # as opposed to perf_counter
 
         batches = generate_batch(list_of_regions, batch_size=batch_size)
         count = 0
         for batch_query in batches:
 
             #enformer_model = get_model() # >> results in serialization errors
-            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, fasta_func=get_fastaExtractor, output_dir=output_dir, logfile=logfile, model_func=get_model, logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
 
-            #print(query_futures)
+            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
 
             if use_parsl == True:
                 query_exec = [q.result() for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
 
-            # print(f'[CACHE NORMAL INFO] {print_cache_status(get_model)}')
-            # print(f'[CACHE NORMAL INFO] (fasta) {get_fastaExtractor.cache_info()}')
-            # print(f'[CACHE NORMAL INFO] (vcf) {make_cyvcf_object.cache_info()}')
-
-
             count = count + 1
 
-        toc_prediction = time.perf_counter()
+        toc_prediction = time.process_time()
 
         print(f'[INFO] (time) to create inputs and predict on {region_range} queries is {toc_prediction - tic_prediction}')
 
