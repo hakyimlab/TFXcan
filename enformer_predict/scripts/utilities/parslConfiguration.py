@@ -11,8 +11,8 @@ def localParslConfig():
     from parsl.channels import LocalChannel
     from parsl.launchers import MpiExecLauncher
 
-    rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/runinfo'
-    workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict'
+    rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/runinfo'
+    workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
 
     #parsl.clear()
 
@@ -39,7 +39,7 @@ def localParslConfig():
     return(local_htex)
 
 
-def htParslConfig():
+def htParslConfig(workingdir=None):
 
     import parsl
     from parsl.config import Config
@@ -50,15 +50,16 @@ def htParslConfig():
     print(f'Parsl version: {parsl.__version__}')
 
     # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
-    rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/runinfo'
-    workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict'
-
+    if workingdir is None:
+        workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
+        rundir = f'{workingdir}/runinfo'
+    
     # I want to put the cobalt directives 
     sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
                     '#COBALT --jobname=enformer-predict-personalized',
-                    '#COBALT -o /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/cobalt-log/enformer-predict-personalized.out',
-                    '#COBALT -e /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/cobalt-log/enformer-predict-personalized.err',
-                    '#COBALT --debuglog /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer-predict/cobalt-log/enformer-predict-personalized.cobalt'
+                    '#COBALT -o /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.out',
+                    '#COBALT -e /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.err',
+                    '#COBALT --debuglog /projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.cobalt'
     ]
 
     sch_options = '\n'.join(sch_options)

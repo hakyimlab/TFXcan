@@ -10,8 +10,8 @@ import math, time, tqdm
 import parsl
 
 # how many regions should I predict on 
-region_range = 500
-use_parsl = True
+region_range = 24
+use_parsl = False
 
 def main():
 
@@ -22,22 +22,23 @@ def main():
     sys.path.append(fpath)
     print(sys.path)
 
+    if use_parsl == True:
+        import parslConfiguration
+        parsl.load(parslConfiguration.htParslConfig())
+
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
-
         intervals_dir = parameters['interval_list_dir']
         output_dir = parameters['output_dir']
         individuals = parameters['individuals']
         vcf_file = parameters['vcf_file']
         TF = parameters['TF']
-        logfile_path = parameters['logfile_path']
+        log_dir = parameters['log_dir']
         batch_size = int(parameters['batch_size'])
+        is_ref = parameters['is_ref']
 
-    # individuals can be a given list or a txt file of individuals per row or a single string
-    if use_parsl == True:
-        import parslConfiguration
-        parsl.load(parslConfiguration.htParslConfig())
+    #individuals can be a given list or a txt file of individuals per row or a single string
 
     if isinstance(individuals, list):
         pass
@@ -71,7 +72,7 @@ def main():
 
         # I need a log file
         # read in the log file for this individual ; doing this so that the log file is not opened everytime
-        logfile_csv = f'{logfile_path}/{each_individual}_predictions_log.csv'
+        logfile_csv = f'{log_dir}/{each_individual}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
         tic_prediction = time.process_time() # as opposed to perf_counter
@@ -82,7 +83,7 @@ def main():
 
             #enformer_model = get_model() # >> results in serialization errors
 
-            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, logfile_path=logfile_path) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
+            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, log_dir=log_dir) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
 
             if use_parsl == True:
                 query_exec = [q.result() for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
