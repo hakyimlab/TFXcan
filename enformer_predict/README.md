@@ -1,0 +1,4 @@
+This repo includes scripts used to make personalized, as well as, reference predictions. 
+
+The following folders/files are needed:
+[ENFORMER parameters](./metadata/enformer_parameters.json) - This is the only file that needs changing to suit your specific circumstance. All paths given to the json file should be absolute paths, please.
