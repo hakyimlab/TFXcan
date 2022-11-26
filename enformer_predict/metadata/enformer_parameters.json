@@ -6,7 +6,8 @@
     "individuals":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/individuals.txt",
     "vcf_file":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/prj6_genotypes/merged_phased_SNPs.vcf.gz",
     "TF":"FOXA1",
-    "log_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/predictions-log",
+    "predictions_log_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/predictions-log",
+    "log_dir": "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log",
     "is_ref": "false",
     "batch_size":8,
     "use_parsl": "true"
