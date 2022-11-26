@@ -12,6 +12,15 @@ sys.path.append(fpath)
 @lru_cache(5)
 def get_fastaExtractor(script_path=script_path):
 
+    """
+    Create a fasta extractor object.
+
+    Parameters
+    ----------
+    script_path: str (path), default is the path to where this file is.
+        The path to the script directory
+    """
+
     import sys, json, os
     fpath = os.path.join(script_path, 'utilities')
     sys.path.append(fpath)
@@ -27,6 +36,7 @@ def get_fastaExtractor(script_path=script_path):
 
 @lru_cache(5)
 def get_model():
+
 
     import sys, json, os
     fpath = os.path.join(script_path, 'utilities')
@@ -81,9 +91,24 @@ def logger(msg, level, logfile):
     if level == 'error'   : log.error(msg)
 
 def check_query(sample, query, output_dir, logfile):
-    '''
-    Checks of predictions are available for an individual or sample
-    '''
+    """
+    Check whether a given region, for an individual has been predicted and logged.
+
+    Parameters:
+        sample: str 
+            The name/id of an individual
+        query: str
+            A region in the genome in the form `chr_start_end`.
+        output_dir: str (path)
+            The folder where the predictions should have been logged. 
+        logfile: pd.DataFrame 
+            A dataframe of a log file or `None` if the log file does not exist. 
+    
+    Returns:
+        dict of (1) the query region if it has not been logged or predictions don't exist and (2) whether it should be logged if it has not been logged. 
+
+    If predictions exist and the query has been logged, this function returns None.
+    """
     import pandas as pd
     import os
 
