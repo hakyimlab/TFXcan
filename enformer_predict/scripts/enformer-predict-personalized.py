@@ -11,7 +11,7 @@ import parsl
 
 # how many regions should I predict on 
 region_range = 24
-use_parsl = False
+#use_parsl = True
 
 def main():
 
@@ -21,10 +21,6 @@ def main():
     fpath = os.path.join(script_path, 'utilities')
     sys.path.append(fpath)
     print(sys.path)
-
-    if use_parsl == True:
-        import parslConfiguration
-        parsl.load(parslConfiguration.htParslConfig())
 
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
@@ -37,9 +33,13 @@ def main():
         log_dir = parameters['log_dir']
         batch_size = int(parameters['batch_size'])
         is_ref = parameters['is_ref']
+        use_parsl = parameters['use_parsl']
+    
+    if use_parsl == 'true':
+        import parslConfiguration
+        parsl.load(parslConfiguration.htParslConfig())
 
     #individuals can be a given list or a txt file of individuals per row or a single string
-
     if isinstance(individuals, list):
         pass
     elif isinstance(individuals, type('str')):
