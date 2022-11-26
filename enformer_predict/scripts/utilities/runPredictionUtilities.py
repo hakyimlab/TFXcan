@@ -372,7 +372,7 @@ def enformer_predict(sequence, region, sample, seq_type, model_func, output_dir,
 
         return(1)
 
-#@python_app
+@python_app
 def run_single_predictions(region, individual, vcf_func, script_path, output_dir, logfile, log_dir): #
 
     import sys, os

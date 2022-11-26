@@ -8,5 +8,6 @@
     "TF":"FOXA1",
     "log_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/predictions-log",
     "is_ref": "false",
-    "batch_size":8
+    "batch_size":8,
+    "use_parsl": "true"
 }
