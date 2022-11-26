@@ -1,43 +1,52 @@
 # exclude everything except directory foo/bar
 code_arguments/*
 enformer_predictions/*
-info-files/*
+enformer_predict/*
+explore_freedman/*
 models/*
-plots/
-data/*
-explore-freedman/*
-log/*
-output/*
-processed-data/*
+processed_data/*
 defined_regions/*
-train-test-val/*
-bcftools_region/**
+log/*
+model_data/*
+plots/*
 prj6_genotypes/*
 temp/*
-defined_regions/*
-old-scripts/*
-test_enformer/*
-parsl-runinfo/*
-enformer-minimal/runinfo/*
-enformer-minimal/outputs/*
-enformer-minimal/log/*
-enformer-minimal/runlog/*
-enformer-minimal/sequence_folder/*
-enformer_logs/*
-motif-intervals/*
-enformer-minimal-2/runinfo/*
-enformer-minimal-2/outputs/*
-enformer-minimal-2/log/*
-enformer-minimal-2/runlog/*
-enformer-minimal-2/sequence_folder/*
 
 # include
 !scripts/
-!enformer-minimal/scripts/
-!enformer-minimal/metadata/
-!enformer-minimal/intervals/
-!enformer-minimal-2/scripts/
-!enformer-minimal-2/metadata/
-!enformer-minimal-2/intervals/
+!metadata/
+!enformer-predict/scripts
+!enformer-predict/metadata
 !README
 !.gitignore
+
+
+
+# temp/*
+# defined_regions/*
+# old-scripts/*
+# test_enformer/*
+# parsl-runinfo/*
+# enformer-minimal/runinfo/*
+# enformer-minimal/outputs/*
+# enformer-minimal/log/*
+# enformer-minimal/runlog/*
+# enformer-minimal/sequence_folder/*
+# enformer_logs/*
+# motif-intervals/*
+# enformer-minimal-2/runinfo/*
+# enformer-minimal-2/outputs/*
+# enformer-minimal-2/log/*
+# enformer-minimal-2/runlog/*
+# enformer-minimal-2/sequence_folder/*
+# enformer-predict/cobalt-log
+# enformer-predict/debug-parsl
+# enformer-predict/runinfo
+# enformer-predict/predictions-log
+# enformer-predict/temp-vcfs
+# !enformer-minimal/scripts/
+# !enformer-minimal/metadata/
+# !enformer-minimal/intervals/
+# !enformer-minimal-2/scripts/
+# !enformer-minimal-2/metadata/
+# !enformer-minimal-2/intervals/
