@@ -13,13 +13,12 @@ prj6_genotypes/*
 temp/*
 
 # include
-!scripts/
-!metadata/
-!enformer-predict/scripts
-!enformer-predict/metadata
+!scripts/*
+!metadata/*
+!enformer-predict/scripts/*
+!enformer-predict/metadata/*
 !README
 !.gitignore
-
 
 
 # temp/*
