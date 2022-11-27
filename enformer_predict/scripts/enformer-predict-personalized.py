@@ -9,10 +9,6 @@ from functools import lru_cache
 import math, time, tqdm
 import parsl
 
-# how many regions should I predict on 
-region_range = 24
-#use_parsl = True
-
 def main():
 
     # get the path of the script as well as parameters         
@@ -20,7 +16,7 @@ def main():
     script_path = os.path.abspath(whereis_script)
     fpath = os.path.join(script_path, 'utilities')
     sys.path.append(fpath)
-    print(sys.path)
+    #print(sys.path)
 
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
@@ -30,12 +26,14 @@ def main():
         individuals = parameters['individuals']
         vcf_file = parameters['vcf_file']
         TF = parameters['TF']
-        log_dir = parameters['log_dir']
+        predictions_log_dir = parameters['predictions_log_dir']
         batch_size = int(parameters['batch_size'])
         is_ref = parameters['is_ref']
-        use_parsl = parameters['use_parsl']
-    
-    if use_parsl == 'true':
+        use_parsl = True if parameters['use_parsl'] == 'true' else False
+        n_regions = parameters["predict_on_n_regions"]
+        predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
+
+    if use_parsl == True:
         import parslConfiguration
         parsl.load(parslConfiguration.htParslConfig())
 
@@ -52,8 +50,8 @@ def main():
 
     for each_individual in individuals:
 
-        run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
-        exec(open(run_predictions_tools).read(), globals(), globals())
+        predict_utils_one = f'{script_path}/utilities/predictUtils_one.py'
+        exec(open(predict_utils_one).read(), globals(), globals())
         
         # this is specific to an individual but is cached per individual
         # I want to cache this but it is a bit tricky to do for now
@@ -68,11 +66,11 @@ def main():
             os.makedirs(f'{output_dir}/{each_individual}')
 
         a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}_400000.txt', sep=' ', header=None)
-        list_of_regions = a[0].tolist()[0:(region_range + 1)] # a list of queries
+        list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
 
         # I need a log file
         # read in the log file for this individual ; doing this so that the log file is not opened everytime
-        logfile_csv = f'{log_dir}/{each_individual}_predictions_log.csv'
+        logfile_csv = f'{predictions_log_dir}/{each_individual}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
         tic_prediction = time.process_time() # as opposed to perf_counter
@@ -83,7 +81,7 @@ def main():
 
             #enformer_model = get_model() # >> results in serialization errors
 
-            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, log_dir=log_dir) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
+            query_futures = [run_single_predictions(region=query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir) for query in tqdm.tqdm(batch_query, desc=f'[INFO] Creating futures for batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')]
 
             if use_parsl == True:
                 query_exec = [q.result() for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
@@ -92,10 +90,10 @@ def main():
 
         toc_prediction = time.process_time()
 
-        print(f'[INFO] (time) to create inputs and predict on {region_range} queries is {toc_prediction - tic_prediction}')
+        print(f'[INFO] (time) to create inputs and predict on {predict_on_n_regions} queries is {toc_prediction - tic_prediction}')
 
         if use_parsl == True:
-            print(f'[INFO] Finished predictions for {each_individual}: {query_exec[0:11]} ...\n')
+            print(f'[INFO] Finished predictions for {each_individual}: {query_exec} ...\n')
         else:
             print(f'[INFO] Finished predictions for {each_individual}: {query_futures[0:11]} ...\n')
 
@@ -107,7 +105,7 @@ if __name__ == '__main__':
 
    #for query in tqdm(list_of_regions, desc='[INFO] Creating futures for input regions'):
 
-            # run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+            # run_predictions_tools = f'{script_path}/utilities/predictUtils_two.py'
             # exec(open(run_predictions_tools).read(), globals(), globals())
 
             #print(f'[INFO] Starting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')
@@ -188,7 +186,7 @@ if __name__ == '__main__':
 
 #         predict_batches = generate_batch(list_of_regions, batch_size=batch_size)
 
-#         run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+#         run_predictions_tools = f'{script_path}/utilities/predictUtils_two.py'
 #         exec(open(run_predictions_tools).read(), globals(), globals())
 
 #         # # load the parsl config file here since you want to distribute across individuals
@@ -198,7 +196,7 @@ if __name__ == '__main__':
 #         count = 0
 #         for query_batch in predict_batches:
 
-#             # run_predictions_tools = f'{script_path}/utilities/runPredictionUtilities.py'
+#             # run_predictions_tools = f'{script_path}/utilities/predictUtils_two.py'
 #             # exec(open(run_predictions_tools).read(), globals(), globals())
 
 #             print(f'[INFO] Starting on batch {count + 1} of {math.ceil(len(list_of_regions)/batch_size)}')
@@ -229,11 +227,11 @@ if __name__ == '__main__':
 
 
  # # for each interval check if prediction has been done; will only return these ==> not a parsl app
-        # query_status = (runPredictionUtilities.check_query(sample=each_individual, query=query, output_dir=output_dir, logfile=logfile) for query in tqdm(list_of_regions, desc='[INFO] Checking query'))
+        # query_status = (predictUtils_two.check_query(sample=each_individual, query=query, output_dir=output_dir, logfile=logfile) for query in tqdm(list_of_regions, desc='[INFO] Checking query'))
 
         # filter this query_status to remove Nones
         #query_status = (l for l in query_status if not isinstance(l, type(None)))
-        #query_status_peeked = runPredictionUtilities.peek(query_status)
+        #query_status_peeked = predictUtils_two.peek(query_status)
 
         # if query_status_peeked is None:
         #     print('[INFO] Nothing to do. All predictions are available.')
