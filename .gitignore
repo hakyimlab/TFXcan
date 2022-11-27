@@ -11,12 +11,13 @@ model_data/*
 plots/*
 prj6_genotypes/*
 temp/*
+*__*__/*
 
 # include
-!scripts/*
-!metadata/*
-!enformer_predict/scripts/*
-!enformer_predict/metadata/*
+!scripts/
+!metadata/
+!enformer_predict/scripts/
+!enformer_predict/metadata/
 !README
 !.gitignore
 
