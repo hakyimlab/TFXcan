@@ -15,7 +15,8 @@ The following folders/files/changes are needed:
 - `batch_size`: is used so that given batches are passed to the GPUs. Change this as needed. 
 - `predictions_log_dir`: When predictions are made, they should be logged per individual. You will find the logs here. These prediction log files are important if there is an interruption during the running of the script. If the file is available, the script will not re-predict on regions whose `*.h5` files are available and whose predictions have been logged, to save time. If you need to force prediction, delete either the log file, or the `*.h5` prediction for that region.
 - `log_dir`: Files detailing error messages, memory consumption, and cache usage are deposited here. 
-- Besides predicting and saving in the user-defined folder, some log files are also returned and are found in the `cobalt-log` folder. 
+- `predict_on_n_regions`: How many regions should be predicted on? Valid arguments are either any number greater than 1 or "all". 
+- Besides predicting and saving in the user-defined folder, some log files are also returned and are found in the `log_dir` folder. 
 
 ### To-do
 - I may need to find a way to toggle Parsl's `@python_app` decorator on/off, depending on if the `use_parsl` parameter is "true" or "false".
