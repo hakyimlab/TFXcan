@@ -1,4 +1,4 @@
-This folder includes scripts used to make personalized, as well as, reference predictions. 
+This folder includes scripts used to make personalized, as well as, reference predictions using ENFORMER.
 
 ### Usage 
 After updating the metadata json file, simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py)
@@ -6,7 +6,7 @@ After updating the metadata json file, simply call: python3 [./scripts/enformer-
 ### Paramaters
 The following folders/files/changes are needed:
 
-[ENFORMER parameters](./metadata/enformer_parameters.json) - This is a json file and is the only file that needs changing to suit your specific circumstance. All paths given to the json file should be absolute paths, please.
+[ENFORMER parameters](./metadata/enformer_parameters.json) - This is a json file and is the only file that needs changing to suit your specific circumstance. All paths given to the json file should be absolute paths, please. Also, please don't add a forward slash, `/`, after the path names. Thank you!
 
 - `output_dir`: Predictions are saved here as `{individual_id}/{region}_predictions.h5`, using an `hdf5` format. 
 - `interval_list_dir`: This folder should contain a `.txt` file for each individual you want to predict for. The text file containing the intervals should be named this way: `{individual_id}_{transcription_factor}_{any other information you want}.txt`, and should contain just the regions of interest listed row-wise. Also each region should be named thus: `chr_start_end` e.g. "chr1_4000_4020". This region will be expanded or resized for ENFORMER. 

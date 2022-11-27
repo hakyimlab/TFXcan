@@ -8,7 +8,9 @@
     "TF":"FOXA1",
     "predictions_log_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/predictions-log",
     "log_dir": "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log",
+    "metadata_path":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/enformer_parameters.json",
     "is_ref": "false",
-    "batch_size":8,
-    "use_parsl": "true"
+    "batch_size":100,
+    "use_parsl": "true",
+    "predict_on_n_regions":500
 }
