@@ -15,8 +15,8 @@ temp/*
 # include
 !scripts/*
 !metadata/*
-!enformer-predict/scripts/*
-!enformer-predict/metadata/*
+!enformer_predict/scripts/*
+!enformer_predict/metadata/*
 !README
 !.gitignore
 
