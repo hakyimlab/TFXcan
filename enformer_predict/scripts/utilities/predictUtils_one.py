@@ -32,22 +32,22 @@ def run_single_predictions(region, individual, vcf_func, script_path, output_dir
     print(sys.path)
     
     try:
-        import runPredictionUtilities
+        import predictUtils_two
     except ModuleNotFoundError as merr:
         print(f'[MODULE NOT FOUND ERROR] at run_single_predictions')
 
     #first check the query
-    check_result = runPredictionUtilities.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile)
+    check_result = predictUtils_two.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile)
 
     if check_result is not None:
         #print(check_result)
-        b = runPredictionUtilities.create_individual_input_for_enformer(region=check_result['query'], individual=individual, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+        b = predictUtils_two.create_individual_input_for_enformer(region=check_result['query'], individual=individual, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
 
         #print(f'[CACHE INFO] (vcf) {vcf_func.cache_info()}')
 
         if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
             #print(type(b))
-            reg_prediction = runPredictionUtilities.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_func=None, output_dir=output_dir, predictions_log_dir=predictions_log_dir, logtype=check_result['logtype'])
+            reg_prediction = predictUtils_two.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_func=None, output_dir=output_dir, predictions_log_dir=predictions_log_dir, logtype=check_result['logtype'])
             
             return(reg_prediction)
         else:
