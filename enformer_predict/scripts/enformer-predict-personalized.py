@@ -28,7 +28,6 @@ def main():
         TF = parameters['TF']
         predictions_log_dir = parameters['predictions_log_dir']
         batch_size = int(parameters['batch_size'])
-        is_ref = parameters['is_ref']
         use_parsl = True if parameters['use_parsl'] == 'true' else False
         n_regions = parameters["predict_on_n_regions"]
         predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
