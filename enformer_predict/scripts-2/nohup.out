@@ -1,0 +1,119 @@
+Parsl version: 1.3.0-dev
+[INFO] Predicting for these individuals: ['LuCaP_49', 'LuCaP_58']
+Creating futures for batch 1 of 6: 0it [00:00, ?it/s]Creating futures for batch 1 of 6: 6it [00:00, 366.59it/s]
+[<AppFuture at 0x7f992e6d3b50 state=pending>, <AppFuture at 0x7f992e6d2470 state=pending>, <AppFuture at 0x7f992e6d21d0 state=pending>, <AppFuture at 0x7f992e6d1900 state=pending>, <AppFuture at 0x7f992e6d16c0 state=pending>, <AppFuture at 0x7f992e6d1450 state=pending>]
+[INFO] Executing futures for 6:   0%|          | 0/6 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/lus/theta-fs0/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/scripts-2/enformer-predict-personalized.py", line 106, in <module>
+    main()
+  File "/lus/theta-fs0/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/scripts-2/enformer-predict-personalized.py", line 92, in main
+    query_exec = [q.result() for q in tqdm.tqdm(appfutures, desc=f'[INFO] Executing futures for {len(appfutures)}')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
+  File "/lus/theta-fs0/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/scripts-2/enformer-predict-personalized.py", line 92, in <listcomp>
+    query_exec = [q.result() for q in tqdm.tqdm(appfutures, desc=f'[INFO] Executing futures for {len(appfutures)}')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 458, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 288, in handle_exec_update
+    res = self._unwrap_remote_exception_wrapper(future)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 481, in _unwrap_remote_exception_wrapper
+    result = future.result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 451, in result
+    return self.__get_result()
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/concurrent/futures/_base.py", line 403, in __get_result
+    raise self._exception
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 538, in launch_if_ready
+    exec_fu = self.launch_task(task_record)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/dataflow/dflow.py", line 630, in launch_task
+    exec_fu = executor.submit(executable, task_record['resource_specification'], *args, **kwargs)
+  File "/home/temi/miniconda3/envs/dl-tools/lib/python3.10/site-packages/parsl/executors/high_throughput/executor.py", line 588, in submit
+    raise self.executor_exception
+Exception: 1. Failed to start block 0: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+2. Failed to start block 1: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+3. Failed to start block 2: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+4. Failed to start block 3: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+5. Failed to start block 4: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+6. Failed to start block 5: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+7. Failed to start block 6: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+8. Failed to start block 7: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+9. Failed to start block 8: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+10. Failed to start block 9: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+11. Failed to start block 10: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+12. Failed to start block 11: Unable to scale out <class 'parsl.providers.cobalt.cobalt.CobaltProvider'> provider: Request to submit job to local scheduler failed
+
+[INFO] Predicting for these individuals: ['LuCaP_49', 'LuCaP_58']
+Creating futures for batch 1 of 6: 0it [00:00, ?it/s]Creating futures for batch 1 of 6: 6it [00:00, 361.12it/s]
+[<AppFuture at 0x7f4975fd3b80 state=pending>, <AppFuture at 0x7f4975fd24d0 state=pending>, <AppFuture at 0x7f4975fd2230 state=pending>, <AppFuture at 0x7f4975fd1990 state=pending>, <AppFuture at 0x7f4975fd1720 state=pending>, <AppFuture at 0x7f4975fd14b0 state=pending>]
+[INFO] Executing futures for 6:   0%|          | 0/6 [00:00<?, ?it/s][INFO] Predicting for these individuals: ['LuCaP_49', 'LuCaP_58']
+Creating futures for batch 1 of 6: 0it [00:00, ?it/s]Creating futures for batch 1 of 6: 6it [00:00, 386.34it/s]
+[<AppFuture at 0x7fae1031fb80 state=pending>, <AppFuture at 0x7fae1031e4d0 state=pending>, <AppFuture at 0x7fae1031e230 state=pending>, <AppFuture at 0x7fae1031d990 state=pending>, <AppFuture at 0x7fae1031d720 state=pending>, <AppFuture at 0x7fae1031d4b0 state=pending>]
+[INFO] Executing futures for 6:   0%|          | 0/6 [00:00<?, ?it/s]

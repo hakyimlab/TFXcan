@@ -21,12 +21,12 @@ def localParslConfig():
             HighThroughputExecutor(
                 label="htex_Local",
                 worker_debug=True,
-                cores_per_worker=24,
+                cores_per_worker=1,
                 working_dir=workingdir,
                 provider=LocalProvider(
                     channel=LocalChannel(),
                     init_blocks=1,
-                    max_blocks=8,
+                    max_blocks=1,
                     launcher=MpiExecLauncher(),
                     worker_init='source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib'
                 ),
@@ -81,8 +81,8 @@ def htParslConfig(workingdir=None):
                     queue='full-node',
                     account='covid-ct',
                     launcher=MpiExecLauncher(),
-                    walltime='00:59:00',
-                    nodes_per_block=2, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
+                    walltime='00:20:00',
+                    nodes_per_block=1, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
                     min_blocks=1,
                     #max_blocks=2,
                     worker_init=workerinit,

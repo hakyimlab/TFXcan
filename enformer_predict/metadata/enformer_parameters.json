@@ -3,13 +3,14 @@
     "hg38_fasta_file":"/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
     "interval_list_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/processed_data/regions_for_enformer/freedman/predictors",
     "output_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predictions/freedman/matched-predictions",
-    "individuals":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/individuals.txt",
+    "individuals":["LuCaP_49", "LuCaP_58"],
     "vcf_file":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/prj6_genotypes/merged_phased_SNPs.vcf.gz",
     "TF":"FOXA1",
     "predictions_log_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/predictions-log",
     "log_dir": "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log",
     "metadata_path":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/enformer_parameters.json",
-    "batch_size":10,
-    "use_parsl": "true",
-    "predict_on_n_regions":50
+    "batch_size":500,
+    "use_parsl":"true",
+    "predict_on_n_regions":-1,
+    "write_log":"true"
 }

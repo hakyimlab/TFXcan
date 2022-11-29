@@ -29,7 +29,7 @@ def run_single_predictions(region, individual, vcf_func, script_path, output_dir
     #sys.path.append(f'{script_path}/utilities')
     mpath = os.path.join(script_path, 'utilities') #os.path.dirname(__file__) #
     sys.path.append(mpath)
-    print(sys.path)
+    #print(sys.path)
     
     try:
         import predictUtils_two
