@@ -18,6 +18,7 @@ def main():
     sys.path.append(fpath)
     #print(sys.path)
 
+    # load enformer parameters
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
@@ -30,7 +31,11 @@ def main():
         batch_size = int(parameters['batch_size'])
         use_parsl = True if parameters['use_parsl'] == 'true' else False
         n_regions = parameters["predict_on_n_regions"]
-        predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
+
+        if int(n_regions) == -1:
+            predict_on_n_regions = None # i.e predict on all
+        elif int(n_regions) > 0:
+            predict_on_n_regions = (n_regions + 1) #if isinstance(n_regions, int) else None
 
     if use_parsl == True:
         import parslConfiguration
@@ -52,6 +57,8 @@ def main():
         predict_utils_one = f'{script_path}/utilities/predictUtils_one.py'
         exec(open(predict_utils_one).read(), globals(), globals())
         
+        # import utilities.predictUtils_one
+
         # this is specific to an individual but is cached per individual
         # I want to cache this but it is a bit tricky to do for now
         @lru_cache(1)
