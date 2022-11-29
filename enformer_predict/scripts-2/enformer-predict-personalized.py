@@ -17,7 +17,7 @@ fpath = os.path.join(script_path, 'utilities')
 sys.path.append(fpath)
 
 @python_app
-def run_batch_predictions(batch_regions, individual, vcf_func, script_path, output_dir, logfile, predictions_log_dir): #
+def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script_path, output_dir, logfile, predictions_log_dir): #
   
     import sys, os, tqdm, faulthandler
     mpath = os.path.join(script_path, 'utilities') #os.path.dirname(__file__) #
@@ -34,9 +34,12 @@ def run_batch_predictions(batch_regions, individual, vcf_func, script_path, outp
     check_result = (predictUtils_two.check_query(sample = individual, query = each_region, output_dir=output_dir, logfile=logfile) for each_region in tqdm.tqdm(batch_regions, desc=f'[INFO] Checking query for batch'))
     # filter for nones
     filtered_check_result = [r for r in check_result if r is not None]
-    reg_prediction = predictUtils_two.enformer_predict(batch_region=filtered_check_result, sample=individual, model=None, output_dir=output_dir, vcf_func=vcf_func, predictions_log_dir=predictions_log_dir)
 
-    return(reg_prediction)
+    if not filtered_check_result: # i.e. if the list is empty
+        return(1)
+    else:
+        reg_prediction = predictUtils_two.enformer_predict(batch_region=filtered_check_result, sample=individual, model=None, output_dir=output_dir, vcf_func=vcf_func, predictions_log_dir=predictions_log_dir, batch_num=batch_num)
+        return(reg_prediction) # returns 0 returned by enformer_predict
 
 # else:
 #     print(f"[WARNING] {check_result}: Either length of input sequence is invalid (NoneType) or too long or too short")
@@ -117,26 +120,27 @@ def main():
         logfile_csv = f'{predictions_log_dir}/{each_individual}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
-        tic_prediction = time.process_time() # as opposed to perf_counter
+        tic_prediction = time.perf_counter() # as opposed to process_time
 
         batches = generate_batch(list_of_regions, batch_size=batch_size)
         count = 0
-        appfutures = []
-        for batch_query in tqdm.tqdm(batches, desc=f"Creating futures for batch {count+1} of {math.ceil(len(list_of_regions)/batch_size)}"):
+        app_futures = []
+        for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {math.ceil(len(list_of_regions)/batch_size)}"):
+            app_futures.append(run_batch_predictions(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
 
-            appfutures.append(run_batch_predictions(batch_regions=batch_query, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
+            count = count + 1
 
         if use_parsl == True:
-            query_exec = [q.result() for q in tqdm.tqdm(appfutures, desc=f'[INFO] Executing futures for {len(appfutures)}')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
+            exec_futures = [q.result() for q in tqdm.tqdm(app_futures, desc=f'[INFO] Executing futures for all {len(app_futures)} batches')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
 
-        toc_prediction = time.process_time()
+        toc_prediction = time.perf_counter()
 
         print(f'[INFO] (time) to create inputs and predict on {predict_on_n_regions} queries is {toc_prediction - tic_prediction}')
 
-        # if use_parsl == True:
-        #     print(f'[INFO] Finished predictions for {each_individual}: {query_exec} ...\n')
-        # else:
-        #     print(f'[INFO] Finished predictions for {each_individual}: {appfutures} ...\n')
+        if use_parsl == True:
+            print(f'[INFO] Finished predictions for {each_individual}: {exec_futures} ...\n')
+        elif use_parsl == False:
+            print(f'[INFO] Finished predictions for {each_individual}: {app_futures} ...\n')
 
     print(f'[INFO] Finished all predictions')                  
                     

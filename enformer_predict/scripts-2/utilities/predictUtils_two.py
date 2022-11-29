@@ -72,11 +72,6 @@ def get_model(script_path=module_path):
     import tensorflow as tf
     return tf.saved_model.load(model_path).model
 
-# @lru_cache(5)
-# def make_cyvcf_object(vcf_file=vcf_file, sample=each_individual):
-#     import cyvcf2
-#     return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
-
 def get_gpu_name():
     import subprocess
     cmd = "cat $COBALT_NODEFILE"
@@ -168,7 +163,7 @@ def check_query(sample, query, output_dir, logfile):
             else:
                 return({'query':query, 'logtype':'y'})
 
-def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True, resize_length=None, write_log=False):
+def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log):
 
     """
     Given a region, extract the reference sequence from a fasta file through a fastaextractor object
@@ -220,7 +215,6 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
         setup_logger('cache_log', CACHE_LOG_FILE)
         logger(msg_cac_log, 'info', 'cache')
 
-    #print(f'[CACHE INFO] (fasta) {get_fastaExtractor.cache_info()}')
     return({'sequences': ref_sequences, 'interval_object': reg_interval})
     
 def find_variants_in_vcf_file(cyvcf2_object, interval_object):
@@ -334,7 +328,7 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, grow_memory=False, write_log=False):
+def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=False, write_log=write_log):
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
@@ -354,10 +348,10 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
                 print(f'[RUNTIME ERROR] {sample} of {type(e)}')
 
     try:
-        enformer_model = get_model() #tf.saved_model.load(model_path).model #model_func() # this load the model
+        enformer_model = get_model(module_path) #tf.saved_model.load(model_path).model #model_func() # this load the model
         #print(f'[CACHE INFO] (model) [{get_model.cache_info()}, {get_gpu_name()}, {sample}]')
 
-        for each_region in tqdm.tqdm(batch_region, desc=f'[INFO] Predicting on each region per batch'):
+        for each_region in batch_region:
             each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], individual=sample, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
 
             if (each_region_seq_info is not None) and (len(each_region_seq_info['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
@@ -383,12 +377,12 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
             if tf.config.list_physical_devices('GPU'):
                 mem_use = get_gpu_memory()
                 #msg_mem_log = f"[GPU MEMORY] (at end of prediction, after clearing session) {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']/1e+9}"
-                msg_mem_log = f"[GPU MEMORY] save_h5_prediction (at end of prediction on {sample}, after clearing session for region): free {mem_use[0]} mb, used {mem_use[1]} mb on {get_gpu_name()}"
+                msg_mem_log = f"[GPU MEMORY] (at end of prediction on {sample}\'s batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {get_gpu_name()}"
                 MEMORY_LOG_FILE = f"{log_dir}/memory_usage.log"
                 setup_logger('memory_log', MEMORY_LOG_FILE)
                 logger(msg_mem_log, 'info', 'memory')
 
-            msg_cac_log = f'[CACHE INFO] (model) [{get_model.cache_info()}, {get_gpu_name()}, {sample}]'
+            msg_cac_log = f'[CACHE INFO] (model) on batch {batch_num}: [{get_model.cache_info()}, {get_gpu_name()}, {sample}]'
             CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
             setup_logger('cache_log', CACHE_LOG_FILE)
             logger(msg_cac_log, 'info', 'cache')
