@@ -27,7 +27,7 @@ def run_single_predictions(region, individual, vcf_func, script_path, output_dir
     """
     import sys, os
     #sys.path.append(f'{script_path}/utilities')
-    mpath = os.path.join(script_path, 'utilities') #os.path.dirname(__file__) #
+    mpath = os.path.join(script_path, 'sequential_utils') #os.path.dirname(__file__) #
     sys.path.append(mpath)
     #print(sys.path)
     
@@ -43,11 +43,9 @@ def run_single_predictions(region, individual, vcf_func, script_path, output_dir
         #print(check_result)
         b = predictUtils_two.create_individual_input_for_enformer(region=check_result['query'], individual=individual, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
 
-        #print(f'[CACHE INFO] (vcf) {vcf_func.cache_info()}')
-
         if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
             #print(type(b))
-            reg_prediction = predictUtils_two.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_func=None, output_dir=output_dir, predictions_log_dir=predictions_log_dir, logtype=check_result['logtype'])
+            reg_prediction = predictUtils_two.enformer_predict_sequential(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_func=None, output_dir=output_dir, predictions_log_dir=predictions_log_dir, logtype=check_result['logtype'])
             
             return(reg_prediction)
         else:
