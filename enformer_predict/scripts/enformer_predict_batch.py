@@ -20,6 +20,8 @@ def main():
     # get the path of the script as well as parameters         
     #print(sys.path)
 
+    global use_parsl
+
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
@@ -83,7 +85,7 @@ def main():
         count = 0
         app_futures = []
         for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {math.ceil(len(list_of_regions)/batch_size)}"):
-            app_futures.append(run_batch_predictions(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
+            app_futures.append(return_prediction_function(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
 
             count = count + 1
 

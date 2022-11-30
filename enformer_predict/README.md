@@ -1,11 +1,11 @@
 This folder includes scripts used to make personalized, as well as, reference predictions using ENFORMER.
 
 ### Information
-- [./scripts](./scripts/) contains code that runs ENFORMER on regions in a sequential manner. 
-- [./scripts-2](./scripts-2/) contains code that runs ENFORMER on batches. 
+- [./scripts/enformer_predict_sequential.py](./scripts/enformer_predict_sequential.py) contains code that runs ENFORMER on regions in a sequential manner. 
+- [./scripts/enformer_predict_batch.py](./scripts/enformer_predict_batch.py) contains code that runs ENFORMER on batches of regions. 
 
 ### Usage 
-After updating the metadata json file (see below), simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py) or `script-2/...`
+After updating the metadata json file (see below), simply call: `python3 ./scripts/enformer_predict_{batch or sequential}.py`.
 
 ### Parameters
 The following folders/files/changes are needed:
@@ -28,6 +28,6 @@ The following folders/files/changes are needed:
 - [ ] I may need to find a way to toggle Parsl's `@python_app` decorator on/off, depending on if the `use_parsl` parameter is "true" or "false".
 - [X] I also want to find a way to toggle if logging should be done and at what level.
 - [ ] The scripts that predicts on batches successfully caches and uses the fastaExtractor function and caches but does not use the `get_model` function. Why? and how can I resolve this?
-- [ ] I want to consolidate these scripts into one and just provide an option to switch to sequential or batch prediction (batch prediction is faster anyway). 
+- [X] I want to consolidate these scripts into one and just provide an option to switch to sequential or batch prediction (batch prediction is faster anyway). 
 - [ ] I want to add `funcx` utilities to this script. 
 - [ ] Make it such that the output, log, and predictions log directories are automatically created if they didn't exist. 
