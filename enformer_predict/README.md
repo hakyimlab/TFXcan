@@ -1,11 +1,11 @@
 This folder includes scripts used to make personalized, as well as, reference predictions using ENFORMER.
 
 ### Information
-[./scripts](./scripts/) contains code that runs ENFORMER on regions in a sequential manner. 
-[./scripts-2](./scripts-2/) contains code that runs ENFORMER on batches. 
+- [./scripts](./scripts/) contains code that runs ENFORMER on regions in a sequential manner. 
+- [./scripts-2](./scripts-2/) contains code that runs ENFORMER on batches. 
 
 ### Usage 
-After updating the metadata json file (see below), simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py)
+After updating the metadata json file (see below), simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py) or `script-2/...`
 
 ### Parameters
 The following folders/files/changes are needed:
