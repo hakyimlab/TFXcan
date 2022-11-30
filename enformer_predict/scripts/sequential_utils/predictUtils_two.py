@@ -53,7 +53,7 @@ def get_fastaExtractor(script_path=module_path):
     """
 
     import sys, json, os
-    fpath = os.path.join(script_path, 'utilities')
+    fpath = os.path.join(script_path, 'sequential_utils')
     sys.path.append(fpath)
 
     with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
@@ -67,7 +67,7 @@ def get_fastaExtractor(script_path=module_path):
 def get_model(script_path=module_path):
 
     import sys, json, os
-    fpath = os.path.join(script_path, 'utilities')
+    fpath = os.path.join(script_path, 'sequential_utils')
     sys.path.append(fpath)
 
     with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
@@ -336,7 +336,7 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(sequence, region, sample, seq_type, model_func, output_dir, predictions_log_dir, logtype, grow_memory=True, write_log=True):
+def enformer_predict_sequential(sequence, region, sample, seq_type, model_func, output_dir, predictions_log_dir, logtype, grow_memory=True, write_log=True):
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
@@ -425,75 +425,3 @@ def enformer_predict(sequence, region, sample, seq_type, model_func, output_dir,
             print(f'[ERROR] of {type(tfe)} at predictions')
 
         return(1)
-
-
-# @python_app
-# def run_batch_predictions(batch_regions, individual, vcf_func, fasta_func, script_path, output_dir, logfile, model_path, predictions_log_dir): #
-
-#     import sys, os
-#     #sys.path.append(f'{script_path}/utilities')
-#     mpath = os.path.join(script_path, 'utilities')
-#     sys.path.append(mpath)
-#     #print(sys.path)
-
-#     try:
-#         import predictUtils_two
-#     except ModuleNotFoundError as merr:
-#         print(f'[MODULE NOT FOUND ERROR] at run_batch_predictions')
-
-#     #first check the query
-#     check_result = [predictUtils_two.check_query(sample = individual, query = region, output_dir=output_dir, logfile=logfile) for region in batch_regions]
-#     check_result = [c for c in check_result if c is not None]
-#     #print(check_result)
-
-#     output = []
-#     for reg in check_result:
-#         if reg is not None:
-#             #print(f'{chk} is not None')
-#             b = predictUtils_two.create_individual_input_for_enformer(region=reg, individual=individual, vcf_func=vcf_func, fasta_func=fasta_func, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
-
-#             if (b is not None) and (len(b['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
-#                 reg_prediction = predictUtils_two.enformer_predict(b['sequence'], region=b['region'], sample=individual, seq_type=b['sequence_source'], model_path = model_path, model_func=get_model(), output_dir=output_dir, predictions_log_dir=predictions_log_dir)
-
-#                 print(f'[CACHE NORMAL INFO] {get_model.cache_info()}')
-
-#                 output.append(reg_prediction)
-#             else:
-#                 print(f"[WARNING] {reg}: Either length of input sequence is invalid (NoneType) or too long or too short")
-#     return(output)
-
-
-
-
- #import tensorflow as tf
-
-    #log the device placement
-    # tf.debugging.set_log_device_placement(True)
-
-    # gpus = tf.config.experimental.list_physical_devices('GPU')
-    # if gpus:
-    #     try:
-    #         # Currently, memory growth needs to be the same across GPUs
-    #         for gpu in gpus:
-    #             tf.config.experimental.set_memory_growth(gpu, True)
-    #         #logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    #         #print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-    #     except RuntimeError as e:
-    #         # Memory growth must be set before GPUs have been initialized
-    #         print(f'[RUNTIME ERROR] {individual} at {region} of {type(e)}')
-
-
-# def one_hot_encode(sequence):
-#     import kipoiseq
-#     import numpy as np
-#     return kipoiseq.transforms.functional.one_hot_dna(sequence).astype(np.float32)
-
-# def convert_to_tensor(one_hot_encoding):
-#     import tensorflow as tf
-#     return(tf.convert_to_tensor(one_hot_encoding))
-
-# def model_predict(input, model):
-#     predictions = model.predict_on_batch(input)
-#     prediction_dict = {k: v.numpy() for k, v in predictions.items()}
-
-#     return(prediction_dict['human'][0])
