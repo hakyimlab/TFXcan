@@ -30,4 +30,6 @@ The following folders/files/changes are needed:
 
 - [ ] The scripts that predicts on batches successfully caches and uses the fastaExtractor function and caches but does not use the `get_model` function. Why? and how can I resolve this?
 
-- [ ]
+- [ ] I want to consolidate these scripts into one and just provide an option to switch to sequential or batch prediction (batch prediction is faster anyway). 
+
+- [ ] I want to add `funcx` utilities to this script. 
