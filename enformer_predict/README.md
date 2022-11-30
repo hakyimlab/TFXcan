@@ -25,11 +25,7 @@ The following folders/files/changes are needed:
 
 ### To-do
 - [ ] I may need to find a way to toggle Parsl's `@python_app` decorator on/off, depending on if the `use_parsl` parameter is "true" or "false".
-
 - [ ] I also want to find a way to toggle if logging should be done and at what level.
-
 - [ ] The scripts that predicts on batches successfully caches and uses the fastaExtractor function and caches but does not use the `get_model` function. Why? and how can I resolve this?
-
 - [ ] I want to consolidate these scripts into one and just provide an option to switch to sequential or batch prediction (batch prediction is faster anyway). 
-
 - [ ] I want to add `funcx` utilities to this script. 
