@@ -1,9 +1,6 @@
 # import parsl
 # from parsl.app.app import python_app
 
-from parsl.app.app import python_app
-
-@python_app
 def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script_path, output_dir, logfile, predictions_log_dir): #
   
     import sys, os, tqdm, faulthandler
@@ -30,7 +27,13 @@ def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script
 
 # else:
 #     print(f"[WARNING] {check_result}: Either length of input sequence is invalid (NoneType) or too long or too short")
-            
+
+def return_prediction_function(use_parsl, fxn=run_batch_predictions):
+    from parsl.app.app import python_app
+    if use_parsl == True:
+        return python_app(fxn)
+    elif use_parsl == False:
+        return fxn
 
 def generate_batch(lst, batch_size):
     """  
