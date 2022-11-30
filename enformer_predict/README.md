@@ -1,9 +1,13 @@
 This folder includes scripts used to make personalized, as well as, reference predictions using ENFORMER.
 
-### Usage 
-After updating the metadata json file, simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py)
+### Information
+[./scripts](./scripts/) contains code that runs ENFORMER on regions in a sequential manner. 
+[./scripts-2](./scripts-2/) contains code that runs ENFORMER on batches. 
 
-### Paramaters
+### Usage 
+After updating the metadata json file (see below), simply call: python3 [./scripts/enformer-predict-personalized.py](./scripts/enformer-predict-personalized.py)
+
+### Parameters
 The following folders/files/changes are needed:
 
 [ENFORMER parameters](./metadata/enformer_parameters.json) - This is a json file and is the only file that needs changing to suit your specific circumstance. All paths given to the json file should be absolute paths, please. Also, please don't add a forward slash, `/`, after the path names. Thank you!
@@ -17,7 +21,13 @@ The following folders/files/changes are needed:
 - `log_dir`: Files detailing error messages, memory consumption, and cache usage are deposited here. 
 - `predict_on_n_regions`: How many regions should be predicted on? Valid arguments are either any number greater than 1 or "all". 
 - Besides predicting and saving in the user-defined folder, some log files are also returned and are found in the `log_dir` folder. 
+- `write_log`: values are either "true" or "false". Should information and messages about caching, errors, and infos be written to separate files located in the log_dir?
 
 ### To-do
-- I may need to find a way to toggle Parsl's `@python_app` decorator on/off, depending on if the `use_parsl` parameter is "true" or "false".
-- I also want to find a way to toggle if logging should be done and at what level.
+- [ ] I may need to find a way to toggle Parsl's `@python_app` decorator on/off, depending on if the `use_parsl` parameter is "true" or "false".
+
+- [ ] I also want to find a way to toggle if logging should be done and at what level.
+
+- [ ] The scripts that predicts on batches successfully caches and uses the fastaExtractor function and caches but does not use the `get_model` function. Why? and how can I resolve this?
+
+- [ ]
