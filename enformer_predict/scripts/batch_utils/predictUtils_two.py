@@ -74,7 +74,8 @@ def get_model(script_path=module_path):
 
 def get_gpu_name():
     import subprocess
-    cmd = "cat $COBALT_NODEFILE"
+    # cmd = "cat $COBALT_NODEFILE"
+    cmd = "cat $PBS_NODEFILE"
     a = str(subprocess.run(cmd, shell=True, capture_output=True).stdout, encoding='utf-8').strip('\n')
 
     # cmd = "nvidia-smi -L" #"nvidia-smi --query-gpu=gpu_bus_id --format=csv"

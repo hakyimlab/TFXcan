@@ -12,5 +12,5 @@
     "batch_size":8,
     "use_parsl":"true",
     "predict_on_n_regions":1000,
-    "write_log":"true"
+    "write_log":"false"
 }
