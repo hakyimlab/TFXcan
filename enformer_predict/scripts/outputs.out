@@ -1,8 +1,0 @@
-nohup: ignoring input
-[INFO] Predicting for these individuals: ['LuCaP_189']
-[INFO] Creating futures for batch 1 of 126: 0it [00:00, ?it/s][INFO] Creating futures for batch 1 of 126: 4it [00:00, 37.94it/s][INFO] Creating futures for batch 1 of 126: 8it [00:00, 34.29it/s][INFO] Creating futures for batch 1 of 126: 8it [00:00, 34.77it/s]
-[INFO] Executing futures for all 8 batches:   0%|          | 0/8 [00:00<?, ?it/s][INFO] Executing futures for all 8 batches:  12%|█▎        | 1/8 [01:14<08:38, 74.01s/it][INFO] Executing futures for all 8 batches:  25%|██▌       | 2/8 [01:15<03:06, 31.15s/it][INFO] Executing futures for all 8 batches: 100%|██████████| 8/8 [01:15<00:00,  9.40s/it]
-[INFO] (time) to create inputs and predict on 1001 queries is 75.39730791002512
-[INFO] Finished predictions for LuCaP_189: [0, 0, 0, 0, 0, 0, 0, 0] ...
-
-[INFO] Finished all predictions
