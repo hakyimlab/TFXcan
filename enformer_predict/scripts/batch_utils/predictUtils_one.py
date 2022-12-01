@@ -1,9 +1,10 @@
-# import parsl
-# from parsl.app.app import python_app
+import parsl
+from parsl.app.app import python_app
 
+@python_app
 def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script_path, output_dir, logfile, predictions_log_dir): #
   
-    import sys, os, tqdm, faulthandler
+    import sys, os, tqdm, faulthandler, time
     mpath = os.path.join(script_path, 'batch_utils') #os.path.dirname(__file__) #
     sys.path.append(mpath)
     
@@ -22,7 +23,12 @@ def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script
     if not filtered_check_result: # i.e. if the list is empty
         return(1)
     else:
+
+        tic = time.process_time()
         reg_prediction = predictUtils_two.enformer_predict(batch_region=filtered_check_result, sample=individual, model=None, output_dir=output_dir, vcf_func=vcf_func, predictions_log_dir=predictions_log_dir, batch_num=batch_num)
+        toc = time.process_time()
+
+        print(f'[INFO] (time) to predict on this batch is {toc - tic}')
         return(reg_prediction) # returns 0 returned by enformer_predict
 
 # else:
@@ -35,20 +41,31 @@ def return_prediction_function(use_parsl, fxn=run_batch_predictions):
     elif use_parsl == False:
         return fxn
 
-def generate_batch(lst, batch_size):
-    """  
-    Given a list, this function yields batches of a specified size
+# def generate_batch(lst, batch_size):
+#     """  
+#     Given a list, this function yields batches of a specified size
     
-    Parameters:
-        lst: list
-        batch_size: int
-            Number of items in each batch.
+#     Parameters:
+#         lst: list
+#         batch_size: int
+#             Number of items in each batch.
 
-    Yields
-        Batches of the list containing `batch_size` elements.
-    """
-    if batch_size <= 0:
-        return None
-    for i in range(0, len(lst), batch_size):
-        yield lst[i:(i + batch_size)]
+#     Yields
+#         Batches of the list containing `batch_size` elements.
+#     """
+#     if batch_size <= 0:
+#         return None
+#     for i in range(0, len(lst), batch_size):
+#         yield lst[i:(i + batch_size)]
+
+def generate_batch(lst, batch_n, len_lst = None):
+    import math
+    # how many per batch
+    if len_lst is not None:
+        n_elems = math.ceil(len_lst/batch_n)
+    else:
+        n_elems = math.ceil(len(lst)/batch_n)
+        
+    for i in range(0, len(lst), n_elems):
+        yield lst[i:(i + n_elems)]
 

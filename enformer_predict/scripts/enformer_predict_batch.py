@@ -10,6 +10,7 @@ import pandas as pd # for manipulating dataframes
 import math, time, tqdm
 import parsl
 from parsl.app.app import python_app
+from functools import lru_cache
 
 whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os.path.dirname(__file__)
 script_path = os.path.abspath(whereis_script)
@@ -42,7 +43,7 @@ def main():
 
     if use_parsl == True:
         import parslConfiguration
-        parsl.load(parslConfiguration.htParslConfig())
+        parsl.load(parslConfiguration.localParslConfig())
 
     #individuals can be a given list or a txt file of individuals per row or a single string
     if isinstance(individuals, list):
@@ -57,6 +58,9 @@ def main():
     
     predict_utils_one = f'{script_path}/batch_utils/predictUtils_one.py'
     exec(open(predict_utils_one).read(), globals(), globals())
+
+    # which prediction function to use i.e. with or without parsl
+    #prediction_function = return_prediction_function(use_parsl)
 
     for each_individual in individuals:
         
@@ -81,11 +85,11 @@ def main():
 
         tic_prediction = time.perf_counter() # as opposed to process_time
 
-        batches = generate_batch(list_of_regions, batch_size=batch_size)
+        batches = generate_batch(list_of_regions, batch_n=batch_size)
         count = 0
         app_futures = []
         for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {math.ceil(len(list_of_regions)/batch_size)}"):
-            app_futures.append(return_prediction_function(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
+            app_futures.append(run_batch_predictions(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
 
             count = count + 1
 

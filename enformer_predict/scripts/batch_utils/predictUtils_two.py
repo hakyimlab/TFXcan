@@ -328,7 +328,7 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=False, write_log=write_log):
+def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=True, write_log=write_log):
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
@@ -356,7 +356,7 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
 
             if (each_region_seq_info is not None) and (len(each_region_seq_info['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
                 sequence_encoded = kipoiseq.transforms.functional.one_hot_dna(each_region_seq_info['sequence']).astype(np.float32) #one_hot_encode(sequence)
-                sequence_tensor = tf.convert_to_tensor(sequence_encoded)[np.newaxis]
+                sequence_tensor = tf.convert_to_tensor(sequence_encoded)[np.newaxis] # (1000, 393216, 4)
                 predictions = enformer_model.predict_on_batch(sequence_tensor)
                 del sequence_encoded
                 prediction_dict = {k: v.numpy() for k, v in predictions.items()}
