@@ -19,7 +19,7 @@ temp/*
 !enformer_predict/scripts/
 !enformer_predict/scripts-2/
 !enformer_predict/metadata/
-!processed_data/regions_for_enformer/freedman/predictors/
+!processed_data/regions_for_enformer/freedman/
 !README
 !.gitignore
 
