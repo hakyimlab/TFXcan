@@ -1,0 +1,269 @@
+---
+title: "TF binding analysis | GATA3 tracks only"
+author: "Temi"
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+---
+```{r}
+knitr::opts_chunk$set(fig.width=12, fig.height=8, cache=F)
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+rm(list=ls())
+
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(glmnet)
+library(doMC)
+library(ROCR)
+library(Matrix)
+library(reshape2)
+library(tidyverse)
+library(foreach)
+library(doParallel)
+```
+
+```{r}
+plots_dir <- '../plots'
+models_dir <- '../models'
+```
+
+```{r}
+TF <- 'GATA3'
+cistrome_dir <- '/projects/covid-ct/imlab/data/cistrome/compressed'
+hf_info <- data.table::fread(glue('{cistrome_dir}/human_factor_full_QC.txt'))
+TF_DCID <- hf_info[hf_info$Factor == TF, ]
+head(TF_DCID)
+```
+
+https://stats.stackexchange.com/questions/138569/why-is-lambda-within-one-standard-error-from-the-minimum-is-a-recommended-valu
+
+\newpage
+
+For plotting, I need to load in the enformer annotations
+```{r}
+enformer_annotations <- data.table::fread('../info-files/enformer_tracks_annotated-resaved.txt')
+enformer_annotations <- enformer_annotations[!is.na(enformer_annotations$assay), ]
+```
+
+```{r}
+# using an individual for now >> will do this across all 3 individuals later
+ind <- 'HG00479'
+```
+
+There are 5 major categories
+```{r}
+assays <- enformer_annotations$assay |> unique()
+assays
+```
+
+```{r}
+
+z_list <- list()
+for(i in 1:length(assays)){
+    z <- combn(assays, i)
+    z_list[[i]] <- t(z) |> as.data.frame()
+}
+
+assays_dt <- plyr::rbind.fill(z_list)
+```
+
+```{r, eval=F}
+# registerDoMC(cores = 24)
+
+# enet_models_aggByMean <- list()
+
+# # pick the tracks
+# for(i in 1:nrow(assays_dt)){
+
+#     cat('Currently on', i, '\n')
+#     # select the categories
+#     track_categories <- assays_dt[i, ][!is.na(assays_dt[i, ])]
+#     selected_tracks <- enformer_annotations$feature_names[enformer_annotations$assay %in% track_categories]
+#     X_train_selected <- X_train[, colnames(X_train) %in% selected_tracks]
+#     X_test_selected <- X_test[, colnames(X_test) %in% selected_tracks]
+
+#     enet_fit_selected <- cv.glmnet(x=X_train_selected[complete.cases(X_train_selected),], y=y_train[complete.cases(X_train_selected)], family = "binomial", type.measure = "auc", alpha = 0.5, parallel=T, keep=T)
+
+#     enet_models_aggByMean[[i]] <- enet_fit_selected
+# }
+```
+
+### helper functions
+
+```{r}
+build_save_list_model <- function(){
+
+    # this function by default uses whatever X_train and y_train is in the environment
+
+    cl <- makeCluster(12)
+    registerDoParallel(cl)
+    print(getDoParName())
+
+    assays_dt <- get('assays_dt', .GlobalEnv)
+    enformer_annotations <- get('enformer_annotations', .GlobalEnv)
+    X_train <- get('X_train', .GlobalEnv)
+    y_train <- get('y_train', .GlobalEnv)
+
+    enet_models_list <- foreach(i = 1:nrow(assays_dt)) %dopar% {
+        #cat('Currently on', i, '\n')
+        # select the categories
+        track_categories <- assays_dt[i, ][!is.na(assays_dt[i, ])]
+        selected_tracks <- enformer_annotations$feature_names[enformer_annotations$assay %in% track_categories]
+        X_train_selected <- X_train[, colnames(X_train) %in% selected_tracks]
+        #X_test_selected <- X_test[, colnames(X_test) %in% selected_tracks]
+
+        enet_fit_selected <- glmnet::cv.glmnet(x=X_train_selected[complete.cases(X_train_selected),], y=y_train[complete.cases(X_train_selected)], family = "binomial", type.measure = "auc", alpha = 0.5, parallel=T, keep=T)
+
+        enet_fit_selected
+    }
+
+    stopCluster(cl)
+    return(enet_models_list)
+}
+
+collate_coefficients <- function(fit){
+    min_error_index <- fit$index['min', ]
+    one_sd_index <- fit$index['1se', ]
+
+    dimensions <- fit$glmnet.fit$beta@Dim
+    coef_mat <- as.data.frame(summary(fit$glmnet.fit$beta))
+
+    temp_mat <- matrix(data=NA, nrow=dimensions[1], ncol=dimensions[2])
+    #print(dim(temp_mat))
+    for(i in 1:nrow(coef_mat)){
+        temp_mat[coef_mat[i, 'i'], coef_mat[i, 'j']] <- coef_mat[i, 'x']
+    }
+
+    temp_mat[is.na(temp_mat)] <- 0
+
+    fit_beta <- cbind(temp_mat[, min_error_index], temp_mat[, one_sd_index])
+    # what features were used?
+    feature_data <- enformer_annotations[enformer_annotations$feature_names %in% (fit$glmnet.fit$beta |> rownames()), c('assay', 'feature_names')]
+
+    fit_beta <- as.data.frame(cbind(fit_beta, feature_data))
+
+    return(fit_beta)
+}
+
+test_models <- function(model, X_test_set, y_test_set){
+
+    features <- model$glmnet.fit$beta |> rownames()
+    X_test_set <- X_test_set[, features]
+    assess.glmnet(model, newx = X_test_set, newy = y_test_set) |> unlist()
+}
+```
+
+
+# Models ...
+
+Here, each predictor is the average of the 8 bins upstream and downstream the bin where the center of the motif resides. 
+
+Loading the data
+```{r, cache=F}
+test_data <- read.csv(glue('/projects/covid-ct/imlab/users/temi/projects/TFXcan/output/train-test-data/test_aggByMean_{ind}_{TF}.csv'))
+
+X_test <- as.matrix(test_data[, -c(1)])
+y_test <- as.matrix(test_data[, 1])
+```
+
+```{r, cache=F}
+
+aggModels_GATA3_names <- c('aggByCenter', 'aggByMean', 'aggByMeanUpstream', 'aggByMeanDownstream', 'aggByMeanUpstreamDownstream')
+model_name <- glue('enet_aggModels_{TF}_tracks_only.RData')
+
+if(file.exists(glue('{models_dir}/{model_name}'))){
+    print('Models exists. Reading them in...\n')
+    enet_models_GATA3 <- readRDS(glue('{models_dir}/{model_name}'))
+} else {
+    enet_models_GATA3 <- list()
+
+    for(i in 1:length(aggModels_GATA3_names)){
+        train_data <- read.csv(glue('/projects/covid-ct/imlab/users/temi/projects/TFXcan/output/train-test-data/train_{aggModels_GATA3_names[i]}_{ind}_{TF}.csv'))
+
+        X_train <- as.matrix(train_data[, -c(1)])
+        y_train <- as.matrix(train_data[, 1])
+
+        enet_model <- glmnet::cv.glmnet(x=X_train[complete.cases(X_train),], y=y_train[complete.cases(X_train)], family = "binomial", type.measure = "auc", alpha = 0.5, parallel=T, keep=T)
+
+        enet_models_GATA3[[i]] <- enet_model
+    }
+}
+
+names(enet_models_GATA3) <- aggModels_GATA3_names
+#save the model for next time
+saveRDS(enet_models_GATA3, file=glue('{models_dir}/{model_name}'))
+```
+
+```{r}
+fit_beta_labels <- c('For lambda with minimum mean cv error', 'For largest lambda with 1 s.e within the mininum error')
+#fit <- enet_models_aggByMean[[1]]
+df_beta_list <- lapply(enet_models_GATA3, collate_coefficients)
+df_beta_list
+```
+
+Performance on the test set
+
+```{r}
+out <- lapply(enet_models_GATA3, test_models, X_test, y_test)
+out <- do.call(rbind, out)
+out
+```
+
+```{r}
+performance_metrics <- out[order(out[, 4], decreasing=F), ]
+performance_metrics
+```
+
+The best model based on the lowest mse
+```{r}
+bmodel_index <- which.min(out[, 4])
+bmodel <- enet_models_GATA3[[bmodel_index]]
+```
+Some diagnostic plots
+```{r}
+used_categories <- 'TF (GATA3) ChIP-seq'
+par(oma=c(2.0, 2.0, 3, 2.0) + 0.1)
+bmodel |> plot()
+mtext(glue('{rownames(out)[bmodel_index]}: {used_categories}'), side=3, line=3, cex=1.5)
+```
+
+```{r}
+bmodel_df_beta <- df_beta_list[[bmodel_index]]
+```
+```{r}
+useColors <- RColorBrewer::brewer.pal(n=8, name='Dark2')
+```
+
+```{r}
+df_beta_labels <- fit_beta_labels
+
+track_names <- c('GATA3:T47D', 'GATA3:SH-SY5Y', 'GATA3:MCF-7')
+
+# define the layout
+layout(matrix(c(1,3,2,3), nrow = 2, ncol = 2, byrow = T), height=c(5, 5), width=c(8,1))
+par(mar=c(0.5,2.5,2,2) + 0.1, oma=c(3.5, 2.0, 3.5, 0.5) + 0.1)
+
+for(i in 1:2){
+    ylimits <- c(min(bmodel_df_beta[, i]), max(bmodel_df_beta[, i]))
+    #print(ylimits)
+    plot(bmodel_df_beta[, i], type='l', col=useColors[1], ylim=ylimits, xaxt='n', main=df_beta_labels[i])
+}
+
+axis(1, labels=track_names, at=seq(1, nrow(bmodel_df_beta)))
+mtext('GATA3 tracks', side=1, outer=T, cex=1.2,  line=2, adj=0.4)
+mtext('coefficients', side=2, outer=T, cex=1.2)
+mtext(glue('{rownames(out)[bmodel_index]}: {used_categories}'), side=3, outer=T, cex=1.3, adj=0)
+
+par(mai=c(0,0,0,0))
+plot.new()
+legend('right', legend='TF ChIP-seq', col=useColors[1], lty=1, bty='n')
+
+```
