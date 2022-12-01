@@ -98,3 +98,70 @@ def htParslConfig(workingdir=None):
     )
 
     return(cobalt_htex)
+
+
+def polaris_htParslConfig(workingdir=None):
+
+    import parsl
+    from parsl.config import Config
+    from parsl.executors import HighThroughputExecutor
+    from parsl.launchers import MpiExecLauncher
+    from parsl.addresses import address_by_hostname
+    from parsl.providers import PBSProProvider
+
+    print(f'Parsl version: {parsl.__version__}')
+
+    # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
+    if workingdir is None:
+        workingdir = '/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
+        rundir = f'{workingdir}/runinfo'
+    
+    # I want to put the cobalt directives 
+    sch_options = ['#PBS -l filesystems=home:grand:eagle',
+                    '#PBS -N enformer-predict-personalized',
+                    '#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.out',
+                    '#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.err'
+    ]
+
+    sch_options = '\n'.join(sch_options)
+
+    # worker init
+    #workerinit = 'source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib'
+
+    user_opts = {
+        'polaris': {
+            # Node setup: activate necessary conda environment and such.
+            'worker_init': 'source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib',
+            'scheduler_options': f'{sch_options}',
+            # ALCF allocation to use
+            'account': 'covid-ct',
+        }
+    }
+
+    pbs_htex = Config(
+        executors=[
+            HighThroughputExecutor(
+                available_accelerators=4,  # Pin each worker to a different GPU
+                max_workers=4,
+                address=address_by_hostname(),
+                provider=PBSProProvider(
+                    launcher=MpiExecLauncher(
+                        bind_cmd="--cpu-bind", overrides="--depth=64 --ppn 1"
+                    ),  # Ensures 1 manger per node, work on all 64 cores
+                    account=user_opts['polaris']['account'],
+                    queue='preemptable',
+                    cpus_per_node=32,
+                    select_options='ngpus=4',
+                    worker_init=user_opts['polaris']['worker_init'],
+                    scheduler_options=user_opts['polaris']['scheduler_options'],
+                    walltime='00:20:00',
+                    nodes_per_block=1,
+                    init_blocks=0,
+                    min_blocks=0,
+                    max_blocks=4,
+                ),
+            )
+        ],
+        run_dir=rundir
+    )
+    return pbs_htex

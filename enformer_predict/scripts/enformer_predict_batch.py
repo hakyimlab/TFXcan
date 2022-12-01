@@ -32,6 +32,7 @@ def main():
         vcf_file = parameters['vcf_file']
         TF = parameters['TF']
         predictions_log_dir = parameters['predictions_log_dir']
+        log_dir = parameters['log_dir']
         batch_size = int(parameters['batch_size'])
         use_parsl = True if parameters['use_parsl'] == 'true' else False
         n_regions = parameters["predict_on_n_regions"]
@@ -41,9 +42,15 @@ def main():
         elif int(n_regions) > 0:
             predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
 
+    if not os.path.isdir(predictions_log_dir):
+        os.makedirs(predictions_log_dir)
+
+    if not os.path.isdir(log_dir):
+        os.makedirs(log_dir)
+
     if use_parsl == True:
         import parslConfiguration
-        parsl.load(parslConfiguration.localParslConfig())
+        parsl.load(parslConfiguration.polaris_htParslConfig())
 
     #individuals can be a given list or a txt file of individuals per row or a single string
     if isinstance(individuals, list):
@@ -88,7 +95,7 @@ def main():
         batches = generate_batch(list_of_regions, batch_n=batch_size)
         count = 0
         app_futures = []
-        for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {math.ceil(len(list_of_regions)/batch_size)}"):
+        for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
             app_futures.append(run_batch_predictions(batch_regions=batch_query, batch_num = count+1, individual=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
 
             count = count + 1

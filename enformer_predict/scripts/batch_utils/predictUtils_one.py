@@ -24,9 +24,11 @@ def run_batch_predictions(batch_regions, batch_num, individual, vcf_func, script
         return(1)
     else:
 
-        tic = time.process_time()
+        tic = time.perf_counter()
+
         reg_prediction = predictUtils_two.enformer_predict(batch_region=filtered_check_result, sample=individual, model=None, output_dir=output_dir, vcf_func=vcf_func, predictions_log_dir=predictions_log_dir, batch_num=batch_num)
-        toc = time.process_time()
+        
+        toc = time.perf_counter()
 
         print(f'[INFO] (time) to predict on this batch is {toc - tic}')
         return(reg_prediction) # returns 0 returned by enformer_predict
@@ -59,6 +61,17 @@ def return_prediction_function(use_parsl, fxn=run_batch_predictions):
 #         yield lst[i:(i + batch_size)]
 
 def generate_batch(lst, batch_n, len_lst = None):
+    """
+    Given a list, this function yields batches of a specified size
+    
+    Parameters:
+        lst: list
+        batch_size: int
+            Number of items in each batch.
+
+    Yields
+        Batches of the list containing `batch_size` elements.
+    """
     import math
     # how many per batch
     if len_lst is not None:
