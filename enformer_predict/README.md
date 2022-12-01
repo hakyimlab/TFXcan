@@ -1,11 +1,10 @@
 This folder includes scripts used to make personalized, as well as, reference predictions using ENFORMER.
 
 ### Information
-- [./scripts/enformer_predict_sequential.py](./scripts/enformer_predict_sequential.py) contains code that runs ENFORMER on regions in a sequential manner. 
 - [./scripts/enformer_predict_batch.py](./scripts/enformer_predict_batch.py) contains code that runs ENFORMER on batches of regions. 
 
 ### Usage 
-After updating the metadata json file (see below), simply call: `python3 ./scripts/enformer_predict_{batch or sequential}.py`.
+After updating the metadata json file (see below), simply call: `python3 ./scripts/enformer_predict_batch.py`.
 
 ### Parameters
 The following folders/files/changes are needed:
@@ -16,7 +15,7 @@ The following folders/files/changes are needed:
 - `interval_list_dir`: This folder should contain a `.txt` file for each individual you want to predict for. The text file containing the intervals should be named this way: `{individual_id}_{transcription_factor}_{any other information you want}.txt`, and should contain just the regions of interest listed row-wise. Also each region should be named thus: `chr_start_end` e.g. "chr1_4000_4020". This region will be expanded or resized for ENFORMER. 
 - `individiduals`: The `individuals.txt` file should be a similar file as above, but should contain the individuals' ids you want to make predictions for. Alternatively, you can pass a list of individuals directly to the json file. 
 - Parsl is used to distribute jobs across multiple GPUs. If not needed, you can disable parsl by toggling the `use_parsl` parameter (either "true" or "false") in the json file. 
-- `batch_size`: is used so that given batches are passed to the GPUs. Change this as needed. 
+- `batch_size`: Split a list of length n into `batch_size`. This is used so that given batches are passed to the GPUs. Change this as needed. 
 - `predictions_log_dir`: When predictions are made, they should be logged per individual. You will find the logs here. These prediction log files are important if there is an interruption during the running of the script. If the file is available, the script will not re-predict on regions whose `*.h5` files are available and whose predictions have been logged, to save time. If you need to force prediction, delete either the log file, or the `*.h5` prediction for that region.
 - `log_dir`: Files detailing error messages, memory consumption, and cache usage are deposited here. 
 - `predict_on_n_regions`: How many regions should be predicted on? Valid arguments are either any number greater than 1 or "all". 
@@ -31,3 +30,5 @@ The following folders/files/changes are needed:
 - [X] I want to consolidate these scripts into one and just provide an option to switch to sequential or batch prediction (batch prediction is faster anyway). 
 - [ ] I want to add `funcx` utilities to this script. 
 - [ ] Make it such that the output, log, and predictions log directories are automatically created if they didn't exist. 
+- [X] This script now runs on Polaris
+- [ ] Need to switch between running on polaris vs theta easily {kind of tricky}
