@@ -20,8 +20,10 @@ def localParslConfig():
         executors=[
             HighThroughputExecutor(
                 label="htex_Local",
+                max_workers=8, # vs max_workers
+                available_accelerators=8,
                 worker_debug=True,
-                cores_per_worker=1,
+                cores_per_worker=1, # how many cores per worker #nodes_per_block, 2 is usually enough or 1.
                 working_dir=workingdir,
                 provider=LocalProvider(
                     channel=LocalChannel(),
@@ -72,7 +74,7 @@ def htParslConfig(workingdir=None):
         executors=[
             HighThroughputExecutor(
                 label='htex-Cobalt',
-                max_workers=8,
+                max_workers=8, # vs max_workers
                 available_accelerators=8,
                 worker_debug=True,
                 cores_per_worker=1, # how many cores per worker #nodes_per_block, 2 is usually enough or 1.
@@ -81,8 +83,8 @@ def htParslConfig(workingdir=None):
                     queue='full-node',
                     account='covid-ct',
                     launcher=MpiExecLauncher(),
-                    walltime='00:30:00',
-                    nodes_per_block=1, # number of full-nodes - 3 will launch 3 full nodes at a time for one instance for each `cores_per_worker`
+                    walltime='00:20:00',
+                    nodes_per_block=2, # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
                     min_blocks=1,
                     #max_blocks=2,
                     worker_init=workerinit,
