@@ -1,0 +1,17 @@
+{
+    "project_dir":"/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline",
+    "model_path":"/projects/covid-ct/imlab/data/enformer/raw",
+    "hg38_fasta_file":"/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+    "interval_list_dir":"../impact_pipeline/motif_intervals/freedman/predictors",
+    "output_dir":"./enformer_predictions/freedman",
+    "individuals":["LuCaP_189"],
+    "vcf_file":"../genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz",
+    "TF":"FOXA1",
+    "predictions_log_dir":"./predictions-log",
+    "log_dir": "./cobalt-log",
+    "metadata_path":"./metadata/enformer_parameters.json",
+    "batch_size":8,
+    "use_parsl":"true",
+    "predict_on_n_regions":1000,
+    "write_log":"true"
+}
