@@ -1,15 +1,11 @@
 # exclude everything except directory foo/bar
-code_arguments/*
-enformer_predictions/*
-enformer_predict/*
+enformer_pipeline/*
+impact_pipeline/*
 explore_freedman/*
-models/*
-processed_data/*
-defined_regions/*
 log/*
-model_data/*
+modeling_pipeline/*
 plots/*
-prj6_genotypes/*
+genotypes/*
 temp/*
 old_scripts/
 *__*__/*
@@ -17,11 +13,12 @@ old_scripts/
 # include
 !scripts/
 !metadata/
-!enformer_predict/scripts/
-!enformer_predict/scripts-2/
-!enformer_predict/metadata/
-!processed_data/regions_for_enformer/freedman/
+!enformer_pipeline/scripts/
+!enformer_pipeline/metadata/
+!impact_pipeline/motif_intervals/
+!impact_pipeline/scripts/
 !README
+!modeling_pipeline/
 !.gitignore
 
 
