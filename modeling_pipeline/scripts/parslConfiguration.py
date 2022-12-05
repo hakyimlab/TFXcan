@@ -11,8 +11,8 @@ def localParslConfig():
     from parsl.channels import LocalChannel
     from parsl.launchers import MpiExecLauncher
 
-    rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/runinfo'
-    workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
+    rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/runinfo'
+    workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
 
     #parsl.clear()
 
@@ -41,7 +41,7 @@ def localParslConfig():
     return(local_htex)
 
 
-def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, num_full_nodes=1):
+def theta_htParslConfig(workingdir=None):
 
     import parsl
     from parsl.config import Config
@@ -58,10 +58,10 @@ def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, 
     
     # I want to put the cobalt directives 
     sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
-                    f'#COBALT --jobname={job_name}',
-                    f'#COBALT -o {workingdir}/cobalt-log/{job_name}.out',
-                    f'#COBALT -e {workingdir}/cobalt-log/{job_name}.err',
-                    f'#COBALT --debuglog {workingdir}/cobalt-log/{job_name}.cobalt'
+                    '#COBALT --jobname=enformer-predict-personalized',
+                    f'#COBALT -o {workingdir}/cobalt-log/enformer-predict-personalized.out',
+                    f'#COBALT -e {workingdir}/cobalt-log/enformer-predict-personalized.err',
+                    f'#COBALT --debuglog {workingdir}/cobalt-log/enformer-predict-personalized.cobalt'
     ]
 
     sch_options = '\n'.join(sch_options)
@@ -83,8 +83,8 @@ def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, 
                     queue='full-node',
                     account='covid-ct',
                     launcher=MpiExecLauncher(),
-                    walltime='00:30:00',
-                    nodes_per_block=num_full_nodes, # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
+                    walltime='03:00:00',
+                    nodes_per_block=3, # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
                     min_blocks=1,
                     #max_blocks=2,
                     worker_init=workerinit,
