@@ -5,7 +5,7 @@ from parsl.app.app import python_app
 def run_batch_predictions(batch_regions, batch_num, id, script_path, output_dir, logfile, predictions_log_dir): #
   
     import sys, os, tqdm, faulthandler, time
-    mpath = os.path.join(script_path, 'batch_utils') #os.path.dirname(__file__) #
+    mpath = os.path.join(script_path, 'reference_utils') #os.path.dirname(__file__) #
     sys.path.append(mpath)
     
     faulthandler.enable() # to figure out where segmentation error is coming from
@@ -43,23 +43,6 @@ def return_prediction_function(use_parsl, fxn=run_batch_predictions):
     elif use_parsl == False:
         return fxn
 
-# def generate_batch(lst, batch_size):
-#     """  
-#     Given a list, this function yields batches of a specified size
-    
-#     Parameters:
-#         lst: list
-#         batch_size: int
-#             Number of items in each batch.
-
-#     Yields
-#         Batches of the list containing `batch_size` elements.
-#     """
-#     if batch_size <= 0:
-#         return None
-#     for i in range(0, len(lst), batch_size):
-#         yield lst[i:(i + batch_size)]
-
 def generate_batch(lst, batch_n, len_lst = None):
     """
     Given a list, this function yields batches of a specified size
@@ -81,4 +64,3 @@ def generate_batch(lst, batch_n, len_lst = None):
         
     for i in range(0, len(lst), n_elems):
         yield lst[i:(i + n_elems)]
-

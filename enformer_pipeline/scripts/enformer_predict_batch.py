@@ -28,7 +28,7 @@ def main():
         parameters = json.load(f)
         intervals_dir = script_path + '/../' + parameters['interval_list_dir']
         output_dir = script_path + '/../' + parameters['output_dir']
-        individuals = parameters['individuals']
+        individuals = script_path + '/../' + parameters['individuals']
         vcf_file = script_path + '/../' + parameters['vcf_file']
         TF = parameters['TF']
         predictions_log_dir = script_path + '/../' + parameters['predictions_log_dir']
@@ -48,7 +48,7 @@ def main():
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
 
-    print(output_dir)
+    print(individuals)
 
     if use_parsl == True:
         import parslConfiguration
@@ -84,7 +84,7 @@ def main():
             print(f'[INFO] Creating output directory at {output_dir}/{each_individual}')
             os.makedirs(f'{output_dir}/{each_individual}')
 
-        a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}_400000.txt', sep=' ', header=None)
+        a = pd.read_table(f'{intervals_dir}/{each_individual}_{TF}_40000.txt', sep=' ', header=None)
         list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
 
         # I need a log file
@@ -107,7 +107,7 @@ def main():
 
         toc_prediction = time.perf_counter()
 
-        print(f'[INFO] (time) to create inputs and predict on {predict_on_n_regions} queries is {toc_prediction - tic_prediction}')
+        print(f'[INFO] (time) to create inputs and predict on {len(list_of_regions)} queries is {toc_prediction - tic_prediction}')
 
         if use_parsl == True:
             print(f'[INFO] Finished predictions for {each_individual}: {exec_futures} ...\n')

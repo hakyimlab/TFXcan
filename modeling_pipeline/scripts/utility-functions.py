@@ -3,6 +3,7 @@
 import zipfile, gzip
 import pandas as pd
 import numpy as np
+import re
 
 def get_bed_files(dcids=[1], data_type='TF', cistrome_dir='/projects/covid-ct/imlab/data/cistrome/compressed', data_info=None):
 

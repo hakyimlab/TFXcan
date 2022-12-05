@@ -8,11 +8,10 @@ module_path = os.path.abspath(whereis_script)
 
 global log_dir, write_log
 
-with open(f'{module_path}/../../metadata/enformer_parameters.json') as f:
+with open(f'{module_path}/../../metadata/reference_parameters.json') as f:
     parameters = json.load(f)
     project_dir = parameters['project_dir']
     log_dir = module_path + '/../../' + parameters['log_dir']
-    vcf_file = module_path + '/../../' + parameters['vcf_file']
     write_log = True if parameters["write_log"] == 'true' else False
 
 
@@ -222,56 +221,9 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
 
     return({'sequences': ref_sequences, 'interval_object': reg_interval})
     
-def find_variants_in_vcf_file(cyvcf2_object, interval_object):
-
-    '''
-    Find variants for a region in a vcf file
-
-    Parameters:
-        cyvcf2_object: cyvcf2_object
-            A cyvcf2_object object
-        interval_object: Interval object
-            An interval object returned by kipoiseq.Interval
-
-    Returns:
-        A list of variants for that region in the form [chr, pos, [genotypes], [genotype bases]]
-        An empty string if no variant is present
-    
-    '''
-    query = f'{interval_object.chrom}:{interval_object.start}-{interval_object.end}'
-    return([[variant.CHROM, variant.POS, variant.genotypes[0][0:2], variant.gt_bases[0].split('|')] for variant in cyvcf2_object(query)])
-
-def create_mapping_dictionary(variants_array, interval_start, haplotype='hap1'):
-    if haplotype == 'hap1':
-        haplotype_map = {(variants_array[i][1] - interval_start): variants_array[i][3][0] for i in range(0, len(variants_array)) if variants_array[i][2][0] == 1}
-        return(haplotype_map)
-        #return({(k - interval_start): v for k, v in haplotype_map.items() if v is not None})
-    elif haplotype == 'hap2':
-        haplotype_map = {(variants_array[i][1] - interval_start): variants_array[i][3][1] for i in range(0, len(variants_array)) if variants_array[i][2][1] == 1}
-        return(haplotype_map)
-    elif haplotype == 'both':
-        haplotype_map = {variants_array[i][1]: variants_array[i][3][0] if variants_array[i][2][0] == 1 else variants_array[i][3][1] if variants_array[i][2][1] == 1 else None for i in range(0, len(variants_array))}
-        haplotype_map = {(k - interval_start): v for k, v in haplotype_map.items() if v is not None}
-        return(haplotype_map)
-
-def replace_variants_in_reference_sequence(query_sequences, mapping_dict):
-
-    sequence_list = list(query_sequences)
-    a = map(lambda i: mapping_dict.get(i, sequence_list[i]), range(len(sequence_list)))
-    return(''.join(list(a)))
-
-def create_individual_input_for_enformer(region, individual, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log):
-
-    vcf_object = vcf_func() # make_cyvcf_object() #
-    #print(f'[INFO] Current individual is {vcf_object.samples}')
+def create_reference_input_for_enformer(region, fasta_func, resize_for_enformer=True, resize_length=None, write_log=write_log):
 
     a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
-
-    # if write_log:
-    #     msg_cac_log = f'[CACHE INFO] (vcf) [{vcf_func.cache_info()}, {get_gpu_name()}, {individual}, {region}]'
-    #     CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
-    #     setup_logger('cache_log', CACHE_LOG_FILE)
-    #     logger(msg_cac_log, 'info', 'cache')
 
     # check that all the sequences in a are valid
     if all(i == 'N' for i in a['sequences']):
@@ -281,19 +233,9 @@ def create_individual_input_for_enformer(region, individual, fasta_func, hap_typ
             MEMORY_ERROR_FILE = f"{log_dir}/error_details.log"
             setup_logger('error_log', MEMORY_ERROR_FILE)
             logger(err_msg, 'error', 'run_error')
-
-        vcf_object.close()
         return(None)
     else:
-        b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
-        vcf_object.close()
-        
-        if b: # go on and change the variants by position
-            c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
-            variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
-            return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
-        else: # return the reference
-            return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
+        return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
 
 def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     """
@@ -333,7 +275,7 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=True, write_log=write_log):
+def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, batch_num, grow_memory=True, write_log=write_log):
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
@@ -357,7 +299,10 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
         #print(f'[CACHE INFO] (model) [{get_model.cache_info()}, {get_gpu_name()}, {sample}]')
 
         for each_region in batch_region:
-            each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], individual=sample, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+            #print(each_region['query'])
+            each_region_seq_info = create_reference_input_for_enformer(region=each_region['query'], fasta_func=None, resize_for_enformer=True, resize_length=None)
+
+            #print(len(each_region_seq_info['sequence']))
 
             if (each_region_seq_info is not None) and (len(each_region_seq_info['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
                 sequence_encoded = kipoiseq.transforms.functional.one_hot_dna(each_region_seq_info['sequence']).astype(np.float32) #one_hot_encode(sequence)
