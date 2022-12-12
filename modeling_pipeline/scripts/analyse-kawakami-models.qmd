@@ -29,13 +29,9 @@ library(doParallel)
 ```
 
 ```{r}
-project_dir <- '/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
-```
-
-```{r}
-plots_dir <- paste0(project_dir, '/plots')
-data_dir <- paste0(project_dir, '/../enformer_pipeline/enformer_predictions/train-test-val')
-models_dir <- paste0(project_dir, '/models')
+plots_dir <- '../plots'
+data_dir <- '../enformer_predictions/train-test-val'
+models_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan/models'
 TF <- 'FOXA1'
 cell_line <- 'LuCaP'
 ```
