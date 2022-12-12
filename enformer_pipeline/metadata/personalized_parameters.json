@@ -13,7 +13,8 @@
     "log_dir": "./cobalt_log",
     "metadata_path":"./metadata/enformer_parameters.json",
     "batch_size":24,
-    "use_parsl":"true",
+    "use_parsl":true,
     "predict_on_n_regions":-1,
-    "write_log":"false"
+    "write_log":{"memory": false, "error": false, "time": false, "cache": false},
+    "parsl_parameters":{"job_name":"enformer_predict_personalized", "num_of_full_nodes":1, "walltime":"00:30:00", "min_num_blocks":0, "max_num_blocks":1}
 }
