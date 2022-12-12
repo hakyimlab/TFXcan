@@ -1,0 +1,882 @@
+---
+title: "After annotating with IMPACT, prepare regions txt file for ENFORMER to predict on"
+author: "Temi"
+date: 'Wednesday Dec 7 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+```
+
+```{r}
+project_dir <- '/lus/theta-fs0/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline'
+setwd(project_dir)
+```
+
+```{r}
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+```
+
+
+## This section prepares target regions for Freedman data
+```{r}
+freedman_metadata_dir <- glue('{project_dir}/processed_data/impact_files/freedman/metadata')
+merge_info <- read.table(glue('{freedman_metadata_dir}/merge_info.txt'))
+srr_info <- data.table::fread(glue('{freedman_metadata_dir}/SraRunTable.txt'), select=c('Run', 'Assay Type', 'GEO_Accession (exp)'))
+mtdt <- read.table(glue('{freedman_metadata_dir}/grouping_info.txt'), header=T)
+```
+
+Select geo with the SRR
+```{r}
+all_srr <- vector('character')
+for(i in 1:nrow(merge_info)){
+    all_srr <- c(all_srr, strsplit(merge_info[i, 'V2'], split=',')[[1]])
+    #sapply(strsplit(merge_info[i, 'V2'], split=','), getElement, 1)
+    #all_srr <- c(all_srr, sapply(strsplit(merge_info[i, 'V2'], split=','), getElement, 1))
+}
+all_srr
+```
+
+```{r}
+srr_peak_file_info <- srr_info[srr_info$Run %in% all_srr, ]
+colnames(srr_peak_file_info) <- c('srr_acc', 'assay_type', 'geo_acc')
+```
+
+```{r}
+peak_dir <- glue('{project_dir}/../../../../../data/freedman_data/sorted_bed_files')
+```
+
+```{r}
+FOXA1_peaks <- list.files(peak_dir)
+```
+
+```{r}
+# available_gsms <- stringr::str_match(string = FOXA1_peaks, pattern = '([A-Z0-9]+)_LuCaP_[\\d+\\.]*_FOXA1.bed')
+# available_gsms <- available_gsms[!is.na(available_gsms[, 2]), ]
+# available_gsms
+```
+
+```{r}
+# mtdt <- strsplit(available_gsms[, 1], '_') %>% do.call('rbind', .)
+# mtdt[, 4] <- sapply(strsplit(mtdt[, 3], '\\.'), getElement, 1)
+# mtdt <- as.data.frame(mtdt)
+# colnames(mtdt) <- c('geo_acc', 'cell_line', 'subgroup_id', 'group_id')
+# mtdt[1:5, ]
+```
+
+```{r}
+#mtdt <- base::merge(srr_peak_file_info[, c(1,3)], mtdt, by='geo_acc')
+write.table(mtdt, file=glue('{freedman_metadata_dir}/grouping_info.txt'), row.names=F, quote=F)
+```
+
+Combine the peaks per individual
+```{r}
+# first create a grouping information
+# crs are not used
+# subgroups <- sapply(strsplit(list.files(peak_dir), '_'), getElement, 3)
+# groups <- sapply(strsplit(subgroups, '\\.'), getElement, 1)
+# grouping_info <- cbind(groups, subgroups) |> as.data.frame()
+# grouping_info <- grouping_info[!endsWith(grouping_info$groups, 'CR') & (grouping_info$groups %in% sapply(strsplit(merge_info$V1, '_'), getElement, 2)), ]
+# grouping_info
+```
+
+
+```{r}
+file_names <- glue('LuCaP_{unique(mtdt$group_id)}_{TF}.bed')
+ind_names <- glue('LuCaP_{unique(mtdt$group_id)}')
+
+files_read <- lapply(file_names, function(each_grp){
+
+    cols_names <- c('chr','start','end','id','score')
+
+    if(length(each_grp) > 1){
+        out <- lapply(each_grp, function(e){
+            read.table(list.files(peak_dir, pattern=e, full.names=T))
+        })
+
+        # rbind these
+        out <- do.call('rbind', out) |> as.data.frame()
+        colnames(out) <- cols_names
+
+    } else{
+        out <- read.table(list.files(peak_dir, pattern=each_grp, full.names=T))
+        colnames(out) <- cols_names
+    }
+
+    return(out)
+})
+names(files_read) <- ind_names
+```
+
+Next, I need to prepare these files to annotate their TF peaks for regions for ENFORMER
+
+I can convert these into granges objects and reduce them
+
+```{r}
+files_granges <- lapply(files_read, function(temp){
+    temp$strand <- '*'
+    bed_Granges <- with(temp, GenomicRanges::GRanges(chr, IRanges(start, end), strand, score, id = id))
+    bed_Granges <- GenomicRanges::reduce(bed_Granges)
+    
+    return(bed_Granges)
+})
+names(files_granges) <- ind_names
+```
+
+### Create annotations per
+
+So far, I have created a reduced granges file of the peaks present in these individuals. 
+I need to overlap these with 
+```{r}
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
+output_dir <- glue('{project_dir}/processed_data/impact_files/freedman/freedman_individuals')
+homer_dir <- glue('~/miniconda3/envs/homer-env/share/homer')
+```
+
+First, I need a set of `common_files`: here, what I really need is a file of the motifs for this transcription factor.
+
+I have a utility script that does this (work on this later)
+
+```{r, eval=F}
+# create motif files
+if(! dir.exists(common_dir)){
+    dir.create(common_dir)
+}
+
+# I should use the modules library later
+source('./utility_functions.R')
+
+prepare_motif_files(common_dir)
+```
+
+Overlap these motifs with the TF Chip-seq data 
+```{r}
+valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
+valid_chromosomes
+```
+
+These are predicted motifs that have been sorted in decreasing order of log odd ratios
+```{r}
+FOXA1_predicted_motifs <- data.table::fread(glue('{common_dir}/{TF}_{cell_line}_scanMotifsGenomewide_sort.txt'))
+names(FOXA1_predicted_motifs) <- c('motif_name', 'chr', 'start', 'end', 'strand', 'log_odds', 'sequence')
+# select only valid chromosomes 
+FOXA1_predicted_motifs <- FOXA1_predicted_motifs[FOXA1_predicted_motifs$chr %in% valid_chromosomes, ]
+dim(FOXA1_predicted_motifs); FOXA1_predicted_motifs |> head()
+```
+Convert the predicted motifs to a granges object 
+```{r}
+# convert the predicted motifs to granges objects
+predicted_motifs_granges <- with(FOXA1_predicted_motifs, GenomicRanges::GRanges(chr, IRanges(start, end), strand, log_odds, id = motif_name, sequence=sequence))
+```
+
+Overlapping with Kawakami data to create bound and unbound regions
+
+```{r}
+kawakami_dir <- glue('{project_dir}/processed_data/impact_files/kawakami-human')
+```
+
+```{r}
+kawakami_peaks <- data.table::fread(paste0(kawakami_dir, '/bedtools-intersected-regions/FOXA1_intersected_chip.txt'))
+colnames(kawakami_peaks) <- c('chr', 'start', 'end', 'binding_counts', 'id')
+kawakami_peaks <- kawakami_peaks[kawakami_peaks$chr %in% valid_chromosomes, ]
+dim(kawakami_peaks) ; kawakami_peaks |> head()
+```
+
+I should use a cut off - any binding counts greater than 10 will be used (since I have like 60 kawakami chip-seq data)
+
+The idea is that regions with binding counts greater than 10 are high-confidence regions
+```{r}
+kawakami_peaks_gt_10 <- kawakami_peaks[kawakami_peaks$binding_counts > 10, ]
+kawakami_peaks_gt_10$strand <- '*'
+dim(kawakami_peaks_gt_10) ; kawakami_peaks_gt_10 |> head()
+```
+Create a granges file
+```{r}
+kawakami_peaks_granges <- with(kawakami_peaks_gt_10, GenomicRanges::GRanges(chr, IRanges(start, end), strand, id = id, binding_counts=binding_counts))
+kawakami_peaks_granges
+```
+
+### Using the top 100000 predicted motifs
+
+Next, I will use the top 100000 predicted motifs and overlap those with the kawakami chip-seq data to get the bound and unbound regions
+
+Select bound regions
+```{r}
+cutoff <- 100000
+motif_cutoff <- FOXA1_predicted_motifs[1:cutoff, ] # since these are sorted already
+
+# make a granges object
+motif_cutoff_granges <- with(motif_cutoff, GenomicRanges::GRanges(chr, IRanges(start, end), strand, log_odds, id = motif_name, sequence=sequence))
+
+granges_overlap <- GenomicRanges::findOverlaps(query = kawakami_peaks_granges, subject = motif_cutoff_granges, type = 'any')
+
+bound_df <- data.frame(as.data.frame(kawakami_peaks_gt_10)[queryHits(granges_overlap),], motif_cutoff_granges[subjectHits(granges_overlap),])
+
+bound_df <- bound_df[, c(1,2,3,4,8,9,10,14)]
+names(bound_df) <- c('chr', 'peak_start', 'peak_end', 'binding_counts', 'motif_start', 'motif_end', 'motif_width', 'sequence')
+bound_df <- cbind(with(bound_df, paste(chr, motif_start, motif_end, sep='_')), 1, bound_df[['binding_counts']]) |> as.data.frame()
+
+dim(bound_df) ; bound_df |> head()
+```
+
+Check for duplicates and take only the first (or last? Need to check the documentation)occurences
+
+```{r}
+bound_df <- bound_df[!duplicated(bound_df[['V1']]), ]
+dim(bound_df) ; bound_df |> head()
+```
+
+
+Select unbound regions and select randomly, 3 times the bound regions
+```{r}
+unbound_df <- data.frame(motif_cutoff_granges[-subjectHits(granges_overlap),])[,c(1,2,3)]
+colnames(unbound_df) <- c('chr', 'motif_start', 'motif_end')
+unbound_df <- cbind(with(unbound_df, paste(chr, motif_start, motif_end, sep='_')), 0, 0) |> as.data.frame()
+
+# randomly select 30000 sites
+set.seed(2022)
+unbound_df <- unbound_df[sample(1:nrow(unbound_df), 3 * nrow(bound_df)), ]
+dim(unbound_df) ; unbound_df |> head()
+```
+
+Check for duplicates and take only the first (or last? Need to check the documentation)occurences
+```{r}
+unbound_df <- unbound_df[!duplicated(unbound_df[['V1']]), ]
+dim(unbound_df) ; unbound_df |> head()
+```
+
+Merge them
+```{r}
+kawakami_defined_regions_40000 <- rbind(bound_df, unbound_df)
+# shuffle
+set.seed(2022)
+kawakami_defined_regions_40000 <- kawakami_defined_regions_40000[sample(1:nrow(kawakami_defined_regions_40000), nrow(kawakami_defined_regions_40000)), ]
+dim(kawakami_defined_regions_40000) ; kawakami_defined_regions_40000 |> head(10)
+```
+
+Check of duplicates again
+```{r}
+stopifnot(all(duplicated(kawakami_defined_regions_40000[['V1']]) == F) == T)
+```
+Save the Kawakami defined regions
+```{r}
+todays_date <- Sys.Date()
+save_dir <- glue('{project_dir}/motif_intervals/kawakami')
+TF <- 'FOXA1'
+howmany <- format(nrow(kawakami_defined_regions_40000), scientific=F)
+
+if(!dir.exists(glue('{save_dir}/intervals_{todays_date}'))){
+    dir.create(glue('{save_dir}/intervals_{todays_date}'))
+}
+
+save_dir <- glue('{save_dir}/intervals_{todays_date}')
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+```{r}
+write.table(kawakami_defined_regions_40000[, 1], glue('{save_dir}/predictors/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+write.table(kawakami_defined_regions_40000, glue('{save_dir}/ground_truth/kawakami_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+
+#### For Freedman
+Next, I have to select these same regions as in Kawakami in Freedman individuals
+
+```{r}
+kawakami_defined_regions_40000 <- data.table::fread(glue('{project_dir}/motif_intervals/kawakami/ground-truth/kawakami_FOXA1_41328.txt'))
+kawakami_defined_regions_40000 ; dim(kawakami_defined_regions_40000)
+```
+
+```{r}
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
+output_dir <- glue('{project_dir}/processed_data/impact_files/freedman/freedman_individuals')
+```
+
+
+```{r}
+freedman_metadata_dir <- paste0(project_dir, '/processed_data/impact_files/freedman/metadata')
+merge_info <- read.table(glue('{freedman_metadata_dir}/merge_info.txt'))
+peak_dir <- '/lus-projects/covid-ct/imlab/data/freedman_data/sorted_bed_files'
+mtdt <- read.table(glue('{freedman_metadata_dir}/grouping_info.txt'), header=T)
+
+valid_chromosomes <- paste0('chr', c(1:22, 'X'), sep='')
+ind_names <- glue('LuCaP_{unique(mtdt$group_id)}')
+```
+
+These are predicted motifs that have been sorted in decreasing order of log odd ratios
+```{r}
+FOXA1_predicted_motifs <- data.table::fread(glue('{common_dir}/{TF}_{cell_line}_scanMotifsGenomewide_sort.txt'))
+names(FOXA1_predicted_motifs) <- c('motif_name', 'chr', 'start', 'end', 'strand', 'log_odds', 'sequence')
+# select only valid chromosomes 
+FOXA1_predicted_motifs <- FOXA1_predicted_motifs[FOXA1_predicted_motifs$chr %in% valid_chromosomes, ]
+dim(FOXA1_predicted_motifs); FOXA1_predicted_motifs |> head()
+```
+
+Combine the peaks per individual
+```{r}
+# first create a grouping information
+# crs are not used
+# subgroups <- sapply(strsplit(list.files(peak_dir), '_'), getElement, 3)
+# groups <- sapply(strsplit(subgroups, '\\.'), getElement, 1)
+# grouping_info <- cbind(groups, subgroups) |> as.data.frame()
+# grouping_info <- grouping_info[!endsWith(grouping_info$groups, 'CR') & (grouping_info$groups %in% sapply(strsplit(merge_info$V1, '_'), getElement, 2)), ]
+# grouping_info
+```
+
+```{r}
+FOXA1_peaks <- list.files(peak_dir)
+length(FOXA1_peaks)
+```
+
+```{r}
+file_names <- glue('LuCaP_{unique(mtdt$group_id)}_{TF}.bed')
+
+files_read <- lapply(file_names, function(each_grp){
+
+    cols_names <- c('chr','start','end','id','score')
+
+    if(length(each_grp) > 1){
+        out <- lapply(each_grp, function(e){
+            read.table(list.files(peak_dir, pattern=e, full.names=T))
+        })
+
+        # rbind these
+        out <- do.call('rbind', out) |> as.data.frame()
+        colnames(out) <- cols_names
+
+    } else{
+        out <- read.table(list.files(peak_dir, pattern=each_grp, full.names=T))
+        colnames(out) <- cols_names
+    }
+
+    return(out)
+})
+names(files_read) <- file_names
+```
+
+Next, I need to prepare these files to annotate their TF peaks for regions for ENFORMER
+
+I can convert these into granges objects and reduce them
+
+```{r}
+files_granges <- lapply(files_read, function(temp){
+    temp <- temp[temp$chr %in% valid_chromosomes, ]
+    temp$strand <- '*'
+    bed_Granges <- with(temp, GenomicRanges::GRanges(chr, IRanges(start, end), strand, score, id = id))
+    bed_Granges <- GenomicRanges::reduce(bed_Granges)
+    
+    return(bed_Granges)
+})
+names(files_granges) <- ind_names
+```
+
+#### Steps
+- First, find the regions that overlap with the Kawakami defined 40000-something regions (::fingers crossed::)
+```{r}
+kawakami_regions <- do.call('rbind', strsplit(kawakami_defined_regions_40000[[1]], '_')) |> as.data.frame()
+kawakami_regions[, 2] <- as.numeric(kawakami_regions[, 2])
+kawakami_regions[, 3] <- as.numeric(kawakami_regions[, 3])
+colnames(kawakami_regions) <- c('chr', 'start', 'end')
+kawakami_regions$strand <- '*'
+kawakami_regions_granges <- with(kawakami_regions, GenomicRanges::GRanges(chr, IRanges(start, end), strand))
+kawakami_regions_granges
+```
+
+Use the top 100000 predicted motifs (as with Kawakami) (note that the motifs are already sorted by log odds)
+```{r}
+cutoff <- 100000
+motif_cutoff <- FOXA1_predicted_motifs[1:cutoff, ]
+motif_cutoff_granges <- with(motif_cutoff, GenomicRanges::GRanges(chr, IRanges(start, end), strand, log_odds, id = motif_name, sequence=sequence))
+```
+
+This function below does the following:
+
+- takes each individual's granges object (the chip-seq information) and overlaps with the defined Kawakami regions to get those regions that are common with Kawakami
+- overlaps these common regions with the top 100000 motif regions defined by IMPACT: THESE WOULD BE THE TRULE BOUND REGIONS
+- All other regions are defined as unbound in a per-individual basis (perhaps, and hopefully due to the underlying sequences)
+```{r}
+per_individual_defined_regions <- lapply(files_granges, function(ind_granges){
+
+    kawakami_regions_granges <- kawakami_regions_granges |> unique()
+
+    # first overlaps between the individual's granges and with defined Kawakami regions to subset for those that are common to Kawakami
+    ind_kawakami_granges_overlap <- findOverlaps(query = ind_granges, subject = kawakami_regions_granges, type = 'any')
+    overlaps_df <- data.frame(as.data.frame(ind_granges)[queryHits(ind_kawakami_granges_overlap),], as.data.frame(kawakami_regions_granges)[subjectHits(ind_kawakami_granges_overlap),])
+
+    # convert these peaks to a granges object
+    freedman_df_granges <- with(overlaps_df, GenomicRanges::GRanges(seqnames, IRanges(start, end), strand))
+
+    # next overlap these subsets with the top 100000 motif regions
+    with_motif_granges_overlap <- findOverlaps(query = freedman_df_granges, subject = motif_cutoff_granges, type = 'any')
+
+    # the resulting subset are the truly bound regions
+    freedman_truly_bound_df <- data.frame(as.data.frame(freedman_df_granges)[queryHits(with_motif_granges_overlap),], motif_cutoff_granges[subjectHits(with_motif_granges_overlap),])
+    colnames(freedman_truly_bound_df)[c(1, 7, 8)] <- c('chr', 'start', 'end')
+    freedman_truly_bound_df <- freedman_truly_bound_df[, c(1, 7, 8)] 
+
+    # select distinct columns
+    freedman_truly_bound_df <- freedman_truly_bound_df %>% dplyr::distinct(chr, start, end)
+    #freedman_truly_bound_df |> head() ; freedman_truly_bound_df |> dim()
+
+    bound_with_kawakami_granges <- with(freedman_truly_bound_df, GenomicRanges::GRanges(chr, IRanges(start, end), strand='*'))
+    bound_with_kawakami_overlap <- findOverlaps(query = bound_with_kawakami_granges, subject = kawakami_regions_granges, type = 'any')
+
+    # find the unbound regions (every other region shold be unbound really)
+    # need to find overlap of the truly bound region with kawakami and then remove 
+    freedman_truly_unbound_df <- data.frame(kawakami_regions_granges[ - subjectHits(bound_with_kawakami_overlap),])
+    freedman_truly_unbound_df <- freedman_truly_unbound_df[c(1,2,3)]
+    colnames(freedman_truly_unbound_df) <- c('chr', 'start', 'end')
+    # select distinct columns
+    freedman_truly_unbound_df <- freedman_truly_unbound_df %>% dplyr::distinct(chr, start, end)
+
+    # select a random X3 of the truly bound regions
+    # set.seed(2022)
+    # freedman_truly_unbound_df <- freedman_truly_unbound_df[sample(1:nrow(freedman_truly_unbound_df), 3*nrow(freedman_truly_bound_df)), ]
+    #freedman_truly_unbound_df |> head() ; freedman_truly_unbound_df |> dim()
+
+    freedman_truly_unbound_df <- cbind(with(freedman_truly_unbound_df, paste(chr, start, end, sep='_')), 0)
+    freedman_truly_bound_df <- cbind(with(freedman_truly_bound_df, paste(chr, start, end, sep='_')), 1)
+
+    freedman_defined_regions <- rbind(freedman_truly_bound_df, freedman_truly_unbound_df)
+    #shuffle
+    freedman_defined_regions <- freedman_defined_regions[sample(1:nrow(freedman_defined_regions), nrow(freedman_defined_regions)), ]
+
+    # remove duplicates
+    freedman_defined_regions <- freedman_defined_regions[!base::duplicated(freedman_defined_regions[, 1]), ]
+
+
+    return(freedman_defined_regions)
+
+})
+
+names(per_individual_defined_regions) <- ind_names
+```
+
+```{r}
+lapply(per_individual_defined_regions, dim)
+```
+
+I need to get the binding counts of these regions per individual (this is going to be a bit hard to do)
+```{r}
+intersected_chip_dt <- data.table::fread(glue('{project_dir}/processed_data/impact_files/freedman/bedtools_intersected_regions/{TF}_intersected_files.txt'))
+dim(intersected_chip_dt) ; intersected_chip_dt[1:5, 1:10] ; intersected_chip_dt |> colnames()
+```
+
+I need to select the bedcounts column too
+```{r}
+#intersected_chip_dt <- intersected_chip_dt[, c('chrom', 'start', 'end', 'strand', 'bedcounts')]
+intersected_chip_dt <- as.data.frame(intersected_chip_dt)
+intersected_chip_dt[1:5,]
+```
+
+```{r}
+# query <- unique(mtdt$group_id)
+# mat <- matrix(NA, nrow=nrow(intersected_chip_dt), ncol=length(query))
+# for(i in seq_along(query)){
+#     a <- intersected_chip_dt[, mtdt[mtdt$group_id == query[i], ]$geo_acc] |> as.matrix()
+#     print(a)
+#     if(ncol(a) > 1){
+#         a <- apply(a, 1, max)
+#     }
+#     #col.names(a) <- paste0('LuCaP_', query[i])
+#     mat[, i] <- a
+# }
+
+# dimnames(mat) <- list(NULL, paste0('LuCaP_', query))
+# mat
+```
+
+```{r}
+intersection_granges <- with(intersected_chip_dt, GenomicRanges::GRanges(chrom, IRanges(start, end), strand='*', num))
+intersection_granges
+```
+
+```{r}
+per_individual_intersected_chip <- list()
+
+for(i in seq_along(query)){
+    pat <- glue('LuCaP_{query[i]}')
+    print(pat)
+    proc_intersected_chip_dt <- data.frame(intersected_chip_dt[, c('chrom', 'start', 'end', 'num', pat)])
+    per_individual_intersected_chip[[i]] <- GenomicRanges::GRanges(seqnames=proc_intersected_chip_dt$chrom, 
+                                            IRanges(start=proc_intersected_chip_dt$start, end=proc_intersected_chip_dt$end), 
+                                            strand='*', 
+                                            num=proc_intersected_chip_dt$num, individual=proc_intersected_chip_dt[[pat]])
+
+    #per_individual_intersected_chip[[i]] <- GenomicRanges::reduce(pt)
+}
+
+names(per_individual_intersected_chip) <- ind_names
+
+```
+
+```{r}
+ind_query <- 'LuCaP_93'
+```
+
+```{r}
+ind_names
+```
+
+```{r}
+
+per_individual_dt <- list()
+
+for(i in seq_along(ind_names)){
+    ind_query <- ind_names[[i]]
+    example <- per_individual_defined_regions[[ind_query]]
+    example_split <- do.call('rbind', strsplit(example[, 1], '_')) |> as.data.frame()
+    example_split[, 2] <- as.numeric(example_split[, 2])
+    example_split[, 3] <- as.numeric(example_split[, 3])
+    colnames(example_split) <- c('chr', 'start', 'end')
+    example_split$strand <- '*'
+    example_split$class <- example[, 2]
+
+    example_granges <- with(example_split, GenomicRanges::GRanges(chr, IRanges(start, end), strand, class))
+
+    # overlap with the individual intersected chips to get the binding counts
+    example_granges_overlap <- GenomicRanges::findOverlaps(query = example_granges, subject = per_individual_intersected_chip[[ind_query]], type = 'any')
+    overlaps_df <- data.frame(as.data.frame(example_granges)[queryHits(example_granges_overlap),], as.data.frame(per_individual_intersected_chip[[ind_query]])[subjectHits(example_granges_overlap),])
+
+    dt_pos <- overlaps_df[, c('seqnames', 'start', 'end', 'class', 'num', 'individual')]
+
+    # select the rest without a binding counts ()
+    dt_neg <- data.frame(example_granges)[ - queryHits(example_granges_overlap),]
+    dt_neg$width <- NULL
+    dt_neg$strand <- NULL
+    dt_neg$num <- 0
+    dt_neg$individual <- 0
+    colnames(dt_neg) <- c('seqnames', 'start', 'end', 'class', 'num', 'individual')
+
+    dt <- rbind(dt_pos, dt_neg) |> as.data.frame()
+
+    #print(dt[1:10, ])
+
+    # granges_dt <- GenomicRanges::GRanges(seqnames=dt$seqnames, 
+    #     IRanges(start=dt$start, end=dt$end), 
+    #     strand='*', 
+    #     num=dt$num, class = dt$class, individual=dt[['individual']])
+
+    #per_individual_dt[[i]] <- granges_dt
+
+    temp <- dt %>%
+        dplyr::group_by(seqnames, start, end) %>%
+        dplyr::summarise(num = max(num), class=max(class), individual=max(individual)) %>%
+        dplyr::slice_max(num, n=1)
+
+    temp$num <- with(temp, ifelse(individual == 0, 0, num))
+    temp <- temp %>% tidyr::unite('region', seqnames:start:end) %>%
+        dplyr::select(region, class, num)
+    per_individual_dt[[i]] <- temp
+
+}
+
+names(per_individual_dt) <- ind_names
+```
+
+```{r}
+
+lapply(per_individual_dt, dim)
+
+# temp <- per_individual_dt$LuCaP_136 #%>% head(20)
+# temp <- temp %>%
+#     dplyr::group_by(seqnames, start, end) %>%
+#     dplyr::summarise(num = max(num), class=max(class), individual=max(individual)) %>%
+#     dplyr::slice_max(num, n=1)
+
+# temp$num <- with(temp, ifelse(individual == 0, 0, num))
+# temp[1:5, ]
+```
+
+```{r}
+lapply(per_individual_dt, function(each_elem){
+    each_elem$class |> table()
+})
+
+lapply(per_individual_dt, function(each_elem){
+    each_elem$num |> table()
+})
+```
+
+```{r}
+per_individual_dt[[1]] |> head()
+```
+
+```{r}
+temp$class |> table() ; temp$num |> table()
+```
+
+```{r}
+todays_date <- Sys.Date()
+todays_date
+```
+
+Save the files
+```{r}
+save_dir <- glue('{project_dir}/motif_intervals/freedman')
+TF <- 'FOXA1'
+howmany <- format(40000, scientific=F)
+
+if(!dir.exists(glue('{save_dir}/intervals_{todays_date}'))){
+    dir.create(glue('{save_dir}/intervals_{todays_date}'))
+}
+
+save_dir <- glue('{save_dir}/intervals_{todays_date}')
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+lapply(names(per_individual_dt), function(each_ind){
+
+    dt <- per_individual_dt[[each_ind]]
+
+    write.table(dt[, 1], glue('{save_dir}/predictors/{each_ind}_{TF}_{nrow(dt)}.txt'), col.names=F, quote=F, row.names=F)
+    write.table(dt, glue('{save_dir}/ground_truth/{each_ind}_{TF}_{nrow(dt)}.txt'), col.names=F, quote=F, row.names=F)
+})
+```
+
+
+
+
+
+Convert this to a granges object and overlap and select the binding counts
+
+```{r}
+example <- per_individual_defined_regions[[ind_query]]
+example_split <- do.call('rbind', strsplit(example[, 1], '_')) |> as.data.frame()
+example_split[, 2] <- as.numeric(example_split[, 2])
+example_split[, 3] <- as.numeric(example_split[, 3])
+colnames(example_split) <- c('chr', 'start', 'end')
+example_split$strand <- '*'
+example_split$class <- example[, 2]
+
+example_granges <- with(example_split, GenomicRanges::GRanges(chr, IRanges(start, end), strand, class))
+example_granges
+```
+
+
+```{r}
+example_granges_overlap <- GenomicRanges::findOverlaps(query = example_granges, subject = per_individual_intersected_chip[[ind_query]], type = 'any')
+overlaps_df <- data.frame(as.data.frame(example_granges)[queryHits(example_granges_overlap),], as.data.frame(per_individual_intersected_chip[[ind_query]])[subjectHits(example_granges_overlap),])
+overlaps_df[1:10, ]
+```
+
+```{r}
+dt <- overlaps_df[, c('seqnames', 'start', 'end', 'class', 'num', 'individual')]
+dt[1:99, ]
+```
+
+
+```{r}
+counts <- ifelse(dt[['individual']] == 1, dt[['num']], 0)
+```
+
+```{r}
+sum(counts > 0)
+```
+
+```{r}
+sum(dt$class > 0)
+```
+
+
+
+
+
+Remember file names? Find which GSMs correspond to the file names
+```{r}
+file_names ; list_peaks <- list.files(peak_dir) ; list_peaks
+```
+
+```{r}
+conds <- lapply(file_names, function(each_name){
+    out <- list()
+    for(l in each_name){
+        out[[l]] <- grepl(l, x = list_peaks)
+    }
+    out
+})
+
+conds_applied <- lapply(seq_along(conds), function(i){
+    out <- list()
+    for(j in seq_along(conds[[i]])){
+        out[[j]] <- list_peaks[conds[[i]][[j]]]
+    }
+    out
+}) 
+
+base::Reduce(unlist, x=conds_applied)
+```
+
+```{r}
+out <- list()
+for(j in seq_along(conds[[3]])){
+    out[[j]] <- list_peaks[conds[[3]][[j]]]
+}
+out
+```
+
+```{r}
+names_out <- lapply(strsplit(list_peaks, '_'), function(each_elem){
+    each_elem[c(1)]
+}) |> unlist()
+
+values_out <- lapply(strsplit(list_peaks, '_'), function(each_elem){
+    each_elem[c(3)]
+}) |> unlist()
+
+names(values_out) <- names_out
+values_out
+```
+
+```{r}
+values_out <- values_out[!endsWith(values_out, 'CR')
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+For now, I can proceed but I need to check back and make sure that regions with a binding count > 0 but a class of 0 are not present in this individual(s)
+
+
+
+
+
+
+
+
+```{r}
+save_dir <- glue('{project_dir}/motif_intervals/freedman')
+TF <- 'FOXA1'
+howmany <- format(40000, scientific=F)
+```
+
+```{r}
+lapply(names(per_individual_defined_regions), function(each_ind){
+
+    write.table(per_individual_defined_regions[[each_ind]][, 1], glue('{save_dir}/predictors/LuCaP_{each_ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+    write.table(per_individual_defined_regions[[each_ind]], glue('{save_dir}/ground-truth/LuCaP_{each_ind}_{TF}_{howmany}.txt'), col.names=F, quote=F, row.names=F)
+})
+```
+
+
+
+
+- Second, overlap these peaks with the predicted 100000 motifs
+
+```{r}
+per_individual_distribution <- lapply(per_individual_defined_regions, function(each_el){
+    table(each_el[, 2])
+})
+
+```
+
+```{r}
+per_individual_distribution <- do.call('rbind', per_individual_distribution)
+```
+
+```{r}
+barplot(per_individual_distribution |> t(), beside=T, col=c('black', 'lightgrey'))
+legend("topright", c('unbound', 'bound'), fill=c('black', 'lightgrey'))
+mtext('Freedman\'s distribution of bound and unbound regions per individual for FOXA1', side=3, cex=1.5, adj=0, line=1.5)
+mtext('Count of unbound regions are 3X bound regions', side=3, cex=1, adj=0, line=0.5)
+```
+
+```{r}
+bplot <- barplot(output |> t(), beside=T, names.arg=format(output[,2], scientific=F), col = c("red", "green", 'grey'), xlab='top n FOXA1 predicted motifs (or the cutoff)', ylim=c(0, nrow(FOXA1_predicted_motifs) + 500000), main='How many truly bound regions should I choose?')
+
+legend("topleft", c('intersected peaks with strength of binding > 10', 'top n FOXA1 predicted motifs', 'num of overlaps found'), fill = c("red", "green", 'grey'))
+
+y_ <- (output |> t()) + 99000
+l_ <- format((output |> t()), scientific=F)
+text(x=bplot, y=y_, pos = 3.5, label = output |> t(), cex = 0.8, col = "black", srt=35)
+```
+
+
+
+```{r}
+
+freedman_truly_bound_df |> head() ; freedman_truly_unbound_df |> head()
+```
+
+```{r}
+
+freedman_defined_regions |> head() ; freedman_defined_regions |> dim()
+```
+
+
+
+
+```{r}
+ind_bound_granges <- with(ind_bound_df, GenomicRanges::GRanges(chr, IRanges(motif_start, motif_end), strand))
+ind_bound_granges
+```
+
+```{r}
+granges_overlap <- findOverlaps(query = ind_bound_granges, subject = kawakami_regions_granges, type = 'any')
+granges_overlap
+```
+
+```{r}
+ind_truly_bound_df <- data.frame(as.data.frame(ind_bound_granges)[queryHits(granges_overlap),], as.data.frame(kawakami_regions_granges)[subjectHits(granges_overlap),])
+
+ind_truly_bound_df |> head()
+```
+
+
+
+```{r}
+granges_overlap <- findOverlaps(query = files_granges[[1]], subject = motif_cutoff_granges, type = 'any')
+ind_bound_df <- data.frame(as.data.frame(files_granges[[1]])[queryHits(granges_overlap),], motif_cutoff_granges[subjectHits(granges_overlap),])
+ind_bound_df <- ind_bound_df[, c(1,2,3,4,5,7,8,13)]
+names(ind_bound_df) <- c('chr', 'peak_start', 'peak_end', 'binding_counts', 'strand', 'motif_start', 'motif_end', 'sequence')
+ind_bound_df |> head()
+```
+
+Check to ensure that there are not weird chromosomes
+
+```{r}
+spp <- strsplit(kawakami_defined_regions_40000[, 1], '_')
+spp_filtered <- lapply(spp, function(each_spp){
+    if(length(each_spp) != 3){
+        return(each_spp)
+    }
+})
+
+spp_filtered <- base::Filter(Negate(is.null), spp_filtered)
+spp_filtered
+```
