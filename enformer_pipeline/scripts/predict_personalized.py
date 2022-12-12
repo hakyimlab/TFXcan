@@ -1,6 +1,6 @@
-# This script is used to predict on batches using ENFORMER on individuals' regions
-# AUTHOR: Temi
-# DATE: Sunday Nov 13 2022
+# Usage: This script is used to predict on batches using ENFORMER on individuals' regions
+# Author: Temi
+# Date: Sunday Nov 13 2022
 
 # "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/individuals.txt"
 
@@ -37,11 +37,15 @@ def main():
         batch_size = int(parameters['batch_size'])
         use_parsl = True if parameters['use_parsl'] == 'true' else False
         n_regions = parameters["predict_on_n_regions"]
+        parsl_parameters = parameters['parsl_parameters']
 
         if int(n_regions) == -1:
             predict_on_n_regions = None
         elif int(n_regions) > 0:
             predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
+
+    # modify parsl parameters to add the working directory
+    parsl_parameters['working_dir'] = f'{script_path}/../'
 
     if not os.path.isdir(predictions_log_dir):
         os.makedirs(predictions_log_dir)
@@ -49,11 +53,9 @@ def main():
     if not os.path.isdir(log_dir):
         os.makedirs(log_dir)
 
-    print(individuals)
-
     if use_parsl == True:
         import parslConfiguration
-        parsl.load(parslConfiguration.theta_htParslConfig(num_full_nodes=3))
+        parsl.load(parslConfiguration.theta_htParslConfig(params=parsl_parameters))
 
     #individuals can be a given list or a txt file of individuals per row or a single string
     if isinstance(individuals, list):
@@ -68,9 +70,6 @@ def main():
     
     predict_utils_one = f'{script_path}/batch_utils/predictUtils_one.py'
     exec(open(predict_utils_one).read(), globals(), globals())
-
-    # which prediction function to use i.e. with or without parsl
-    #prediction_function = return_prediction_function(use_parsl)
 
     for each_individual in individuals:
         
