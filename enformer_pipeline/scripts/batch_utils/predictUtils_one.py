@@ -6,6 +6,8 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
     """
     Predict and save on a given batch of regions in the genome
 
+    This function also filters the regions in the batch for those that have been predicted and logged
+
     Parameters:
         batch_regions: list
             A list of regions with each element (region) in the form `chr_start_end`.
@@ -59,10 +61,16 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
         print(f'[INFO] (time) to predict on this batch is {toc - tic}')
         return(reg_prediction) # returns 0 returned by enformer_predict
 
-# else:
-#     print(f"[WARNING] {check_result}: Either length of input sequence is invalid (NoneType) or too long or too short")
-
 def return_prediction_function(use_parsl, fxn=run_batch_predictions):
+    '''
+    Decorate or not the `run_batch_predictions` function based on whether `use_parsl` is true or false
+
+    Returns: 
+        function object
+        The function if parsl is not used
+        The parsl decorated function if parsl is meant to be used
+    
+    '''
     from parsl.app.app import python_app
     if use_parsl == True:
         return python_app(fxn)
