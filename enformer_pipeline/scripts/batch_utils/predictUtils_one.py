@@ -1,8 +1,8 @@
 import parsl
 from parsl.app.app import python_app
 
-@python_app
-def run_batch_predictions(batch_regions, batch_num, id, script_path, output_dir, logfile, predictions_log_dir): #
+#@python_app
+def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, output_dir, logfile, predictions_log_dir): #
     """
     Predict and save on a given batch of regions in the genome
 
@@ -52,7 +52,7 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, output_dir,
 
         tic = time.perf_counter()
 
-        reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_region=filtered_check_result, sample=id, model=None, output_dir=output_dir, predictions_log_dir=predictions_log_dir, batch_num=batch_num)
+        reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_region=filtered_check_result, sample=id, model=None, vcf_func=vcf_func, output_dir=output_dir, predictions_log_dir=predictions_log_dir, batch_num=batch_num)
         
         toc = time.perf_counter()
 
