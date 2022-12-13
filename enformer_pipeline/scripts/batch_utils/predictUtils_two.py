@@ -12,7 +12,7 @@ module_path = os.path.abspath(whereis_script)
 
 global log_dir, write_log
 
-with open(f'{module_path}/../../metadata/enformer_parameters.json') as f:
+with open(f'{module_path}/../../metadata/personalized_parameters.json') as f:
     parameters = json.load(f)
     project_dir = parameters['project_dir']
     log_dir = module_path + '/../../' + parameters['log_dir']
@@ -51,10 +51,10 @@ class FastaStringExtractor:
     def close(self):
         return self.fasta.close()
 
-@lru_cache(5)
-def make_cyvcf_object(vcf_file=vcf_file, sample=vcf_id):
-    import cyvcf2
-    return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+# @lru_cache(5)
+# def make_cyvcf_object(vcf_file=vcf_file, sample=vcf_id):
+#     import cyvcf2
+#     return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
 
 @lru_cache(5)
 def get_fastaExtractor(script_path=module_path):
@@ -67,7 +67,7 @@ def get_fastaExtractor(script_path=module_path):
             The path to the script directory
     """
 
-    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
         parameters = json.load(f)
         fasta_file = parameters['hg38_fasta_file']
 
@@ -77,7 +77,7 @@ def get_fastaExtractor(script_path=module_path):
 @lru_cache(5)
 def get_model(script_path=module_path):
 
-    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
         parameters = json.load(f)
         model_path = parameters['model_path']
 
@@ -314,11 +314,11 @@ def create_individual_input_for_enformer(region, individual, fasta_func, hap_typ
 
     a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
 
-    if write_log['cache']:
-        msg_cac_log = f'[CACHE INFO] (vcf) [{vcf_func.cache_info()}, {get_gpu_name()}, {individual}, {region}]'
-        CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
-        setup_logger('cache_log', CACHE_LOG_FILE)
-        logger(msg_cac_log, 'info', 'cache')
+    # if write_log['cache'] == True:
+    #     msg_cac_log = f'[CACHE INFO] (vcf) [{vcf_func.cache_info()}, {get_gpu_name()}, {individual}, {region}]'
+    #     CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
+    #     setup_logger('cache_log', CACHE_LOG_FILE)
+    #     logger(msg_cac_log, 'info', 'cache')
 
     # check that all the sequences in a are valid
     if all(i == 'N' for i in a['sequences']):
@@ -409,7 +409,6 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
     import sys # functions for interacting with the operating system
     import tensorflow as tf
     import kipoiseq, gc
-    import tqdm
 
     if grow_memory == True:
         gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -444,7 +443,7 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
                     pass
                 elif each_region['logtype'] == 'y':
                     write_logfile(predictions_log_dir=predictions_log_dir, each_individual=sample, what_to_write=h5result)
-
+                    
         tf.keras.backend.clear_session()
         gc.collect()
 
@@ -457,6 +456,7 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
                 setup_logger('memory_log', MEMORY_LOG_FILE)
                 logger(msg_mem_log, 'info', 'memory')
 
+        if write_log['cache']:
             msg_cac_log = f'[CACHE INFO] (model) on batch {batch_num}: [{get_model.cache_info()}, {get_gpu_name()}, {sample}]'
             CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
             setup_logger('cache_log', CACHE_LOG_FILE)
