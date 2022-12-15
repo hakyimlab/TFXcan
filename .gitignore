@@ -15,6 +15,7 @@ old_scripts/
 !metadata/
 !enformer_pipeline/scripts/
 !enformer_pipeline/metadata/
+!enformer_pipeline/README
 !impact_pipeline/motif_intervals/
 !impact_pipeline/scripts/
 !README

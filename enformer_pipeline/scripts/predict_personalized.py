@@ -2,16 +2,15 @@
 # Author: Temi
 # Date: Sunday Nov 13 2022
 
-# "/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/metadata/individuals.txt"
-
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
 import pandas as pd # for manipulating dataframes
-import math, time, tqdm
+import time, tqdm
 import parsl
 from parsl.app.app import python_app
 from functools import lru_cache
 import glob
+from datetime import date
 
 whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os.path.dirname(__file__)
 script_path = os.path.abspath(whereis_script)
@@ -24,13 +23,10 @@ def main():
 
     global use_parsl
 
-    with open(f'{script_path}/../metadata/personalized_parameters.json') as f:
+    with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
         intervals_dir = script_path + '/../' + parameters['interval_list_dir']
-        output_dir = script_path + '/../' + parameters['output_dir'] + '/' + parameters['prediction_data_name'] + '/predictions_' + parameters['date']
-        individuals = script_path + '/../' + parameters['individuals']
-        vcf_file = script_path + '/../' + parameters['vcf_file']
         TF = parameters['TF']
         predictions_log_dir = script_path + '/../' + parameters['predictions_log_dir']
         log_dir = script_path + '/../' + parameters['log_dir']
@@ -38,15 +34,26 @@ def main():
         use_parsl = parameters['use_parsl']
         n_regions = parameters["predict_on_n_regions"]
         parsl_parameters = parameters['parsl_parameters']
+        dataset_type = parameters['dataset_type']
+        prediction_data_name = parameters['prediction_data_name']
+        run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
+
+
+        output_dir = script_path + '/../' + parameters['output_dir'] + '/' + parameters['prediction_data_name'] + '/predictions_' + run_date
 
         if int(n_regions) == -1:
             predict_on_n_regions = None
         elif int(n_regions) > 0:
             predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
 
+
+        individuals = script_path + '/../' + parameters['individuals'] if dataset_type == 'personalized' else None
+        vcf_file = script_path + '/../' + parameters['vcf_file'] if dataset_type == 'personalized' else None
+
     # modify parsl parameters to add the working directory
     parsl_parameters['working_dir'] = f'{script_path}/../'
 
+    predictions_log_dir = f'{predictions_log_dir}/{prediction_data_name}/predictions_log_{run_date}'
     if not os.path.isdir(predictions_log_dir):
         os.makedirs(predictions_log_dir)
 
@@ -56,46 +63,52 @@ def main():
     if use_parsl == True:
         print(f'[INFO] Using parsl configuration: {use_parsl}')
         import parslConfiguration
-        parsl.load(parslConfiguration.theta_htParslConfig(params=parsl_parameters))
+        parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_parameters))
 
     predict_utils_one = f'{script_path}/batch_utils/predictUtils_one.py'
     exec(open(predict_utils_one).read(), globals(), globals())
 
     prediction_fxn = return_prediction_function(use_parsl)
 
-    #individuals can be a given list or a txt file of individuals per row or a single string
-    if isinstance(individuals, list):
-        pass
-    elif isinstance(individuals, type('str')):
-        if os.path.isfile(individuals):
-            individuals = pd.read_table(individuals, header=None)[0].tolist()[0:1]
-        else:
-            individuals = [individuals]
+    if dataset_type == 'personalized':
+        if isinstance(individuals, list):
+            id_list = individuals
+            pass
+        elif isinstance(individuals, type('str')):
+            if os.path.isfile(individuals):
+                id_list = pd.read_table(individuals, header=None)[0].tolist()
+            else:
+                id_list = [individuals]
+        print(f'[INFO] Predicting for these individuals: {id_list}')
+    elif dataset_type == 'reference':
+        id_list = [prediction_data_name]
+        print(f'[INFO] Predicting on a reference set')
         
-    print(f'[INFO] Predicting for these individuals: {individuals}')
-    
-    
-
-    for each_individual in individuals:
+    for each_id in id_list:
         
         # this is specific to an individual but is cached per individual
         # I want to cache this but it is a bit tricky to do for now
-        def make_cyvcf_object(vcf_file=vcf_file, sample=each_individual):
-            import cyvcf2
-            return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+        #global make_cyvcf_object
+        if dataset_type == 'personalized':
+            def make_cyvcf_object(vcf_file=vcf_file, sample=each_id):
+                import cyvcf2
+                return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+        elif dataset_type == 'reference':
+            make_cyvcf_object = None
+            pass
 
         # create the directories for this individual 
-        if not os.path.exists(f'{output_dir}/{each_individual}'):
-            print(f'[INFO] Creating output directory at {output_dir}/{each_individual}')
-            os.makedirs(f'{output_dir}/{each_individual}')
+        if not os.path.exists(f'{output_dir}/{each_id}'):
+            print(f'[INFO] Creating output directory at {output_dir}/{each_id}')
+            os.makedirs(f'{output_dir}/{each_id}')
 
-        interval_list_file = glob.glob(f'{intervals_dir}/{each_individual}_{TF}_*.txt')[0]
+        interval_list_file = glob.glob(f'{intervals_dir}/{each_id}_{TF}_*.txt')[0]
         a = pd.read_table(interval_list_file, sep=' ', header=None)
         list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
 
         # I need a log file
         # read in the log file for this individual ; doing this so that the log file is not opened everytime
-        logfile_csv = f'{predictions_log_dir}/{each_individual}_predictions_log.csv'
+        logfile_csv = f'{predictions_log_dir}/{each_id}_predictions_log.csv'
         logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
 
         tic_prediction = time.perf_counter() # as opposed to process_time
@@ -104,7 +117,7 @@ def main():
         count = 0
         app_futures = []
         for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
-            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_individual, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir))
+            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_dir=predictions_log_dir, dataset_type=dataset_type))
 
             count = count + 1
 
@@ -116,9 +129,9 @@ def main():
         print(f'[INFO] (time) to create inputs and predict on {len(list_of_regions)} queries is {toc_prediction - tic_prediction}')
 
         if use_parsl == True:
-            print(f'[INFO] Finished predictions for {each_individual}: {exec_futures} ...\n')
+            print(f'[INFO] Finished predictions for {each_id}: {exec_futures} ...\n')
         elif use_parsl == False:
-            print(f'[INFO] Finished predictions for {each_individual}: {app_futures} ...\n')
+            print(f'[INFO] Finished predictions for {each_id}: {app_futures} ...\n')
 
     print(f'[INFO] Finished all predictions')                  
                     

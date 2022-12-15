@@ -2,7 +2,7 @@ import parsl
 from parsl.app.app import python_app
 
 #@python_app
-def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, output_dir, logfile, predictions_log_dir): #
+def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, output_dir, logfile, predictions_log_dir, dataset_type): #
     """
     Predict and save on a given batch of regions in the genome
 

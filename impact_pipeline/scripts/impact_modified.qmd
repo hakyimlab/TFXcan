@@ -9,7 +9,6 @@ format:
     code-line-numbers: true
 ---
 
-
 ```{r}
 library(glue)
 library(rjson)
@@ -20,7 +19,7 @@ library(tidyverse)
 ```
 
 ```{r}
-project_dir <- '/lus/theta-fs0/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline'
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline'
 #setwd(project_dir)
 ```
 
@@ -29,7 +28,7 @@ output_dir <- glue('{project_dir}/explore_impact')
 id <- 'kawakami'
 TF <- 'FOXA1'
 cell_line <- 'LuCaP'
-homer_dir <- glue('~/miniconda3/envs/homer-env/share/homer')
+homer_dir <- glue('/home/temi/miniconda3/envs/homer-env/share/homer') # /home/temi/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl
 common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
 ```
 
@@ -59,11 +58,11 @@ chip_dt[1:5, ]
 Select 200 peaks to test with (These are randomly selected peaks)
 ```{r}
 set.seed(2022)
-chip_dt <- chip_dt[sample(1:nrow(chip_dt), 10000, replace=F), ]
+chip_dt <- chip_dt[sample(1:nrow(chip_dt), nrow(chip_dt), replace=F), ]
 nrow(chip_dt)
 ```
 ```{r}
-chip_granges <- with(chip_dt, GenomicRanges::GRanges(chrom, IRanges(start, end), strand='*'))
+chip_granges <- with(chip_dt, GenomicRanges::GRanges(chrom, IRanges(start, end), strand='*', num=num, list=list))
 chip_granges
 ```
 ```{r}
@@ -88,23 +87,36 @@ write.table(motif_file, glue('{common_dir}/{TF}_{cell_line}_threshold.motif'), s
 ### Step 4: Run findMotifsGenome.pl using the new motif file and the TF chIP peaks 
 
 ```{r}
-find_motifs_script <- glue("{project_dir}/scripts/find_motifs_genome.sh")
-find_motifs_script
+find_motifs_pbs <- glue("{project_dir}/scripts/find_motifs_genome.sh")
+file.exists(find_motifs_pbs)
 ```
 
+```{r}
+homer_script <- glue('{homer_dir}/bin/findMotifsGenome.pl')
+file.exists(homer_script)
+```
 
 ```{r}
-cmd <- glue('perl {homer_dir}/bin/findMotifsGenome.pl {output_dir}/{id}_{TF}_{cell_line}_train_df.txt {homer_dir}/data/genomes/hg19 {output_dir}/homer_output/ -size given -find {common_dir}/{TF}_{cell_line}_threshold.motif > {output_dir}/{id}_{TF}_{cell_line}_findinstances.txt')
-system(cmd)
+# cmd <- glue('perl {homer_dir}/bin/findMotifsGenome.pl {output_dir}/{id}_{TF}_{cell_line}_train_df.txt {homer_dir}/data/genomes/hg19 {output_dir}/homer_output/ -size given -find {common_dir}/{TF}_{cell_line}_threshold.motif > {output_dir}/{id}_{TF}_{cell_line}_findinstances.txt')
+# system(cmd)
 ```
 
 ```{r, eval=F}
-cmd <- glue("qsub -v peaks={output_dir}/{id}_{TF}_{cell_line}_train_df.txt,genome={homer_dir}/data/genomes/hg19,homer_output={output_dir}/homer_output/,size=given,motif_file={common_dir}/{TF}_{cell_line}_threshold.motif,output={output_dir}/{id}_{TF}_{cell_line}_findinstances.txt {find_motifs_script}")
+cmd <- glue("qsub -v find_motifs_script={homer_script},peaks={output_dir}/{id}_{TF}_{cell_line}_train_df.txt,genome={homer_dir}/data/genomes/hg19,homer_output={output_dir}/homer_output/,size=given,motif_file={common_dir}/{TF}_{cell_line}_threshold.motif,output={output_dir}/{id}_{TF}_{cell_line}_findinstances.txt {find_motifs_pbs}")
+cmd
+```
+
+```{r}
 system(cmd)
+```
+
+```{r}
+system('qstat -u temi')
 ```
 
 
 ```{r}
+# This is another way to do the same thing
 # cmd <- glue('perl {homer_dir}/bin/annotatePeaks.pl {output_dir}/{id}_{TF}_{cell_line}_train_df.txt {homer_dir}/data/genomes/hg19 -size given -m {common_dir}/{TF}_{cell_line}.motif > {output_dir}/annotated_{id}_{TF}_{cell_line}_findinstances.txt')
 # system(cmd)
 ```
@@ -115,16 +127,15 @@ system(cmd)
 
 ### Step 5: Define positive regions
 
+We read in all the files we need
 ```{r}
 motif_instances <- read.table(glue('{output_dir}/{id}_{TF}_{cell_line}_findinstances.txt'), sep = "\t", header = T, stringsAsFactors = FALSE)
-motif_instances
+motif_instances |> head()
 ```
 
 ```{r}
 chip_regions <- read.table(glue('{output_dir}/{id}_{TF}_{cell_line}_train_df.txt'), sep='\t', header=F, stringsAsFactors=F) 
-
 motif_library <- read.table(glue('{common_dir}/{TF}_{cell_line}_motif_threshold_info.txt'), sep = "\t", header = F, stringsAsFactors = FALSE)
-
 motif_library[1,2] <- threshold
 
 colnames(chip_regions) <- c("seqnames","starts","ends","names","scores","strands")
@@ -160,7 +171,7 @@ for (i in 1:nrow(chip_regions)){
 }
 
 write.table(chip_regions_newpeaks, glue("{output_dir}/{id}_{TF}_{cell_line}_train_df_newpeaks.txt"), sep = "\t", quote = F, row.names = FALSE, col.names = FALSE)
-chip_regions_newpeaks
+chip_regions_newpeaks[1:5, ]
 ```
 
 ```{r}
@@ -175,9 +186,8 @@ chip_regions_newpeaks_realdf <- data.frame(seqnames=chip_regions_newpeaks[,1],
 
 set.seed(2022)
 s <- sample(seq(1,nrow(chip_regions_newpeaks_realdf),1), nrow(chip_regions_newpeaks_realdf),replace = F)
-s
+s[1:5]
 ```
-
 
 ```{r}
 chip_regions_newpeaks_realdf <- chip_regions_newpeaks_realdf[s,]
@@ -204,14 +214,27 @@ if (length(c(w1,w2)) > 0){
 }
 
 write.table(train_test_peaks, glue("{output_dir}/{id}_{TF}_{cell_line}_train_test_positive_bed.txt"), sep = "\t", quote = F, row.names = FALSE, col.names = FALSE)
-train_test_peaks
+train_test_peaks[1:5, ]
 ```
+
+Check that these regions are non-overlapping: can reduce the granges object and check that the lengths don't differ
+```{r}
+#
+pos_granges <- with(train_test_peaks, GenomicRanges::GRanges(seqnames, IRanges(starts,ends), strand=strands, score=scores, id = names))
+pos_granges
+```
+
+```{r}
+stopifnot(length(GenomicRanges::reduce(pos_granges)) == length(pos_granges))
+```
+
 
 ### Step 6: Define negative regions
 
+Start with the already define positive and negative sets instead
 ```{r}
-train_df_newpeaks <- read.table(glue("{output_dir}/{id}_{TF}_{cell_line}_train_df_newpeaks.txt"), sep = "\t", header = F, stringsAsFactors = FALSE)
-
+#train_df_newpeaks <- read.table(glue("{output_dir}/{id}_{TF}_{cell_line}_train_df_newpeaks.txt"), sep = "\t", header = F, stringsAsFactors = FALSE)
+train_df_newpeaks <- train_test_peaks
 MotifThreshold <- motif_library #read.table(glue("{common_dir}/{TF}_{cell_line}_motif_threshold_info.txt"), sep = "\t", header = F, stringsAsFactors = FALSE)
 ```
 
@@ -307,7 +330,7 @@ b <- c(ms_2,me_2)
 b <- unique(b[is.na(b) == F])
 ab <- unique(c(a,b))
 ab <- ab[!is.na(ab)]
-ab
+ab[1:5]
 ```
 
 ```{r}
@@ -320,10 +343,16 @@ if (length(ab) > 0){
 dim(noChIP)
 ```
 
-### Step 7: Check that there are not overlaps between positives and negatives
+```{r}
+noChIP$end <- noChIP$end + 1
+noChIP[1:5, ]
+```
+
+
+### Step 7: Check that there are no overlaps between positives and negatives
 
 ```{r}
-pos_granges <- with(train_df_newpeaks, GenomicRanges::GRanges(V1, IRanges(V2,V3), strand=V6, score=V5, id = V4))
+pos_granges <- with(train_df_newpeaks, GenomicRanges::GRanges(seqnames, IRanges(starts,ends), strand=strands, score=scores, id = names))
 pos_granges
 ```
 
@@ -340,6 +369,158 @@ int_3
 int_3 <- GenomicRanges::intersect(neg_granges, pos_granges)
 int_3
 ```
+
+Take out the ones that are overlapping
+```{r}
+overlaps <- GenomicRanges::findOverlaps(pos_granges, neg_granges)
+overlaps ; pos_granges[queryHits(overlaps), ] ; neg_granges[subjectHits(overlaps), ]
+```
+
+```{r}
+pos_granges <- pos_granges[-queryHits(overlaps), ]
+neg_granges <- neg_granges[-subjectHits(overlaps), ]
+```
+
+Check that they are not overlapping
+```{r}
+pos_granges <- GenomicRanges::reduce(pos_granges)
+neg_granges <- GenomicRanges::reduce(neg_granges)
+```
+
+```{r}
+stopifnot(any(width(pos_granges) != 3) == F)
+```
+
+```{r}
+stopifnot(any(width(neg_granges) != 3) == F)
+```
+
+### Step 8: Modify and save the files
+
+- Ensure that you only have valid chromosomes
+- Get the binding counts information (this should be done only for the positive sets)
+- Save only the chr, start, end, class (bound or not), and binding counts
+
+```{r}
+# valid chromosomes
+valid_chromosomes <- paste0('chr', c(1:22, 'X'))
+valid_chromosomes
+```
+
+- Select valid chromosomes
+```{r}
+temp_pos_granges <- pos_granges[seqnames(pos_granges) %in% valid_chromosomes]
+```
+- overlap with the binding counts information
+Remember that you have `chip_granges`
+```{r}
+bc_overlaps <- GenomicRanges::findOverlaps(temp_pos_granges, chip_granges)
+bc_overlaps
+```
+
+```{r}
+positive_bc <- chip_granges[subjectHits(bc_overlaps), ]
+positive_bc
+```
+
+```{r}
+temp_pos_granges <- temp_pos_granges[queryHits(bc_overlaps), ]
+temp_pos_granges
+```
+
+```{r}
+stopifnot(length(temp_pos_granges) == length(positive_bc))
+```
+
+```{r}
+binding_counts <- mcols(positive_bc)[, 'num']
+length(binding_counts)
+```
+
+```{r}
+mcols(temp_pos_granges)$class <- 1
+mcols(temp_pos_granges)$binding_counts <- binding_counts
+temp_pos_granges
+```
+
+```{r}
+positive_set <- as.data.frame(temp_pos_granges)
+names(positive_set)[1] <- 'chr'
+positive_set <- positive_set[, c('chr', 'start', 'end', 'class', 'binding_counts')]
+positive_set |> head()
+```
+
+Negative set
+
+```{r}
+temp_neg_granges <- neg_granges[seqnames(neg_granges) %in% valid_chromosomes]
+temp_neg_granges
+```
+
+```{r}
+mcols(temp_neg_granges)$class <- 0
+mcols(temp_neg_granges)$binding_counts <- 0
+temp_neg_granges
+```
+
+```{r}
+negative_set <- as.data.frame(temp_neg_granges)
+names(negative_set)[1] <- 'chr'
+negative_set <- negative_set[, c('chr', 'start', 'end', 'class', 'binding_counts')]
+negative_set |> head()
+```
+
+```{r}
+training_set <- rbind(positive_set, negative_set)
+training_set <- training_set[sample(1:nrow(training_set), nrow(training_set), replace=F), ]
+training_set |> dim() ; training_set |> head()
+```
+
+
+Save the files
+```{r}
+todays_date <- Sys.Date()
+save_dir <- glue('{project_dir}/defined_regions/kawakami/regions_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+```
+
+```{r}
+data.table::fwrite(training_set, glue('{save_dir}/{id}_{TF}_{nrow(training_set)}.txt'), quote=F, row.names=F, col.names=T)
+```
+
+### Plotting
+
+```{r}
+positive_set %>%
+    dplyr::group_by(chr) %>%
+    dplyr::summarise(cnts=n()) %>%
+    as.data.frame() %>%
+    pull(chr, cnts) %>%
+    barplot(cnts)
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Nice!
 

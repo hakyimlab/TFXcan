@@ -10,15 +10,16 @@ whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os
 global module_path # this variable should be a global one and will be used by the functions defined below
 module_path = os.path.abspath(whereis_script)
 
-global log_dir, write_log
+global log_dir, write_log, dataset_type
 
-with open(f'{module_path}/../../metadata/personalized_parameters.json') as f:
+with open(f'{module_path}/../../metadata/enformer_parameters.json') as f:
     parameters = json.load(f)
     project_dir = parameters['project_dir']
     log_dir = module_path + '/../../' + parameters['log_dir']
     vcf_file = module_path + '/../../' + parameters['vcf_file']
     #write_log = True if parameters["write_log"] == 'true' else False
     write_log = parameters["write_log"]
+    dataset_type = parameters['dataset_type']
 
 #print(module_path, log_dir, vcf_file)
 
@@ -67,7 +68,7 @@ def get_fastaExtractor(script_path=module_path):
             The path to the script directory
     """
 
-    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
         parameters = json.load(f)
         fasta_file = parameters['hg38_fasta_file']
 
@@ -77,7 +78,7 @@ def get_fastaExtractor(script_path=module_path):
 @lru_cache(5)
 def get_model(script_path=module_path):
 
-    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
         parameters = json.load(f)
         model_path = parameters['model_path']
 
@@ -295,7 +296,7 @@ def replace_variants_in_reference_sequence(query_sequences, mapping_dict):
     a = map(lambda i: mapping_dict.get(i, sequence_list[i]), range(len(sequence_list)))
     return(''.join(list(a)))
 
-def create_individual_input_for_enformer(region, individual, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log):
+def create_individual_input_for_enformer(region, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log, dataset_type=dataset_type):
     '''
     Given a region in the genome, a reference genome (fasta) and a VCF file, create an individual's sequence for that region
 
@@ -309,16 +310,11 @@ def create_individual_input_for_enformer(region, individual, fasta_func, hap_typ
         A new sequence with all the changes applied.
     '''
 
-    vcf_object = vcf_func() # make_cyvcf_object() #
-    #print(f'[INFO] Current individual is {vcf_object.samples}')
-
-    a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
-
-    # if write_log['cache'] == True:
-    #     msg_cac_log = f'[CACHE INFO] (vcf) [{vcf_func.cache_info()}, {get_gpu_name()}, {individual}, {region}]'
-    #     CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
-    #     setup_logger('cache_log', CACHE_LOG_FILE)
-    #     logger(msg_cac_log, 'info', 'cache')
+    if dataset_type == 'reference':
+        a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
+    elif dataset_type == 'personalized':
+        #vcf_object = vcf_func() # make_cyvcf_object() #
+        a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
 
     # check that all the sequences in a are valid
     if all(i == 'N' for i in a['sequences']):
@@ -329,18 +325,22 @@ def create_individual_input_for_enformer(region, individual, fasta_func, hap_typ
             setup_logger('error_log', MEMORY_ERROR_FILE)
             logger(err_msg, 'error', 'run_error')
 
-        vcf_object.close()
+        #vcf_object.close()
         return(None)
     else:
-        b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
-        vcf_object.close()
-        
-        if b: # go on and change the variants by position
-            c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
-            variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
-            return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
-        else: # return the reference
+        if dataset_type == 'reference':
             return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
+        elif dataset_type == 'personalized':
+            vcf_object = vcf_func()
+            b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
+            vcf_object.close()
+        
+            if b: # go on and change the variants by position
+                c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
+                variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
+                return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
+            else: # return the reference
+                return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
 
 def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     """
@@ -366,7 +366,7 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
         hf.create_dataset(region, data=prediction)
     return([region, sample, 'completed', seq_type])
 
-def write_logfile(predictions_log_dir, each_individual, what_to_write):
+def write_logfile(predictions_log_dir, id, what_to_write):
     '''
     Write the prediction status to a log file
 
@@ -383,7 +383,7 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
     '''
 
     import os, csv
-    logfile_csv = f'{predictions_log_dir}/{each_individual}_predictions_log.csv'
+    logfile_csv = f'{predictions_log_dir}/{id}_predictions_log.csv'
     open_mode = 'a' if os.path.isfile(logfile_csv) else 'w'
 
     #if not query_status: # i.e. if the list is not empty
@@ -399,9 +399,6 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
 def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=True, write_log=write_log):
     '''
     Use ENFORMER to predict on a batch of regions
-
-
-
 
     '''
 
@@ -426,7 +423,7 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
         #print(f'[CACHE INFO] (model) [{get_model.cache_info()}, {get_gpu_name()}, {sample}]')
 
         for each_region in batch_region:
-            each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], individual=sample, vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None)
+            each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None, dataset_type=dataset_type)
 
             if (each_region_seq_info is not None) and (len(each_region_seq_info['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
                 sequence_encoded = kipoiseq.transforms.functional.one_hot_dna(each_region_seq_info['sequence']).astype(np.float32) #one_hot_encode(sequence)
@@ -442,7 +439,7 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
                 if each_region['logtype'] == 'n':
                     pass
                 elif each_region['logtype'] == 'y':
-                    write_logfile(predictions_log_dir=predictions_log_dir, each_individual=sample, what_to_write=h5result)
+                    write_logfile(predictions_log_dir=predictions_log_dir, id=sample, what_to_write=h5result)
                     
         tf.keras.backend.clear_session()
         gc.collect()
