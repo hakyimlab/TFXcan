@@ -1,5 +1,9 @@
 import pandas as pd
 import os, sys
+from datetime import date
+
+todays_date = date.today().strftime("%Y-%m-%d")
+print(todays_date)
 
 def collect_modeling_data_for_freedman(each_individual, log_data, individual_predictions_path, TF, data_names, base_path, save_dir):
 
@@ -7,10 +11,9 @@ def collect_modeling_data_for_freedman(each_individual, log_data, individual_pre
     import numpy as np
     import os
     import pandas as pd
-    import tqdm
     # read in one of the files
 
-    exec(open(f'{base_path}/modeling_pipeline/scripts/utility-functions.py').read(), globals(), globals())
+    exec(open(f'{base_path}/modeling_pipeline/scripts/collect_model_data/utility-functions.py').read(), globals(), globals())
 
     freedman_predictions = {}
 
@@ -36,10 +39,14 @@ def collect_modeling_data_for_freedman(each_individual, log_data, individual_pre
 
         ty = pd.concat([pd.Series(list(freedman_predictions.keys())), pd.DataFrame(dt)], axis=1)
 
-        column_names = ['id', 'class']
-        column_names.extend([f'f_{i}' for i in range(1, ty.shape[1] - 1)])
+        print(f'[INFO] Dimension of collected data is {ty.shape[0]} by {ty.shape[1]}')
 
-        ty = ty.set_axis(column_names, axis=1, copy=False)
+        column_names = ['id']
+        column_names.extend([f'f_{i}' for i in range(1, ty.shape[1])])
+
+        ty = ty.set_axis(column_names, axis=1, inplace=False)
+
+        print(ty.iloc[0:5, 0:5])
 
         ty.to_csv(path_or_buf=f'{save_dir}/{each_individual}_{data_names[i]}_{TF}.csv.gz', index=False, compression='gzip')
     print(f'[INFO] Finished saving data for {each_individual}')
@@ -54,16 +61,13 @@ center = [8]
 downstream = list(range(9, 17))
 
 base_path = '/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan'
-enformer_predictions_path = f'{base_path}/enformer_pipeline/enformer_predictions/freedman'
+enformer_predictions_path = f'{base_path}/enformer_pipeline/enformer_predictions/freedman/predictions_2022-12-11'
 individuals_file = f'{base_path}/enformer_pipeline/metadata/individuals.txt'
-individuals_log_path = f'{base_path}/enformer_pipeline/predictions-log'
+individuals_log_path = f'{base_path}/enformer_pipeline/predictions_log/predictions_log_2022-12-11'
 
-save_dir = f'{base_path}/modeling_pipeline/data/train-test-val/freedman'
+save_dir = f'{base_path}/modeling_pipeline/data/train-test-val/freedman/data_{todays_date}'
 if not os.path.isdir(save_dir):
     os.makedirs(save_dir)
-
-#individuals = pd.read_table(individuals_file, header=None)[0].tolist()
-#exec(open(f'{base_path}/modeling_pipeline/scripts/utility-functions.py').read(), globals(), globals())
 
 TF = 'FOXA1'
 data_names = ['aggByCenter']

@@ -1,8 +1,7 @@
 #!/bin/bash
-#PBS -l select=10:system=polaris
-#PBS -l walltime=02:00:00,filesystems=grand
+#PBS -l walltime=00:59:00,filesystems=grand
 #PBS -A covid-ct
-#PBS -q prod  
+#PBS -q debug-scaling  
 #PBS -N create_model_data_for_kawakami
 #PBS -k doe
 #PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/create_model_data_for_kawakami.out

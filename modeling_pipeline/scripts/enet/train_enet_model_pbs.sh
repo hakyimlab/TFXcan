@@ -31,10 +31,14 @@ conda activate r-env
 echo "PBS_JOBID = " $PBS_JOBID
 
 project_dir="/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline"
+#data_file=${1} # path to the data file
+#"${project_dir}/data/enet_data/data_2022-12-13/balanced_enet.csv.gz"
 #Rscript="~/miniconda3/envs/r-env/bin/Rscript"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${project_dir}/scripts/train_enet_model.R"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${project_dir}/scripts/enet/train_old_enet_model.R" "${data_file}" "${metainfo}"
 
 status=$?
 echo "Exit status of training run is: $status"
+
+# qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh
