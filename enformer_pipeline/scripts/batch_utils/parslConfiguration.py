@@ -41,7 +41,7 @@ def localParslConfig():
     return(local_htex)
 
 
-def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, num_full_nodes=1):
+def theta_htParslConfig(params):
 
     import parsl
     from parsl.config import Config
@@ -52,16 +52,16 @@ def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, 
     print(f'Parsl version: {parsl.__version__}')
 
     # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
-    if workingdir is None:
-        workingdir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline'
-        rundir = f'{workingdir}/runinfo'
+    workingdir = params['working_dir']
+    rundir = f'{workingdir}/runinfo'
+    job_name = params['job_name']
     
     # I want to put the cobalt directives 
-    sch_options = ['#COBALT --attrs filesystems=home,theta-fs0,grand,eagle:enable_ssh=1',
+    sch_options = ['#COBALT --attrs filesystems=theta-fs0,grand:enable_ssh=1',
                     f'#COBALT --jobname={job_name}',
-                    f'#COBALT -o {workingdir}/cobalt-log/{job_name}.out',
-                    f'#COBALT -e {workingdir}/cobalt-log/{job_name}.err',
-                    f'#COBALT --debuglog {workingdir}/cobalt-log/{job_name}.cobalt'
+                    f'#COBALT -o {workingdir}/cobalt_log/{job_name}.out',
+                    f'#COBALT -e {workingdir}/cobalt_log/{job_name}.err',
+                    f'#COBALT --debuglog {workingdir}/cobalt_log/{job_name}.cobalt'
     ]
 
     sch_options = '\n'.join(sch_options)
@@ -83,10 +83,10 @@ def theta_htParslConfig(job_name='enformer-predict-reference', workingdir=None, 
                     queue='full-node',
                     account='covid-ct',
                     launcher=MpiExecLauncher(),
-                    walltime='00:30:00',
-                    nodes_per_block=num_full_nodes, # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
-                    min_blocks=1,
-                    #max_blocks=2,
+                    walltime=params['walltime'],
+                    nodes_per_block=params['num_of_full_nodes'], # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
+                    min_blocks=params['min_num_blocks'],
+                    max_blocks=params['max_num_blocks'],
                     worker_init=workerinit,
                     cmd_timeout=120,
                     scheduler_options=sch_options

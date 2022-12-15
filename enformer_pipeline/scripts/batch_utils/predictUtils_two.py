@@ -1,3 +1,7 @@
+# Usage: This module is used to predict with ENFORMER on individual genomes
+# Author: Temi
+# Date:
+
 from functools import lru_cache
 import logging, json
 import os, sys
@@ -8,13 +12,13 @@ module_path = os.path.abspath(whereis_script)
 
 global log_dir, write_log
 
-with open(f'{module_path}/../../metadata/enformer_parameters.json') as f:
+with open(f'{module_path}/../../metadata/personalized_parameters.json') as f:
     parameters = json.load(f)
     project_dir = parameters['project_dir']
     log_dir = module_path + '/../../' + parameters['log_dir']
     vcf_file = module_path + '/../../' + parameters['vcf_file']
-    write_log = True if parameters["write_log"] == 'true' else False
-
+    #write_log = True if parameters["write_log"] == 'true' else False
+    write_log = parameters["write_log"]
 
 #print(module_path, log_dir, vcf_file)
 
@@ -47,6 +51,10 @@ class FastaStringExtractor:
     def close(self):
         return self.fasta.close()
 
+# @lru_cache(5)
+# def make_cyvcf_object(vcf_file=vcf_file, sample=vcf_id):
+#     import cyvcf2
+#     return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
 
 @lru_cache(5)
 def get_fastaExtractor(script_path=module_path):
@@ -59,7 +67,7 @@ def get_fastaExtractor(script_path=module_path):
             The path to the script directory
     """
 
-    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
         parameters = json.load(f)
         fasta_file = parameters['hg38_fasta_file']
 
@@ -69,7 +77,7 @@ def get_fastaExtractor(script_path=module_path):
 @lru_cache(5)
 def get_model(script_path=module_path):
 
-    with open(f'{script_path}/../../metadata/enformer_parameters.json') as f:
+    with open(f'{script_path}/../../metadata/personalized_parameters.json') as f:
         parameters = json.load(f)
         model_path = parameters['model_path']
 
@@ -135,8 +143,9 @@ def check_query(sample, query, output_dir, logfile):
         logfile: pd.DataFrame 
             A dataframe of a log file or `None` if the log file does not exist. 
     
-    Returns:
-        dict of (1) the query region if it has not been logged or predictions don't exist and (2) whether it should be logged if it has not been logged. 
+    Returns: dict
+        'query': the query region if it has not been logged or predictions don't exist
+        'logtye': whether it should be logged if it has not been logged
 
     If predictions exist and the query has been logged, this function returns None.
     """
@@ -214,7 +223,7 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
     # extract the sequence 
     ref_sequences = fasta_object.extract(interval=reg_interval, anchor=[])
 
-    if write_log == True:
+    if write_log['cache'] == True:
         msg_cac_log = f'[CACHE INFO] (fasta) [{get_fastaExtractor.cache_info()}, {get_gpu_name()}, {region}]'
         CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
         setup_logger('cache_log', CACHE_LOG_FILE)
@@ -242,6 +251,20 @@ def find_variants_in_vcf_file(cyvcf2_object, interval_object):
     return([[variant.CHROM, variant.POS, variant.genotypes[0][0:2], variant.gt_bases[0].split('|')] for variant in cyvcf2_object(query)])
 
 def create_mapping_dictionary(variants_array, interval_start, haplotype='hap1'):
+    '''
+    Create a map of which variants should be switched 
+
+    Parameters:
+        variants_array: a list/numpy array
+            A cyvcf2_object object
+        interval_start: Interval object start position
+            The start position of the interval object returned by kipoiseq.Interval
+        haplotype: str; default: 'hap1'; options: hap2, both
+            Should haplotype 1 or 2 or both be used?
+
+    Returns: dict
+        {position: new genotype base}
+    '''
     if haplotype == 'hap1':
         haplotype_map = {(variants_array[i][1] - interval_start): variants_array[i][3][0] for i in range(0, len(variants_array)) if variants_array[i][2][0] == 1}
         return(haplotype_map)
@@ -255,19 +278,43 @@ def create_mapping_dictionary(variants_array, interval_start, haplotype='hap1'):
         return(haplotype_map)
 
 def replace_variants_in_reference_sequence(query_sequences, mapping_dict):
+    '''
+    Using the mapping dictionary, mutate many variants in a given sequence 
+
+    Parameters:
+        query_sequences: str
+            The query, perhaps, reference sequence
+        mapping_dict: a numpy array or list
+            List of the regions that should be modified
+
+    Returns:
+        A new sequence with all the changes applied.
+    '''
 
     sequence_list = list(query_sequences)
     a = map(lambda i: mapping_dict.get(i, sequence_list[i]), range(len(sequence_list)))
     return(''.join(list(a)))
 
 def create_individual_input_for_enformer(region, individual, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log):
+    '''
+    Given a region in the genome, a reference genome (fasta) and a VCF file, create an individual's sequence for that region
+
+    Parameters:
+        query_sequences: str
+            The query, perhaps, reference sequence
+        mapping_dict: a numpy array or list
+            List of the regions that should be modified
+
+    Returns:
+        A new sequence with all the changes applied.
+    '''
 
     vcf_object = vcf_func() # make_cyvcf_object() #
     #print(f'[INFO] Current individual is {vcf_object.samples}')
 
     a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
 
-    # if write_log:
+    # if write_log['cache'] == True:
     #     msg_cac_log = f'[CACHE INFO] (vcf) [{vcf_func.cache_info()}, {get_gpu_name()}, {individual}, {region}]'
     #     CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
     #     setup_logger('cache_log', CACHE_LOG_FILE)
@@ -276,7 +323,7 @@ def create_individual_input_for_enformer(region, individual, fasta_func, hap_typ
     # check that all the sequences in a are valid
     if all(i == 'N' for i in a['sequences']):
         #print(f'[INPUT ERROR] {region} is invalid; all nucleotides are N.')
-        if write_log:
+        if write_log['error']:
             err_msg = f'[INPUT ERROR] {region} is invalid; all nucleotides are N.'
             MEMORY_ERROR_FILE = f"{log_dir}/error_details.log"
             setup_logger('error_log', MEMORY_ERROR_FILE)
@@ -300,13 +347,15 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     Save ENFORMER predictions as an hdf5 file.
 
     Parameters:
-        prediction:
-
-        sample:
-
-        region:
-
-        seq_type:
+        prediction: numpy array 
+            A numpy array of predictions
+        sample: str
+            unique id or name of an individual
+        region: str
+            a region in the genome (used to provide a name for the file to be saved)
+        seq_type: str
+            'ref': if the sequence was from the reference genome i.e. no variants were found
+            'var': if the sequence was modified based on the VCF file
 
     Returns:
         A list of what to log [region, sample, 'completed', sequence type] if the prediction has been saved 
@@ -318,6 +367,20 @@ def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     return([region, sample, 'completed', seq_type])
 
 def write_logfile(predictions_log_dir, each_individual, what_to_write):
+    '''
+    Write the prediction status to a log file
+
+    Parameters:
+        predictions_log_dir: str (path)
+            A folder wherein to create the file in which to write the log
+        each_individual: str
+            The unique id of an individual
+        what_to_write: list
+            A list, comma separated, of what to write to the log file
+        
+    Returns:
+        None
+    '''
 
     import os, csv
     logfile_csv = f'{predictions_log_dir}/{each_individual}_predictions_log.csv'
@@ -333,13 +396,19 @@ def write_logfile(predictions_log_dir, each_individual, what_to_write):
         running_log_file.flush()
         os.fsync(running_log_file)
 
-def enformer_predict(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=True, write_log=write_log):
+def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictions_log_dir, vcf_func, batch_num, grow_memory=True, write_log=write_log):
+    '''
+    Use ENFORMER to predict on a batch of regions
+
+
+
+
+    '''
 
     import numpy as np # for numerical computations
     import sys # functions for interacting with the operating system
     import tensorflow as tf
     import kipoiseq, gc
-    import tqdm
 
     if grow_memory == True:
         gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -374,11 +443,11 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
                     pass
                 elif each_region['logtype'] == 'y':
                     write_logfile(predictions_log_dir=predictions_log_dir, each_individual=sample, what_to_write=h5result)
-
+                    
         tf.keras.backend.clear_session()
         gc.collect()
 
-        if write_log:
+        if write_log['memory']:
             if tf.config.list_physical_devices('GPU'):
                 mem_use = get_gpu_memory()
                 #msg_mem_log = f"[GPU MEMORY] (at end of prediction, after clearing session) {sample} | {region}: {tf.config.experimental.get_memory_info('GPU:0')['current']/1e+9}"
@@ -387,6 +456,7 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
                 setup_logger('memory_log', MEMORY_LOG_FILE)
                 logger(msg_mem_log, 'info', 'memory')
 
+        if write_log['cache']:
             msg_cac_log = f'[CACHE INFO] (model) on batch {batch_num}: [{get_model.cache_info()}, {get_gpu_name()}, {sample}]'
             CACHE_LOG_FILE = f"{log_dir}/cache_usage.log"
             setup_logger('cache_log', CACHE_LOG_FILE)
@@ -395,7 +465,7 @@ def enformer_predict(batch_region, sample, model, output_dir, predictions_log_di
         return(0) # for that batch
         
     except (TypeError, AttributeError) as tfe:
-        if write_log:
+        if write_log['error']:
             if tf.config.list_physical_devices('GPU'):
                 mem_use = get_gpu_memory()
                 err_mem_log = f"[GPU MEMORY] (error type {type(tfe) } for individual {sample}): free {mem_use[0]} mb, used {mem_use[1]} mb on {get_gpu_name()}"

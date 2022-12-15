@@ -28,7 +28,7 @@ library(doParallel)
 ```
 
 ```{r}
-project_dir <- '/grand/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
 setwd(project_dir)
 
 TF <- 'FOXA1'
@@ -131,7 +131,7 @@ y_train$class |> table()
 
 ### Utility functions
 ```{r}
-source('./utility-functions.R')
+source(glue('{project_dir}/scripts/utility-functions.R'))
 ```
 
 ```{r}
@@ -175,6 +175,11 @@ training_data
 pbs_script <- glue('qsub -v "data_file={training_data}" {project_dir}/scripts/enet/train_enet_model_pbs.sh')
 pbs_script
 ```
+<<<<<<< HEAD
+
+```{r}
+system(pbs_script)
+=======
 
 ```{r}
 system(pbs_script)
@@ -182,10 +187,19 @@ system(pbs_script)
 
 ```{r}
 system("qstat -u temi")
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 Read in the model(s)
 ```{r}
+<<<<<<< HEAD
+system("qstat -u temi")
+```
+
+Read in the model(s)
+```{r}
+=======
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 enet_binary_model <- readRDS(paste0(project_dir, '/models/enet_models/kawakami_center_binary_balanced_2022-12-14.rds'))
 enet_binary_model
 ```
@@ -200,6 +214,12 @@ enet_binary_old_model <- readRDS(paste0(project_dir, '/models/enet_models/kawaka
 enet_binary_old_model
 ```
 
+<<<<<<< HEAD
+=======
+
+
+
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 Test on the training data itself
 ```{r}
 #test_data <- data.table::fread(paste0(project_dir, '/data/enet_data/data_', Sys.Date(), '/balanced_enet.csv.gz'))
@@ -211,15 +231,65 @@ vbc <- y_test$binding_counts
 y_test$nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
 
 X_test |> dim() ; X_test[1:5, 1:5] ; y_test |> head()
+<<<<<<< HEAD
+=======
+```
+
+```{r}
+tr_data <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz')
+```
+
+```{r}
+tr_data[1:5, 1:5]
+```
+
+### Some fancy plots
+```{r}
+a <- predict(enet_binary_old_model, tr_data[, -1] |> as.matrix(), type='response') #|> boxplot()
+b <- data.frame(probabilities=a[,1], true_class=tr_data[, 1])
+```
+
+```{r}
+boxplot(probabilities ~ class, data=b, col=c('aquamarine', 'darkorange'))
+mtext('Boxplot of distribution of probabilities', line=1, cex=1.5)
+```
+
+```{r}
+denx <- density(b$probabilities[b$class == 0])
+deny <- density(b$probabilities[b$class == 1])
+
+
+#den_unbound <- density(denx)
+plot(denx, ylim = c(0, max(c(denx$y, deny$y))),
+     xlim = c(min(c(denx$x, deny$x)),
+              max(c(denx$x, deny$x))),
+              main='Density plot of probabilities', xlab='probabilities')
+lines(deny)
+
+polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5) )
+polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 ```{r}
 predicted <- predict(enet_binary_model, X_test, type='class')
 prediction_table <- cbind(observed=y_test$class, predicted=as.numeric(predicted)) |> as.data.frame()
+<<<<<<< HEAD
 prediction_table[1:5, ]
+=======
+prediction_table[1:5, ] ; with(prediction_table, table(observed, predicted))
 ```
 
 ```{r}
+predicted <- predict(enet_binary_old_model, X_test, type='class')
+prediction_table <- cbind(observed=y_test$class, predicted=as.numeric(predicted)) |> as.data.frame()
+prediction_table[1:5, ] ; with(prediction_table, table(observed, predicted))
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
+```
+
+### Some fancy plots
+```{r}
+<<<<<<< HEAD
 with(prediction_table, table(observed, predicted))
 ```
 
@@ -309,59 +379,286 @@ predicted_values[, 1] |> table()
 
 ```{r}
 test_models(enet_binary_balanced_model, X_test, y_test$class)
+=======
+a <- predict(enet_binary_model, X_test, type='response') #|> boxplot()
+b <- cbind(probabilities=a[,1], true_class=y_test$class) |> as.data.frame()
 ```
 
-
-
-
-
-### testing on LuCaP_145
 ```{r}
-# may want to load the model
-enet_center_binary_model <- readRDS(glue('{project_dir}/models/kawakami-human/enet-center-binary-40000.rds'))
+boxplot(probabilities ~ true_class, data=b, col=c('aquamarine', 'darkorange'))
+mtext('Boxplot of distribution of probabilities', line=1, cex=1.5)
 ```
+
+```{r}
+denx <- density(b$probabilities[b$true_class == 0])
+deny <- density(b$probabilities[b$true_class == 1])
+
+
+#den_unbound <- density(denx)
+plot(denx, ylim = c(0, max(c(denx$y, deny$y))),
+     xlim = c(min(c(denx$x, deny$x)),
+              max(c(denx$x, deny$x))),
+              main='Density plot of probabilities', xlab='probabilities')
+lines(deny)
+
+polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5) )
+polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
+>>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
+```
+
+
+```{r}
+with(prediction_table, table(observed, predicted))
+```
+
+```{r}
+predicted <- predict(enet_linear_model, X_test, type='class')
+prediction_table <- cbind(observed=y_test$nbc, predicted=as.numeric(predicted)) |> as.data.frame()
+prediction_table[1:5, ]
+```
+
+```{r}
+(with(prediction_table, observed - predicted)**2) |> mean()
+```
+
+```{r}
+with(prediction_table, (max(predicted) - predicted)/(max(predicted) - min(predicted)))
+```
+
+
+### Testing on individuals
 
 Read in the test set: LuCaP_145 and LuCaP_136
 ```{r}
-library(vcd)
+test_data_dir <- glue('{project_dir}/data/train-test-val/freedman/data_2022-12-13')
+```
 
-save_dir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/train-test-val/freedman'
+```{r}
+individual <- 'LuCaP_208' #'LuCaP_145'
+
+test_data_path <- glue('{test_data_dir}/{individual}_aggByCenter_FOXA1.csv.gz')
+test_data <- data.table::fread(test_data_path)
+test_data[1:5, 1:5]
+```
+
+Ground truth (or class)
+```{r}
+gt_file <- Sys.glob(glue('{project_dir}/../impact_pipeline/motif_intervals/freedman/intervals_2022-12-11/ground_truth/{individual}_{TF}_*.txt'))
+
+ground_truth <- data.table::fread(gt_file)
+head(ground_truth)
+```
+
+```{r}
+gt <- ground_truth[ground_truth$V1 %in% test_data$id, ]
+dim(gt) ; length(unique(gt$V1))
+```
+
+```{r}
+find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
+  n_occur <- data.frame(table(dt[[col]]))
+
+  if(return_dups == TRUE){
+    return(dt[dt[[col]] %in% n_occur$Var1[n_occur$Freq > 1],])
+  } else {
+    return(n_occur[n_occur$Freq > 1,])
+  }
+}
+```
+
+```{r}
+find_duplicates_in_dataframe(gt, col='V1')
+```
+Keep first occurrence of duplicates
+```{r}
+gt_dedup <- gt[!duplicated(gt[['V1']]),]
+dim(gt_dedup)
+```
+
+Merge `gt_dedup` with the data
+```{r}
+new_dt <- merge(gt_dedup, test_data, by.x='V1', by.y='id')
+new_dt[1:5, 1:5] ; dim(new_dt)
+```
+
+```{r}
+colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
+new_dt[1:5, 1:5] ; dim(new_dt)
+```
+
+```{r}
+X_test <- new_dt[, -c(1:3)] |> as.matrix()
+y_test <- new_dt[, c(1:3)] |> as.data.frame()
+
+vbc <- y_test$binding_counts
+y_test$nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
+```
+
+```{r}
+predicted <- predict(enet_binary_model, X_test, type='class')
+prediction_table <- cbind(observed=y_test$class, predicted=as.numeric(predicted)) |> as.data.frame()
+prediction_table[1:5, ]
+```
+
+```{r}
+with(prediction_table, table(observed, predicted))
+```
+
+```{r}
+predicted <- predict(enet_linear_model, X_test, type='class')
+prediction_table <- cbind(observed=y_test$nbc, predicted=as.numeric(predicted)) |> as.data.frame()
+prediction_table[1:5, ]
+```
+
+```{r}
+(with(prediction_table, observed - predicted)**2) |> mean()
+```
+
+```{r}
+predicted_values <- glmnet::predict.glmnet(enet_binary_balanced_model$glmnet.fit, X_test, type='class')
+predicted_values[, 1] |> table()
+```
+
+```{r}
+test_models(enet_binary_balanced_model, X_test, y_test$class)
 ```
 
 ```{r}
 # list of individuals
-individuals <- c('LuCaP_145', 'LuCaP_136')
+individuals <- c('LuCaP_145', 'LuCaP_136', 'LuCaP_208')
+
+y_test_list <- list()
+X_test_list <- list()
+
+for(ind in individuals){
+  test_data_path <- glue('{test_data_dir}/{ind}_aggByCenter_FOXA1.csv.gz')
+  test_data <- data.table::fread(test_data_path)
+  gt_file <- Sys.glob(glue('{project_dir}/../impact_pipeline/motif_intervals/freedman/intervals_2022-12-11/ground_truth/{ind}_{TF}_*.txt'))
+  ground_truth <- data.table::fread(gt_file)
+  gt <- ground_truth[ground_truth$V1 %in% test_data$id, ]
+  gt_dedup <- gt[!duplicated(gt[['V1']]),]
+  new_dt <- merge(gt_dedup, test_data, by.x='V1', by.y='id')
+  colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
+
+  X_test <- new_dt[, -c(1:3)] |> as.matrix()
+  y_test <- new_dt[, c(1:3)] |> as.data.frame()
+
+  vbc <- y_test$binding_counts
+  y_test$nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
+
+  y_test_list[[ind]] <- y_test
+  X_test_list[[ind]] <- X_test
+}
+
+names(y_test_list) <- individuals
+names(X_test_list) <- individuals
+```
+
+```{r}
+source(glue('{project_dir}/scripts/utility-functions.R'))
+```
+
+```{r}
+library(vcd)
 test_metrics <- list()
 
 # this produces a plot
-
 lo <- layout(matrix(c(1, 2), nrow=1, ncol=2))
 
 for(ind in individuals){
 
-  test_data_path <- glue('{save_dir}/{ind}_aggByCenter_FOXA1.csv')
-  test_data <- data.table::fread(test_data_path)
+  test_metrics[[ind]] <- test_models(enet_binary_model, X_test_list[[ind]], y_test_list[[ind]]$class)
 
-  X_test <- test_data[, -c(1:2)] |> as.matrix()
-  y_test <- test_data[, c(1:2)] |> as.data.frame()
-
-  test_metrics[[ind]] <- test_models(enet_center_binary_model, X_test, y_test$class)
-
-  test_predictions <- predict(enet_center_binary_model, X_test, type='class')
+  test_predictions <- predict(enet_binary_model, X_test_list[[ind]], type='class')
   test_predictions <- as.numeric(test_predictions[, 1])
 
-  mc <- cbind(test_predictions, y_test$class)
+  mc <- cbind(test_predictions, y_test_list[[ind]]$class)
   colnames(mc) <- c('predicted', 'truth')
   mc <- as.data.frame(mc)
 
   mtable <- table(mc$predicted, mc$truth)
-  dimnames(mtable) <- list(predicted = c('neg', 'pos'), truth=c('neg', 'pos'))
+  dimnames(mtable) <- list(predicted = c('unbound', 'bound'), truth=c('unbound', 'bound'))
 
   # plot
   vcd::mosaic(mtable, highlighting = "truth", highlighting_fill = c("pink", "lightblue"), pop=F, main=ind)
   labeling_cells(text = mtable, margin=0)(mtable)
 }
 ```
+
+```{r}
+test_metrics <- list()
+
+# this produces a plot
+lo <- layout(matrix(c(1, 2), nrow=1, ncol=2))
+
+for(ind in individuals){
+
+  test_metrics[[ind]] <- test_models(enet_binary_old_model, X_test_list[[ind]], y_test_list[[ind]]$class)
+
+  test_predictions <- predict(enet_binary_old_model, X_test_list[[ind]], type='class')
+  test_predictions <- as.numeric(test_predictions[, 1])
+
+  mc <- cbind(test_predictions, y_test_list[[ind]]$class)
+  colnames(mc) <- c('predicted', 'truth')
+  mc <- as.data.frame(mc)
+
+  mtable <- table(mc$predicted, mc$truth)
+  dimnames(mtable) <- list(predicted = c('unbound', 'bound'), truth=c('unbound', 'bound'))
+
+  # plot
+  vcd::mosaic(mtable, highlighting = "truth", highlighting_fill = c("pink", "lightblue"), pop=F, main=ind)
+  labeling_cells(text = mtable, margin=0)(mtable)
+}
+```
+
+```{r}
+
+for(ind in individuals){
+  lo <- layout(matrix(c(1, 2), nrow=1, ncol=2))
+
+  a <- predict(enet_binary_model, X_test_list[[ind]], type='response') #|> boxplot()
+  b <- data.frame(probabilities=a[,1], class=y_test_list[[ind]]$class) #|> as.data.frame()
+
+  boxplot(probabilities ~ class, data=b, col=c('aquamarine', 'darkorange'))
+  mtext(glue('Boxplot of distribution of probabilities for {ind}'), line=1, cex=1.5)
+
+
+  denx <- density(b$probabilities[b$class == 0])
+  deny <- density(b$probabilities[b$class == 1])
+  #den_unbound <- density(denx)
+  plot(denx, ylim = c(0, max(c(denx$y, deny$y))),
+      xlim = c(min(c(denx$x, deny$x)),
+                max(c(denx$x, deny$x))), xlab='probabilities', main="")
+  lines(deny)
+
+  polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5))
+  polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
+  mtext(glue('Density plot of probabilities for {ind}'), line=1, cex=1.5)
+}
+```
+
+
+```{r}
+
+```
+
+```{r}
+denx <- density(b$probabilities[b$true_class == 0])
+deny <- density(b$probabilities[b$true_class == 1])
+
+
+#den_unbound <- density(denx)
+plot(denx, ylim = c(0, max(c(denx$y, deny$y))),
+     xlim = c(min(c(denx$x, deny$x)),
+              max(c(denx$x, deny$x))),
+              main='Density plot of probabilities', xlab='probabilities')
+lines(deny)
+
+polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5) )
+polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
+```
+
+
 
 \newpage
 ## xgboost models
