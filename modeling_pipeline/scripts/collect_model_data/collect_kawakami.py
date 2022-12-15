@@ -1,5 +1,8 @@
 import pandas as pd
 import os, sys
+from datetime import date
+
+todays_date = date.today().strftime("%Y-%m-%d")
 
 def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, data_names, base_path, save_dir):
 
@@ -58,16 +61,16 @@ center = [8]
 downstream = list(range(9, 17))
 
 base_path = '/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan'
-enformer_predictions_path = f'{base_path}/enformer_pipeline/enformer_predictions/{each_id}_reference/{each_id}_FOXA1'
-log_path = f'{base_path}/enformer_pipeline/predictions-log'
+enformer_predictions_path = f'{base_path}/enformer_pipeline/enformer_predictions/{each_id}_reference/predictions_2022-12-11/{each_id}_FOXA1'
+log_path = f'{base_path}/enformer_pipeline/predictions_log/predictions_log_2022-12-11'
 
-save_dir = f'{base_path}/modeling_pipeline/data/train-test-val/{each_id}'
+save_dir = f'{base_path}/modeling_pipeline/data/train-test-val/{each_id}/data_{todays_date}'
 if not os.path.isdir(save_dir):
     os.makedirs(save_dir)
 
 TF = 'FOXA1'
-#data_names = ['aggByCenter']
-data_names = ['aggByMean', 'aggByCenter', 'aggByUpstream', 'aggByDownstream', 'aggByUpstreamDownstream']
+data_names = ['aggByCenter']
+#data_names = ['aggByMean', 'aggByCenter', 'aggByUpstream', 'aggByDownstream', 'aggByUpstreamDownstream']
 
 logpath = f'{log_path}/{each_id}_{TF}_predictions_log.csv'
 log_data = pd.read_csv(logpath)

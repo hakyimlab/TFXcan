@@ -1,0 +1,151 @@
+---
+title: "Split data for model training and testing"
+author: "Temi"
+date: 'Wednesday Oct 26 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+### Usage
+After ENFORMER models have been aggregated, this script creates a train-test-val or train-test split and saves them. 
+
+It currently works on Kawakami data only. 
+
+
+```{r}
+rm(list=ls())
+
+library(glue)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(glmnet)
+library(doMC)
+library(ROCR)
+library(Matrix)
+library(reshape2)
+library(tidyverse)
+library(foreach)
+library(doParallel)
+
+```
+
+```{r}
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
+setwd(project_dir)
+
+TF <- 'FOXA1'
+id <- 'kawakami'
+kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-12')
+```
+
+```{r}
+# using the aggByCenter 
+kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/{id}_aggByCenter_{TF}.csv.gz'))
+dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
+```
+
+Ground truth (or class)
+
+```{r}
+ground_truth_path <- Sys.glob(paste0(project_dir, '/../impact_pipeline/motif_intervals/kawakami/intervals_2022-12-11/ground_truth/', id, '_', TF, '_*.txt'))
+ground_truth_path
+```
+
+```{r}
+ground_truth <- data.table::fread(ground_truth_path)
+head(ground_truth)
+```
+
+```{r}
+gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$id, ]
+dim(gt) ; length(unique(gt$V1))
+```
+
+```{r}
+find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
+  n_occur <- data.frame(table(dt[[col]]))
+
+  if(return_dups == TRUE){
+    return(dt[dt[[col]] %in% n_occur$Var1[n_occur$Freq > 1],])
+  } else {
+    return(n_occur[n_occur$Freq > 1,])
+  }
+}
+```
+
+```{r}
+find_duplicates_in_dataframe(gt, col='V1') # there should be no duplicates
+```
+Keep first occurrence of duplicates
+```{r}
+gt_dedup <- gt[!duplicated(gt[['V1']]),]
+dim(gt_dedup)
+```
+
+Merge `gt_dedup` with the data
+```{r}
+new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='id')
+new_dt[1:5, 1:5]
+```
+
+```{r}
+#new_dt <- new_dt[, -c('class')]
+colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
+new_dt[1:5, 1:5] ; dim(new_dt)
+```
+
+Split into 80-20
+```{r}
+set.seed(2022)
+tr_size <- ceiling(nrow(new_dt) * 0.8)
+tr_indices <- sample(1:nrow(new_dt), tr_size)
+```
+
+```{r}
+train <- new_dt[tr_indices, ]
+test <- new_dt[-tr_indices, ]
+```
+Save the data
+```{r}
+save_dir <- paste0(project_dir, '/data/enet_data/data_', Sys.Date())
+if(!dir.exists(save_dir)){
+  dir.create(save_dir)
+}
+```
+```{r}
+write.csv(x=train, file=gzfile(paste0(save_dir, '/train_enet.csv.gz')))
+write.csv(x=test, file=gzfile(paste0(save_dir, '/test_enet.csv.gz')))
+```
+
+#### Balanced dataset
+```{r}
+class_1 <- new_dt[new_dt$class == 1, ]
+dim(class_1)
+```
+
+```{r}
+set.seed(2022)
+class_0 <- new_dt[new_dt$class == 0, ]
+class_0 <- class_0[sample(1:nrow(class_0), nrow(class_1), replace=F), ]
+dim(class_0)
+```
+
+```{r}
+balanced_dt <- rbind(class_0, class_1)
+balanced_dt <- balanced_dt[sample(1:nrow(balanced_dt), nrow(balanced_dt), replace=F), ]
+dim(balanced_dt)
+```
+
+```{r}
+write.csv(x=balanced_dt, file=gzfile(paste0(save_dir, '/balanced_enet.csv.gz')), row.names=F)
+```
+
+```{r}
+dt <- data.table::fread(paste0(save_dir, '/balanced_enet.csv.gz'))
+dim(dt) ; dt[1:5, 1:5]
+```
+

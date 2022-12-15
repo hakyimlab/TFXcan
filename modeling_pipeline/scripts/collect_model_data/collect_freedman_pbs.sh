@@ -2,10 +2,10 @@
 #PBS -l walltime=00:59:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q debug-scaling    
-#PBS -N create_model_data
+#PBS -N create_model_data_for_freedman
 #PBS -k doe
-#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/create_model_data.out
-#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/create_model_data.err
+#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/create_model_data_for_freedman.out
+#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/create_model_data_for_freedman.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
@@ -38,7 +38,7 @@ IFS=,$'\n' read -d '' -r -a individuals_array < "${individuals_list}"
 
 for each_individual in "${individuals_array[@]}"; do
     #printf "${each_individual}"
-    mpiexec -n 1 --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${project_dir}/scripts/create_model_data.py" "${each_individual}" &
+    mpiexec -n 1 --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${project_dir}/scripts/collect_model_data/collect_freedman.py" "${each_individual}" &
     sleep 1
 done
 
@@ -52,4 +52,4 @@ echo "Exit status of training run is: $status"
 # status=$?
 
 # echo "Exit status of training run is: $status"
-# exit $status
+# exit $statusls

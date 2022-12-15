@@ -1,8 +1,5 @@
 args = commandArgs(trailingOnly=TRUE)
 
-#setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
-
-
 library(glue)
 library(R.utils)
 library(data.table)
@@ -34,8 +31,8 @@ dt_train <- data.table::fread(data_file)
 print(dim(dt_train))
 
 # split the data
-X_train <- dt_train[, -c(1,2,3)] |> as.matrix()
-y_train <- dt_train[, c(1,2,3)] |> as.data.frame()
+X_train <- dt_train[, -c(1)] |> as.matrix()
+y_train <- dt_train[, c(1)] |> as.data.frame()
 print(head(y_train))
 
 # X_test <- dt_test[, -c(1,2,3)] |> as.matrix()
@@ -51,24 +48,13 @@ cat(glue('[INFO] Registering {foreach::getDoParWorkers()} workers/cores\n'))
 
 # build two models
 set.seed(2022)
-enet_center_binary_model <- glmnet::cv.glmnet(x=X_train, y=y_train$class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T, nfolds=5)
+enet_center_binary_model <- glmnet::cv.glmnet(x=X_train, y=y_train[,1], family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T, nfolds=5)
 cat('[INFO] Finished with binary model\n')
-
-
-vbc <- y_train$binding_counts
-nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
-enet_center_linear_model <- glmnet::cv.glmnet(x=X_train, y=nbc, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T, parallel=T, nfolds=5)
-cat('[INFO] Finished with linear model\n')
-
-# enet_center_multinomial_model <- glmnet::cv.glmnet(x=X_train, y=y_train$binding_counts, family = "multinomial", type.multinomial = "ungrouped", alpha=0.5, keep=T, parallel=T, nfolds=5)
-# cat('[INFO] Finished with multinomial model\n')
 
 cat('[INFO] Saving the models\n')
 
 # save the model
 saveRDS(enet_center_binary_model, file=glue('{project_dir}/models/enet_models/{id}_center_binary_{unique_id}_{run_date}.rds'))
-saveRDS(enet_center_linear_model, file=glue('{project_dir}/models/enet_models/{id}_center_linear_{unique_id}_{run_date}.rds'))
-#saveRDS(enet_center_multinomial_model, file=glue('{project_dir}/models/enet_models/{id}_center_multinomial_{unique_id}_{run_date}.rds'))
 
 registerDoSEQ()
 #cat('[INFO] Job completed')
