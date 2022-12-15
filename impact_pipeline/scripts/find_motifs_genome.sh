@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -l walltime=00:59:00,filesystems=grand
+#PBS -l walltime=00:59:00,filesystems=home:grand
 #PBS -A covid-ct
 #PBS -q debug-scaling    
 #PBS -N find_motifs_genome
@@ -33,8 +33,15 @@ echo "PBS_JOBID = " $PBS_JOBID
 project_dir="/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline"
 homer_dir="~/miniconda3/envs/homer-env/share/homer"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
+perl="`which perl`"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" perl ${homer_dir}/bin/findMotifsGenome.pl ${peaks} ${genome} ${homer_output} -size ${size} -find ${motif_file} > ${output}
+homer_cmd=`ls ~/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl`
+
+if [[ -f ${homer_cmd} ]]; then 
+    printf "${homer_cmd} exists."
+fi
+
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ${perl} ${homer_cmd} ${peaks} ${genome} ${homer_output} -size ${size} -find ${motif_file} > ${output}
 
 status=$?
 echo "Exit status of job is: $status"

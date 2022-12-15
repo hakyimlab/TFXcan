@@ -1,0 +1,246 @@
+---
+title: "Prepare target regions for ENFORMER"
+author: "Temi"
+date: 'Wednesday Dec 15 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+## Usage
+After defining regions for Kawakami, prepare those regions for Freedman data too.
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(tidyverse)
+```
+
+```{r}
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline'
+#setwd(project_dir)
+```
+
+```{r}
+output_dir <- glue('{project_dir}/explore_impact')
+id <- 'kawakami'
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+homer_dir <- glue('/home/temi/miniconda3/envs/homer-env/share/homer') # /home/temi/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl
+common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
+```
+
+Read in the kawakami defined regions
+```{r}
+dr <- Sys.glob(glue('{project_dir}/defined_regions/kawakami/regions_2022-12-15/{id}_{TF}_*.txt'))
+file.exists(dr)
+
+kawakami_dr <- data.table::fread(dr)
+
+# expand kawakami_dr to 9 bp
+kawakami_dr$start <- kawakami_dr$start - 3
+kawakami_dr$end <- kawakami_dr$end + 3
+kawakami_dr
+```
+
+Read in Freedman chip data
+```{r}
+freedman_chip_dt <- data.table::fread(glue('{project_dir}/processed_data/impact_files/freedman/bedtools_intersected_regions/{TF}_intersected_files.txt'))
+freedman_chip_dt |> dim() ; freedman_chip_dt[1:5, ]
+```
+
+For each individual, 
+- read the
+```{r}
+freedman_granges <- with(freedman_chip_dt, GenomicRanges::GRanges(chrom, IRanges(start, end), strand='*', num=num, list=list))
+freedman_granges
+```
+
+```{r}
+kawakami_granges <- with(kawakami_dr, GenomicRanges::GRanges(chr, IRanges(start, end), strand='*', class=class))
+kawakami_granges
+```
+
+```{r}
+kf_overlaps <- GenomicRanges::findOverlaps(query=kawakami_granges, subject=freedman_granges, type='any')
+kf_overlaps
+```
+
+There are multiple freedman regions that map to kawakami regions
+So, I need to aggregate these somehow.
+
+First select the unmatched regions
+
+Unmatched (using the trick that the query hits are sorted indices, so I just look for indices not present in those)
+
+```{r}
+k_inds <- 1:length(kawakami_granges)
+unmatched_indices <- k_inds[-queryHits(kf_overlaps) |> unique()]
+```
+
+Select these regions in Kawakami
+
+so, in Freedman individuals, these regions are 0
+```{r}
+u_set <- kawakami_granges[unmatched_indices]
+mcols(u_set)$class <- 0
+mcols(u_set)$binding_counts <- 0
+u_set <- as.data.frame(u_set)
+names(u_set)[1] <- 'chr'
+u_set <- u_set[, c('chr', 'start', 'end', 'class', 'binding_counts')]
+u_set |> head()
+# unmatched_freedman_chip_dt <- freedman_chip_dt[-subjectHits(kf_overlaps), ]
+# dim(unmatched_freedman_chip_dt)
+```
+
+Next select the matched regions, aggreate and get the binding counts
+```{r}
+filtered_freedman_chip_dt <- freedman_chip_dt[subjectHits(kf_overlaps), ]
+dim(filtered_freedman_chip_dt)
+```
+```{r}
+filtered_freedman_chip_dt <- cbind(groups=queryHits(kf_overlaps), filtered_freedman_chip_dt) |> as.data.frame()
+filtered_freedman_chip_dt[1:5, ] ; filtered_freedman_chip_dt |> dim()
+```
+
+```{r}
+length(unique(filtered_freedman_chip_dt$groups))
+```
+Looks like there are this number of matches.
+
+
+```{r}
+ind_names <- data.table::fread(glue('{project_dir}/processed_data/impact_files/freedman/metadata/grouping_info.txt'))
+ind_names <- glue('{unique(ind_names$cell_line)}_{unique(ind_names$group_id)}')
+ind_names <- as.character(ind_names)
+ind_names
+```
+
+```{r}
+summarised_freedman_chip_dt <- filtered_freedman_chip_dt %>%
+    dplyr::group_by(groups) %>%
+    dplyr::summarise(start=min(start), end=max(end), num=max(num), across(c(ind_names), max)) 
+    #%>%
+    #dplyr::distinct(ms, me, num, .keep_all=F)
+summarised_freedman_chip_dt 
+```
+
+The groups are the indices
+```{r}
+summarised_freedman_chip_dt$groups
+```
+
+```{r}
+ind_id <- 'LuCaP_136'
+crit_id <- summarised_freedman_chip_dt[, c('groups', 'num', ind_id)]
+id_granges <- kawakami_granges[crit_id$groups]
+mcols(id_granges)$class <- ifelse(crit_id[[ind_id]] == 0, 0, 1)
+mcols(id_granges)$binding_counts <- ifelse(crit_id[[ind_id]] == 0, 0, crit_id$num)
+id_granges
+```
+
+```{r}
+p_set <- as.data.frame(id_granges)
+names(p_set)[1] <- 'chr'
+p_set <- p_set[, c('chr', 'start', 'end', 'class', 'binding_counts')]
+p_set |> head()
+```
+
+```{r}
+id_set <- rbind(p_set, u_set)
+id_set <- id_set[sample(1:nrow(id_set), nrow(id_set), replace=F), ]
+id_set |> dim() ; id_set |> head()
+```
+
+```{r}
+gt <- with(id_set, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+```
+
+
+```{r}
+dataset <- 'freedman'
+todays_date <- Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+
+```
+
+```{r}
+lapply(ind_names, function(ind_id){
+    crit_id <- summarised_freedman_chip_dt[, c('groups', 'num', ind_id)]
+    id_granges <- kawakami_granges[crit_id$groups]
+    mcols(id_granges)$class <- ifelse(crit_id[[ind_id]] == 0, 0, 1)
+    mcols(id_granges)$binding_counts <- ifelse(crit_id[[ind_id]] == 0, 0, crit_id$num)
+
+    p_set <- as.data.frame(id_granges)
+    names(p_set)[1] <- 'chr'
+    p_set <- p_set[, c('chr', 'start', 'end', 'class', 'binding_counts')]
+
+    id_set <- rbind(p_set, u_set)
+    id_set <- id_set[sample(1:nrow(id_set), nrow(id_set), replace=F), ]
+
+    id_set <- with(id_set, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+    write.table(id_set[, 1], glue('{save_dir}/predictors/{ind_id}_{TF}_{nrow(id_set)}.txt'), col.names=F, quote=F, row.names=F)
+    write.table(id_set, glue('{save_dir}/ground_truth/{ind_id}_{TF}_{nrow(id_set)}.txt'), col.names=F, quote=F, row.names=F)
+
+})
+```
+
+Save Kawakami too ^^
+
+```{r}
+dataset <- 'kawakami'
+todays_date <- Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+k_set <- with(kawakami_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(k_set[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(k_set)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(k_set, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(k_set)}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+
+
+```{r}
+id_set$binding_counts |> table()
+```
+
+
+
+
+
+
+
+
+
+
+

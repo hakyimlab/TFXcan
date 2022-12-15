@@ -100,7 +100,7 @@ def theta_htParslConfig(params):
     return(cobalt_htex)
 
 
-def polaris_htParslConfig(workingdir=None):
+def polaris_htParslConfig(params):
 
     import parsl
     from parsl.config import Config
@@ -110,28 +110,25 @@ def polaris_htParslConfig(workingdir=None):
     from parsl.providers import PBSProProvider
 
     print(f'Parsl version: {parsl.__version__}')
-
     # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
-    if workingdir is None:
-        workingdir = '/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
-        rundir = f'{workingdir}/runinfo'
+    workingdir = params['working_dir']
+    rundir = f'{workingdir}/runinfo'
+    job_name = params['job_name']
     
     # I want to put the cobalt directives 
     sch_options = ['#PBS -l filesystems=home:grand:eagle',
-                    '#PBS -N enformer-predict-personalized',
-                    '#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.out',
-                    '#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/cobalt-log/enformer-predict-personalized.err'
+                    f'#PBS -N {job_name}',
+                    f'#PBS -o {workingdir}/cobalt_log/{job_name}.out',
+                    f'#PBS -e {workingdir}/cobalt_log/{job_name}.err',
+                    f'#PBS -k doe'
     ]
 
     sch_options = '\n'.join(sch_options)
 
-    # worker init
-    #workerinit = 'source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib'
-
     user_opts = {
         'polaris': {
             # Node setup: activate necessary conda environment and such.
-            'worker_init': 'source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib',
+            'worker_init': 'source /home/temi/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib',
             'scheduler_options': f'{sch_options}',
             # ALCF allocation to use
             'account': 'covid-ct',
@@ -141,6 +138,7 @@ def polaris_htParslConfig(workingdir=None):
     pbs_htex = Config(
         executors=[
             HighThroughputExecutor(
+                label='htex-Cobalt',
                 available_accelerators=4,  # Pin each worker to a different GPU
                 max_workers=4,
                 address=address_by_hostname(),
@@ -149,19 +147,60 @@ def polaris_htParslConfig(workingdir=None):
                         bind_cmd="--cpu-bind", overrides="--depth=64 --ppn 1"
                     ),  # Ensures 1 manger per node, work on all 64 cores
                     account=user_opts['polaris']['account'],
-                    queue='preemptable',
+                    queue='prod',
                     cpus_per_node=32,
                     select_options='ngpus=4',
                     worker_init=user_opts['polaris']['worker_init'],
                     scheduler_options=user_opts['polaris']['scheduler_options'],
-                    walltime='00:20:00',
-                    nodes_per_block=1,
-                    init_blocks=0,
-                    min_blocks=0,
-                    max_blocks=4,
+                    walltime=params['walltime'],
+                    nodes_per_block=params['num_of_full_nodes'],
+                    init_blocks=1,
+                    min_blocks=params['min_num_blocks'],
+                    max_blocks=params['max_num_blocks'],
                 ),
             )
         ],
         run_dir=rundir
     )
     return pbs_htex
+
+def polaris_localParslConfig(params):
+
+    import parsl
+    # Make a config that runs on two nodes
+    from parsl.executors import HighThroughputExecutor
+    from parsl.providers import LocalProvider
+    from parsl.config import Config
+    from parsl.channels import LocalChannel
+    from parsl.launchers import MpiExecLauncher
+
+    print(f'Parsl version: {parsl.__version__}')
+    # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
+    workingdir = params['working_dir']
+    rundir = f'{workingdir}/runinfo'
+    job_name = params['job_name']
+
+    local_htex = Config(
+        executors=[
+            HighThroughputExecutor(
+                label="htex_Local",
+                max_workers=4, # vs max_workers
+                available_accelerators=4,
+                worker_debug=True,
+                cores_per_worker=1, # how many cores per worker #nodes_per_block, 2 is usually enough or 1.
+                working_dir=workingdir,
+                provider=LocalProvider(
+                    channel=LocalChannel(),
+                    init_blocks=1,
+                    min_blocks=params['min_num_blocks'],
+                    max_blocks=params['max_num_blocks'],
+                    launcher=MpiExecLauncher(bind_cmd="--cpu-bind", overrides="--depth=64 --ppn 1"),
+                    worker_init='source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib'
+                ),
+            )
+        ],
+        strategy=None,
+        run_dir=rundir
+    )
+
+    return(local_htex)
