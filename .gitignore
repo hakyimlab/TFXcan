@@ -15,11 +15,11 @@ old_scripts/
 !metadata/
 !enformer_pipeline/scripts/
 !enformer_pipeline/metadata/
-!enformer_pipeline/README
+!enformer_pipeline/README.md
 !impact_pipeline/motif_intervals/
 !impact_pipeline/scripts/
-!impact_pipeline/README
-!README
+!impact_pipeline/README.md
+!README.md
 !modeling_pipeline/
 !.gitignore
 
