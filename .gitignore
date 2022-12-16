@@ -18,6 +18,7 @@ old_scripts/
 !enformer_pipeline/README
 !impact_pipeline/motif_intervals/
 !impact_pipeline/scripts/
+!impact_pipeline/README
 !README
 !modeling_pipeline/
 !.gitignore
