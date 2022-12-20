@@ -35,7 +35,7 @@ common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}'
 
 Read in the kawakami defined regions
 ```{r}
-dr <- Sys.glob(glue('{project_dir}/defined_regions/kawakami/regions_2022-12-15/{id}_{TF}_*.txt'))
+dr <- Sys.glob(glue('{project_dir}/defined_regions/kawakami/regions_2022-12-20/{id}_{TF}_*.txt'))
 file.exists(dr)
 
 kawakami_dr <- data.table::fread(dr)

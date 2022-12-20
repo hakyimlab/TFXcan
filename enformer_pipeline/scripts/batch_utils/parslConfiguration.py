@@ -40,7 +40,6 @@ def localParslConfig():
 
     return(local_htex)
 
-
 def theta_htParslConfig(params):
 
     import parsl
@@ -99,7 +98,6 @@ def theta_htParslConfig(params):
 
     return(cobalt_htex)
 
-
 def polaris_htParslConfig(params):
 
     import parsl
@@ -147,7 +145,7 @@ def polaris_htParslConfig(params):
                         bind_cmd="--cpu-bind", overrides="--depth=64 --ppn 1"
                     ),  # Ensures 1 manger per node, work on all 64 cores
                     account=user_opts['polaris']['account'],
-                    queue='prod',
+                    queue=params['queue'], #preemptable',
                     cpus_per_node=32,
                     select_options='ngpus=4',
                     worker_init=user_opts['polaris']['worker_init'],

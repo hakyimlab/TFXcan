@@ -1,39 +1,48 @@
-
-arguments <- commandArgs(trailingOnly=TRUE) |> as.numeric()
+arguments <- commandArgs(trailingOnly=TRUE) #|> as.numeric()
 
 library(glue)
 library(xgboost)
 library(data.table)
 
-project_dir <- '/grand/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
+xgb_arguments <- arguments[1:6]
+
+#print(glue('[INFO] Arguments are {arguments}'))
+
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
 # date
 run_date <- Sys.Date()
 
 id <- 'kawakami'
 TF <- 'FOXA1'
 
-data_dir <- glue('{project_dir}/data/enet_data')
+data_file <- arguments[7] #glue('{project_dir}/data/enet_data')
+unique_id <- arguments[8]
 output_dir <- glue('{project_dir}/models/xgboost_cv')
+if(!dir.exists(output_dir)){
+    dir.create(output_dir, recursive=T)
+}
 
 # read in the training data
-train_data <- data.table::fread(paste0(data_dir, '/train_enet.csv.gz'))
+train_data <- data.table::fread(data_file)
 
 X <- train_data[, -c(1,2,3)] |> as.matrix()
 y <- train_data$class
+
 # set up param list
-params <- list(colsample_bytree=arguments[1], max_depth=arguments[2], eta=arguments[3], gamma=arguments[4], lambda=arguments[5], alpha=arguments[6], verbosity=0, objective = "binary:logistic", eval_metric='auc', booster='gbtree')
+params <- list(colsample_bytree=xgb_arguments[1], max_depth=xgb_arguments[2], eta=xgb_arguments[3], gamma=xgb_arguments[4], lambda=xgb_arguments[5], alpha=xgb_arguments[6], verbosity=0, objective = "binary:logistic", eval_metric='auc', booster='gbtree')
 dtrain <- xgboost::xgb.DMatrix(data=X, label=y)
 
 # # uses 5-folds cross validation
-cat('[INFO] Starting cross-validation\n')
-xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=99, nfold=5, metrics='auc', early_stopping_rounds = 20, print_every_n = 10, nthread=2, verbose=T)
-cat('[INFO] Cross-validation done\n')
+print(glue('[INFO] Starting cross-validation for row {arguments[9]}'))
+xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=100, nfold=5, metrics='auc', early_stopping_rounds = 20, verbose=0)
+#print('[INFO] Cross-validation done')
 
 scores <- as.data.frame(xgb_model$evaluation_log)
-test_auc <- tail(scores$test_auc_mean, 1)
-train_auc <- tail(scores$train_auc_mean, 1)
+idmax_test_auc <- which.max(scores$test_auc_mean)
+test_auc <- scores$test_auc_mean[idmax_test_auc]
+train_auc <- scores$train_auc_mean[idmax_test_auc]
 
-results <- c(test_auc, train_auc, arguments) |> as.data.frame() |> t()
-cat('[INFO] Saving output\n')
-write.table(results, file=glue('{output_dir}/cv_results_{run_date}.txt'), append=T, row.names=F, quote=F, col.names=F)
-cat('[INFO] Job complete\n')
+results <- c(test_auc, train_auc, xgb_arguments) |> as.data.frame() |> t()
+print(glue('[INFO] Saving cv result for row {arguments[9]}'))
+write.table(results, file=glue('{output_dir}/cv_results_{unique_id}_{argument[10]}_{run_date}.txt'), append=T, row.names=F, quote=F, col.names=F)
+print(glue('[INFO] Job complete for row {arguments[9]}'))
