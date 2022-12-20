@@ -33,7 +33,7 @@ setwd(project_dir)
 
 TF <- 'FOXA1'
 id <- 'kawakami'
-kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-16')
+kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-20')
 ```
 
 ```{r}
@@ -41,6 +41,18 @@ kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-
 kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/{id}_aggByCenter_{TF}.csv.gz'))
 dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
 ```
+
+```{r}
+# using the aggByCenter 
+kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/kawakami_aggByMean_FOXA1_compiled.csv.gz'))
+dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
+```
+
+```{r}
+length(unique(kawakami_center_dt$V1))
+```
+
+
 
 Ground truth (or class)
 

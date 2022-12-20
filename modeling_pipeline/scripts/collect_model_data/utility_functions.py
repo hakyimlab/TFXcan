@@ -2,11 +2,12 @@
 import pandas as pd
 import numpy as np
 
-def localParslConfig(params):
-    from tqdm import tqdm
-    from parsl import python_app
-    import parsl
-    import json
+# these are the bins
+upstream = list(range(0, 8))
+center = [8]
+downstream = list(range(9, 17))
+
+def localParslConfig_htpool(params):
 
     # Make a config that runs on two nodes
     from parsl.executors import HighThroughputExecutor
@@ -50,21 +51,18 @@ def localParslConfig(params):
 def localParslConfig_threadpool(params):
  
     import parsl
-    # Make a config that runs on two nodes
     from parsl.executors import ThreadPoolExecutor
     from parsl.config import Config
 
     import os
     workingdir = params['working_dir']
     rundir = os.path.join(workingdir, 'runinfo')
-
     parsl.clear()
-
     local_tpex = Config(
         executors=[
             ThreadPoolExecutor(
                 label="tpex_Local",
-                max_threads=16,
+                max_threads=8,
                 thread_name_prefix='tpex_run',
                 working_dir=workingdir,
             )
@@ -74,11 +72,6 @@ def localParslConfig_threadpool(params):
     )
 
     return(local_tpex)
-
-# these are the bins
-upstream = list(range(0, 8))
-center = [8]
-downstream = list(range(9, 17))
 
 # can aggregate by the mean of all bins, mean of the upstream and/or downstream alone, or just select the center
 def agg_by_mean(pred_tracks, use_bins=None):
@@ -122,13 +115,19 @@ def agg_byall(pred_tracks, center=8):
     
     return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
 
-def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, base_path, save_dir, agg_types):
+def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, base_path, save_dir, agg_types, batch_num=None):
 
     import h5py
     import numpy as np
     import os
     import pandas as pd
+    #import tqdm
     # read in one of the files
+
+    try:
+        import utility_functions
+    except ModuleNotFoundError:
+        print(f'[ERROR] Utility_functions module not found.')
 
     #exec(open(f'{base_path}/modeling_pipeline/scripts/collect_model_data/utility-functions.py').read(), globals(), globals())
     # bpath = os.path.join(base_path, 'modeling_pipeline')
@@ -136,7 +135,7 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
     kawakami_predictions = {}
 
-    for dt in tqdm.tqdm(log_data.loc[log_data['sequence_type'] == 'ref', ].motif.values.tolist()):
+    for dt in log_data.loc[log_data['sequence_type'] == 'ref', ].motif.values.tolist():
         fle = f'{predictions_path}/{dt}_predictions.h5'
         if os.path.isfile(fle):
             with h5py.File(fle, 'r') as f:
@@ -152,11 +151,11 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
     data_dict = {}
     for agg_type in agg_types:
-        if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(kawakami_predictions)
-        if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions)
-        if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream)
-        if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=downstream)
-        if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream + downstream)
+        if agg_type == 'aggByMean': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions)
+        if agg_type == 'aggByCenter': data_dict[agg_type] = utility_functions.agg_by_center(kawakami_predictions)
+        if agg_type == 'aggByUpstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=upstream)
+        if agg_type == 'aggByDownstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=downstream)
+        if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=upstream + downstream)
 
     #test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream = agg_byall(kawakami_predictions)
     #data_list = [test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream]
@@ -174,13 +173,52 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
         ty = ty.set_axis(column_names, axis=1, inplace=False)
         print(ty.iloc[0:5, 0:5])
 
-        ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}.csv.gz', index=False, compression='gzip')
-    print(f'[INFO] Finished saving data for {each_id}')
+        if batch_num is None:
+            ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}.csv.gz', index=False, compression='gzip')
+        else:
+            ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}_batch_{batch_num}.csv.gz', index=False, compression='gzip')
+            
+    print(f'[INFO] Finished saving data for {each_id} for batch {batch_num}')
 
     return(0)
 
+def return_prediction_function(use_parsl, fxn=collect_modeling_data_for_kawakami):
+    '''
+    Decorate or not the `run_batch_predictions` function based on whether `use_parsl` is true or false
+    Returns: 
+        function object
+        The function if parsl is not used
+        The parsl decorated function if parsl is meant to be used
+    
+    '''
+    from parsl.app.app import python_app
+    if use_parsl == True:
+        return python_app(fxn)
+    elif use_parsl == False:
+        return fxn
 
-
+def generate_batch(lst, batch_n, len_lst = None):
+    """
+    Given a list, this function yields batches of an unspecified size but the number of batches is equal to `batch_n`
+    E.g. generate_batch([0, 1, 2, 3, 4, 5, 6], batch_n=2) -> (0, 1, 2, 3), (4, 5, 6)
+    
+    Parameters:
+        lst: list
+        batch_n: int
+            Number of batches to return
+        len_lst: None or num (length of the input list)
+    Yields
+        `batch_n` batches of the list
+    """
+    import math
+    # how many per batch
+    if len_lst is not None:
+        n_elems = math.ceil(len_lst/batch_n)
+    else:
+        n_elems = math.ceil(len(lst)/batch_n)
+        
+    for i in range(0, len(lst), n_elems):
+        yield lst[i:(i + n_elems)]
 
 
 # def get_bed_files(dcids=[1], data_type='TF', cistrome_dir='/projects/covid-ct/imlab/data/cistrome/compressed', data_info=None):
