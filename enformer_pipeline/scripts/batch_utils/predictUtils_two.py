@@ -208,10 +208,19 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
 
     SEQUENCE_LENGTH = 393216
 
-    region_split = region.split('_')
-    region_chr = region_split[0]
-    region_start = int(region_split[1])
-    region_end = int(region_split[2])
+    try:
+        region_split = region.split('_')
+        region_chr = region_split[0]
+        region_start = int(region_split[1])
+        region_end = int(region_split[2])
+    except ValueError:
+        if write_log['error']:
+            err_msg = f'[REGION ERROR] {region} input start or end is invalid.'
+            MEMORY_ERROR_FILE = f"{log_dir}/error_details.log"
+            setup_logger('error_log', MEMORY_ERROR_FILE)
+            logger(err_msg, 'error', 'run_error')
+        return(None)
+
 
     if fasta_func is None:
         fasta_object = get_fastaExtractor()
@@ -317,7 +326,7 @@ def create_individual_input_for_enformer(region, fasta_func, hap_type = 'hap1', 
         a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
 
     # check that all the sequences in a are valid
-    if all(i == 'N' for i in a['sequences']):
+    if all(i == 'N' for i in a['sequences']) or (a is None):
         #print(f'[INPUT ERROR] {region} is invalid; all nucleotides are N.')
         if write_log['error']:
             err_msg = f'[INPUT ERROR] {region} is invalid; all nucleotides are N.'

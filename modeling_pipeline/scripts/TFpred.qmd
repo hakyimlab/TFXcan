@@ -33,7 +33,7 @@ setwd(project_dir)
 
 TF <- 'FOXA1'
 id <- 'kawakami'
-kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-12')
+kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-16')
 ```
 
 ```{r}
@@ -45,7 +45,7 @@ dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
 Ground truth (or class)
 
 ```{r}
-ground_truth_path <- Sys.glob(paste0(project_dir, '/../impact_pipeline/motif_intervals/kawakami/intervals_2022-12-11/ground_truth/', id, '_', TF, '_*.txt'))
+ground_truth_path <- Sys.glob(paste0(project_dir, '/../impact_pipeline/motif_intervals/kawakami/intervals_2022-12-15/ground_truth/', id, '_', TF, '_*.txt'))
 ground_truth_path
 ```
 
@@ -95,7 +95,7 @@ new_dt[1:5, 1:5] ; dim(new_dt)
 Split into 80-20
 ```{r}
 set.seed(2022)
-tr_size <- ceiling(nrow(new_dt) * 0.8)
+tr_size <- ceiling(nrow(new_dt) * 1)
 tr_indices <- sample(1:nrow(new_dt), tr_size)
 ```
 
@@ -103,6 +103,11 @@ tr_indices <- sample(1:nrow(new_dt), tr_size)
 train <- new_dt[tr_indices, ]
 test <- new_dt[-tr_indices, ]
 ```
+
+```{r}
+train[1:5, 1:5]
+```
+
 Save the data
 ```{r}
 save_dir <- paste0(project_dir, '/data/enet_data/data_', Sys.Date())
@@ -111,9 +116,15 @@ if(!dir.exists(save_dir)){
 }
 ```
 ```{r}
-write.csv(x=train, file=gzfile(paste0(save_dir, '/train_enet.csv.gz')))
-write.csv(x=test, file=gzfile(paste0(save_dir, '/test_enet.csv.gz')))
+write.csv(x=train, file=gzfile(glue('{save_dir}/train_enet_{Sys.Date()}.csv.gz')), quote=F, row.names=F)
+#write.csv(x=test, file=gzfile(paste0(save_dir, '/test_enet.csv.gz')))
 ```
+
+```{r}
+temp_dt <- data.table::fread(glue('{save_dir}/train_enet_{Sys.Date()}.csv.gz'))
+temp_dt[1:5, 1:5] ; temp_dt |> dim()
+```
+Good!
 
 
 
@@ -167,19 +178,18 @@ nbc[nbc > 0.9]
 I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
 ```{r}
 # path to the data
-training_data <- paste0(project_dir, '/data/enet_data/data_2022-12-13/balanced_enet.csv.gz')
-training_data
+training_data <- paste0(project_dir, '/data/enet_data/data_2022-12-16/train_enet_2022-12-16.csv.gz')
+training_data ; file.exists(training_data)
 ```
 
 ```{r}
-pbs_script <- glue('qsub -v "data_file={training_data}" {project_dir}/scripts/enet/train_enet_model_pbs.sh')
-pbs_script
+mtinfo <- 'with_mixing_parameters'
 ```
-<<<<<<< HEAD
 
 ```{r}
-system(pbs_script)
-=======
+pbs_script <- glue('qsub -v data_file={training_data},metainfo={mtinfo} {project_dir}/scripts/enet/train_enet_model_pbs.sh')
+pbs_script #; file.exists(pbs_script)
+```
 
 ```{r}
 system(pbs_script)
@@ -187,20 +197,11 @@ system(pbs_script)
 
 ```{r}
 system("qstat -u temi")
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 Read in the model(s)
 ```{r}
-<<<<<<< HEAD
-system("qstat -u temi")
-```
-
-Read in the model(s)
-```{r}
-=======
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
-enet_binary_model <- readRDS(paste0(project_dir, '/models/enet_models/kawakami_center_binary_balanced_2022-12-14.rds'))
+enet_binary_model <- readRDS(paste0(project_dir, '/models/enet_models/kawakami_center_binary_matched_2022-12-16.rds'))
 enet_binary_model
 ```
 
@@ -214,12 +215,9 @@ enet_binary_old_model <- readRDS(paste0(project_dir, '/models/enet_models/kawaka
 enet_binary_old_model
 ```
 
-<<<<<<< HEAD
-=======
 
 
 
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 Test on the training data itself
 ```{r}
 #test_data <- data.table::fread(paste0(project_dir, '/data/enet_data/data_', Sys.Date(), '/balanced_enet.csv.gz'))
@@ -231,8 +229,6 @@ vbc <- y_test$binding_counts
 y_test$nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
 
 X_test |> dim() ; X_test[1:5, 1:5] ; y_test |> head()
-<<<<<<< HEAD
-=======
 ```
 
 ```{r}
@@ -268,15 +264,11 @@ lines(deny)
 
 polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5) )
 polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 ```{r}
 predicted <- predict(enet_binary_model, X_test, type='class')
 prediction_table <- cbind(observed=y_test$class, predicted=as.numeric(predicted)) |> as.data.frame()
-<<<<<<< HEAD
-prediction_table[1:5, ]
-=======
 prediction_table[1:5, ] ; with(prediction_table, table(observed, predicted))
 ```
 
@@ -284,102 +276,10 @@ prediction_table[1:5, ] ; with(prediction_table, table(observed, predicted))
 predicted <- predict(enet_binary_old_model, X_test, type='class')
 prediction_table <- cbind(observed=y_test$class, predicted=as.numeric(predicted)) |> as.data.frame()
 prediction_table[1:5, ] ; with(prediction_table, table(observed, predicted))
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 ### Some fancy plots
 ```{r}
-<<<<<<< HEAD
-with(prediction_table, table(observed, predicted))
-```
-
-```{r}
-predicted <- predict(enet_linear_model, X_test, type='class')
-prediction_table <- cbind(observed=y_test$nbc, predicted=as.numeric(predicted)) |> as.data.frame()
-prediction_table[1:5, ]
-```
-
-```{r}
-(with(prediction_table, observed - predicted)**2) |> mean()
-```
-
-```{r}
-with(prediction_table, (max(predicted) - predicted)/(max(predicted) - min(predicted)))
-```
-
-
-Read in the test set: LuCaP_145 and LuCaP_136
-```{r}
-test_data_dir <- glue('{project_dir}/data/train-test-val/freedman/data_2022-12-13')
-```
-
-```{r}
-individual <- 'LuCaP_208' #'LuCaP_145'
-
-test_data_path <- glue('{test_data_dir}/{individual}_aggByCenter_FOXA1.csv.gz')
-test_data <- data.table::fread(test_data_path)
-test_data[1:5, 1:5]
-```
-
-Ground truth (or class)
-```{r}
-gt_file <- Sys.glob(glue('{project_dir}/../impact_pipeline/motif_intervals/freedman/intervals_2022-12-11/ground_truth/{individual}_{TF}_*.txt'))
-
-ground_truth <- data.table::fread(gt_file)
-head(ground_truth)
-```
-
-```{r}
-gt <- ground_truth[ground_truth$V1 %in% test_data$id, ]
-dim(gt) ; length(unique(gt$V1))
-```
-
-```{r}
-find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
-  n_occur <- data.frame(table(dt[[col]]))
-
-  if(return_dups == TRUE){
-    return(dt[dt[[col]] %in% n_occur$Var1[n_occur$Freq > 1],])
-  } else {
-    return(n_occur[n_occur$Freq > 1,])
-  }
-}
-```
-
-```{r}
-find_duplicates_in_dataframe(gt, col='V1')
-```
-Keep first occurrence of duplicates
-```{r}
-gt_dedup <- gt[!duplicated(gt[['V1']]),]
-dim(gt_dedup)
-```
-
-Merge `gt_dedup` with the data
-```{r}
-new_dt <- merge(gt_dedup, test_data, by.x='V1', by.y='id')
-new_dt[1:5, 1:5] ; dim(new_dt)
-```
-
-```{r}
-colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
-new_dt[1:5, 1:5] ; dim(new_dt)
-```
-
-```{r}
-X_test <- new_dt[, -c(1:3)] |> as.matrix()
-y_test <- new_dt[, c(1:3)] |> as.data.frame()
-```
-
-```{r}
-predicted_values <- glmnet::predict.glmnet(enet_binary_balanced_model$glmnet.fit, X_test, type='class')
-predicted_values[, 1] |> table()
-```
-
-
-```{r}
-test_models(enet_binary_balanced_model, X_test, y_test$class)
-=======
 a <- predict(enet_binary_model, X_test, type='response') #|> boxplot()
 b <- cbind(probabilities=a[,1], true_class=y_test$class) |> as.data.frame()
 ```
@@ -403,7 +303,6 @@ lines(deny)
 
 polygon(denx, col = adjustcolor("aquamarine", alpha.f=0.5) )
 polygon(deny, col = adjustcolor("darkorange", alpha.f=0.5))
->>>>>>> 36da6727ffb7caab6253ac17f3c21d86f6a76839
 ```
 
 
@@ -668,6 +567,303 @@ library(DiagrammeR)
 library(DiagrammeRsvg)
 library(rsvg)
 ```
+Create cv parameters
+```{r}
+# here we use a grid search to find the optimal hyperparameters
+set.seed(2022)
+xgb_grid_search <- expand.grid(colsample_bytree = c(0.2, 0.5, 0.7), max_depth=c(5, 20, 40), eta=c(0.01, 0.1, 1), gamma=c(20, 50), lambda=c(1, 10, 20), alpha=c(0, 10, 20))
+xgb_grid_search <- xgb_grid_search[sample(1:nrow(xgb_grid_search), nrow(xgb_grid_search)), ]
+xgb_grid_search[1:5, ] ; dim(xgb_grid_search)
+```
+
+```{r}
+max_ <- 49
+ids <- 1:nrow(xgb_grid_search)
+ids_list <- split(xgb_grid_search, ceiling(ids/max_))
+
+dir.create(glue('{project_dir}/metadata/cv_split'))
+lapply(seq_along(ids_list), function(i){
+  write.table(xgb_grid_search, file=glue('{project_dir}/metadata/cv_split/xgb_gridcv_parameters_{i}.txt'), quote=F, row.names=F, col.names=F)
+})
+```
+
+```{r}
+list.files(glue('{project_dir}/metadata/cv_split'))
+```
+
+
+
+```{r}
+write.table(xgb_grid_search[1:10, ], file=glue('{project_dir}/metadata/xgb_gridcv_parameters.txt'), quote=F, row.names=F, col.names=F)
+```
+
+I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
+```{r}
+# path to the data
+training_data <- paste0(project_dir, '/data/enet_data/data_2022-12-16/train_enet_2022-12-16.csv.gz')
+training_data ; file.exists(training_data)
+```
+
+```{r}
+# path to cv data
+cv_params <- glue('{project_dir}/metadata/xgb_gridcv_parameters.txt')
+cv_params ; file.exists(cv_params)
+```
+
+```{r}
+mtinfo <- 'single_params'
+param_num <- 0
+```
+
+```{r}
+xgboost_pbs_script <- glue('qsub -v data_file={training_data},grid_parameters={cv_params},metainfo={mtinfo},param_num={i} {project_dir}/scripts/xgboost/cv_xgboost_pbs.sh')
+xgboost_pbs_script #; file.exists(pbs_script)
+```
+
+```{r}
+system(xgboost_pbs_script)
+```
+```{r}
+system("qstat -u temi")
+```
+
+#### Can run larger cross validations this way
+```{r}
+# here we use a grid search to find the optimal hyperparameters
+set.seed(2022)
+xgb_grid_search <- expand.grid(colsample_bytree = c(0.2, 0.5, 0.7), max_depth=c(5, 20, 40), eta=c(0.01, 0.1, 1), gamma=c(20, 50), lambda=c(1, 10, 20), alpha=c(0, 10, 20))
+xgb_grid_search <- xgb_grid_search[sample(1:nrow(xgb_grid_search), nrow(xgb_grid_search)), ]
+xgb_grid_search[1:5, ] ; dim(xgb_grid_search)
+```
+
+```{r}
+# max_ <- 10 # 49 is the max for the mediumn queue ; change to 24 for small queue
+# ids <- 1:nrow(xgb_grid_search)
+# ids_list <- split(xgb_grid_search, ceiling(ids/max_))
+
+ids <- sample(1:max_, nrow(xgb_grid_search), replace=T) |> sort()
+ids_list <- split(xgb_grid_search, ids)
+
+dir.create(glue('{project_dir}/metadata/cv_split'))
+lapply(seq_along(ids_list), function(i){
+  write.table(ids_list[[i]], file=glue('{project_dir}/metadata/cv_split/xgb_gridcv_parameters_{i}.txt'), quote=F, row.names=F, col.names=F)
+})
+```
+
+```{r}
+list.files(glue('{project_dir}/metadata/cv_split'))
+```
+
+```{r}
+# write out the full paths of the params you want to batch run
+list.files(glue('{project_dir}/metadata/cv_split'), full.names=T) |> cat(file=glue('{project_dir}/metadata/params_files.txt'), sep='\n')
+```
+
+```{r}
+cv_params <- glue('{project_dir}/metadata/params_files.txt')
+mtinfo <- 'batch_run'
+```
+
+```{r}
+xgboost_pbs_script <- glue('qsub -v data_file={training_data},grid_parameters={cv_params},metainfo={mtinfo} {project_dir}/scripts/xgboost/cv_xgboost_pbs.sh')
+system(xgboost_pbs_script)
+```
+
+
+```{r}
+#mtinfo <- 'batch_params'
+for(i in 1:10){
+  #cv_params <- glue('{project_dir}/metadata/cv_split/xgb_gridcv_parameters_{i}.txt')
+  xgboost_pbs_script <- glue('qsub -v data_file={training_data},grid_parameters={cv_params},metainfo={mtinfo},param_num={i} {project_dir}/scripts/xgboost/cv_xgboost_pbs.sh')
+  print(xgboost_pbs_script)
+}
+```
+
+```{r}
+system("qstat -u temi")
+```
+
+
+#####
+
+```{r}
+set.seed(2022)
+xgb_grid_search <- expand.grid(colsample_bytree = c(0.2), max_depth=c(5), eta=c(0.01), gamma=c(20, 50), lambda=c(1, 20), alpha=c(10, 20))
+xgb_grid_search <- xgb_grid_search[sample(1:nrow(xgb_grid_search), nrow(xgb_grid_search)), ] |> unname()
+xgb_grid_search[1:5, ] ; dim(xgb_grid_search)
+```
+
+```{r}
+grid_model <- apply(xgb_grid_search[1:2, ], 1, function(xgb_arguments){
+
+  xgb_params <- list(colsample_bytree=xgb_arguments[1], max_depth=xgb_arguments[2], eta=xgb_arguments[3], gamma=xgb_arguments[4], lambda=xgb_arguments[5], alpha=xgb_arguments[6])
+  params <- c(xgb_params, list(objective = "binary:logistic", eval_metric='auc'))
+
+  #print(xgb_params)
+  # uses 3-folds cross validation
+  xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=5, nfold=3, metrics='auc', early_stopping_rounds = 20, verbose=0)
+
+  scores <- as.data.frame(xgb_model$evaluation_log)
+  test_auc <- tail(scores$test_auc_mean, 1)
+  train_auc <- tail(scores$train_auc_mean, 1)
+
+  return(c(test_auc=test_auc, train_auc=train_auc, unlist(xgb_params)))
+
+
+
+}) |> t()
+
+grid_model
+```
+
+####
+
+```{r}
+set.seed(2022)
+n <- 500
+x1 <- rnorm(n, 3, 0.5)
+x2 <- runif(n, 0, 20)
+X_train <- cbind(x1, x2)
+y_train <- ifelse((x1 + x2)**(x1 - x2) < mean(x1), 0, 1)
+#dtrain <- xgboost::xgb.DMatrix(data=X_train, label=y_train)
+```
+```{r}
+parallel::detectCores()
+ncores <- 3
+```
+
+```{r}
+# register workers/cores
+print(glue('[INFO] Detected {parallel::detectCores()} cores.'))
+cl <- parallel::makeForkCluster(ncores, outfile = glue('{project_dir}/log/foreach.out'))
+doParallel::registerDoParallel(cl)
+print(glue('[INFO] Registered {ncores} cores.'))
+#print(glue('Cluster call: {clusterCall(cl, function() Sys.info()[c("nodename","machine")])}'))
+```
+
+```{r}
+params_data <- data.table::fread(glue('{project_dir}/metadata/cv_split/xgb_gridcv_parameters_1.txt'), header=F)[1:3, ] #|> unname()
+params_data
+```
+
+```{r}
+# set up param list # .export=ls(globalenv())
+#print(glue('[INFO] Starting cross-validation for batch {batch_num}'))
+xgb_grid_result <- foreach::foreach(i=1:nrow(params_data), .combine='rbind') %dopar% {
+  print(glue('[INFO] Currently on row {i}'))
+
+  # dtrain <- xgboost::xgb.DMatrix(data=X, label=y)
+  dtrain <- xgboost::xgb.DMatrix(data=X_train, label=y_train)
+
+  xgb_params <- list(colsample_bytree=params_data[i,1], max_depth=params_data[i,2], eta=params_data[i,3], gamma=params_data[i,4], lambda=params_data[i,5], alpha=params_data[i,6])
+  params <- c(xgb_params, list(objective = "binary:logistic", eval_metric='auc'))
+
+  print(params |> unlist())
+
+  # xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=20, nfold=3, metrics='auc', early_stopping_rounds = 10)
+
+  # scores <- as.data.frame(xgb_model$evaluation_log)
+  # idmax_test_auc <- which.max(scores$test_auc_mean)
+  # test_auc <- scores$test_auc_mean[idmax_test_auc]
+  # train_auc <- scores$train_auc_mean[idmax_test_auc]
+
+  # return(c(test_auc=test_auc, train_auc=train_auc, unlist(xgb_params)))
+}
+
+parallel::stopCluster(cl)
+registerDoSEQ()
+```
+
+```{r}
+xgb_grid_result <- parallel::mclapply(seq(1:nrow(params_data)), function(i){
+    print(glue('[INFO] Currently on row {i}'))
+
+    # dtrain <- xgboost::xgb.DMatrix(data=X, label=y)
+    dtrain <- xgboost::xgb.DMatrix(data=X_train, label=y_train)
+
+    xgb_params <- list(colsample_bytree=params_data[i,1], max_depth=params_data[i,2], eta=params_data[i,3], gamma=params_data[i,4], lambda=params_data[i,5], alpha=params_data[i,6])
+    params <- c(xgb_params, list(objective = "binary:logistic", eval_metric='auc'))
+
+    xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=20, nfold=3, metrics='auc', early_stopping_rounds = 10)
+
+    scores <- as.data.frame(xgb_model$evaluation_log)
+    idmax_test_auc <- which.max(scores$test_auc_mean)
+    test_auc <- scores$test_auc_mean[idmax_test_auc]
+    train_auc <- scores$train_auc_mean[idmax_test_auc]
+
+    return(c(test_auc=test_auc, train_auc=train_auc, unlist(xgb_params)))
+}, mc.cores=ncores) 
+
+xgb_grid_result <- do.call('rbind', xgb_grid_result)
+
+xgb_grid_result
+```
+
+
+### Split the data
+
+```{r}
+data_file <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-16/kawakami_aggByCenter_FOXA1.csv.gz"
+train_data <- data.table::fread(data_file)
+# X <- train_data[, -c(1,2,3)] |> as.matrix()
+# y <- train_data$class
+```
+
+```{r}
+small_train_data <- train_data[1:500, ]
+small_train_data |> dim()
+```
+
+```{r}
+small_train_data$class |> table()
+```
+
+
+
+
+```{r}
+n <- 200
+x1 <- rnorm(n, 6, 1)
+x2 <- runif(n, 1, 10)
+X_test <- cbind(x1, x2)
+y_test <- ifelse((x1 + x2)**(x1 - x2) < mean(x1), 0, 1)
+dtest <- xgboost::xgb.DMatrix(data=X_test, label=y_test)
+```
+
+```{r}
+params_1 <- xgb_grid_search[1, ] |> unlist() |> as.list()
+params_list <- c(params_1, list(verbosity=0, objective = "binary:logistic", eval_metric='auc', booster='gbtree'))
+```
+
+```{r}
+xgb_cv_run <- xgboost::xgb.cv(data=dtrain, params=params_list, nrounds=25, nfold=2, metrics='auc', early_stopping_rounds = 10, nthread=1, verbose=0)
+xgb_cv_run
+```
+
+```{r}
+threads <- c(1:25)
+#lapply(threads, function(nt){
+for(nt in threads){
+  start_time <- Sys.time()
+  xgb_cv_run <- xgboost::xgb.cv(data=dtrain, params=params_list, nrounds=25, nfold=2, metrics='auc', early_stopping_rounds = 10, nthread=nt, verbose=0)
+  end_time <- Sys.time()
+
+  print(round(end_time - start_time, 2))
+}
+
+```
+
+
+```{r}
+xgb_model_trained <- xgb.train(data=dtrain, params=params_list, nrounds=50, watchlist=list(training=dtrain, testing=dtest), print_every_n = 10, early_stopping_rounds = 20, verbose=0)
+xgb_model_trained
+```
+
+
+
+
+
+
 
 ```{r}
 # I should try with a small dataset
@@ -856,11 +1052,3 @@ output_cv_result <- foreach(i=1:nrow(xgb_grid_search), .combine='rbind', .packag
 
 stopCluster(fk_cl)
 ```
-
-
-
-
-
-
-
-

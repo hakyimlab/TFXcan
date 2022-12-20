@@ -42,7 +42,7 @@ dim(genome_wide_predicted_motifs) ; genome_wide_predicted_motifs[1:5, ]
 ```
 
 ```{r}
-threshold <- 11
+threshold <- 9
 predicted_motifs <- genome_wide_predicted_motifs[genome_wide_predicted_motifs$V6 >= threshold, ]
 dim(predicted_motifs) ; predicted_motifs[1:5, ]
 ```
