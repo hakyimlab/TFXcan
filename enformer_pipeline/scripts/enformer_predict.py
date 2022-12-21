@@ -26,10 +26,10 @@ def main():
     with open(f'{script_path}/../metadata/enformer_parameters.json') as f:
 
         parameters = json.load(f)
-        intervals_dir = script_path + '/../' + parameters['interval_list_dir']
+        intervals_dir = os.path.join(script_path, '..', parameters['interval_list_dir'])
         TF = parameters['TF']
-        predictions_log_dir = script_path + '/../' + parameters['predictions_log_dir']
-        log_dir = script_path + '/../' + parameters['log_dir']
+        predictions_log_dir = os.path.join(script_path, '..', parameters['predictions_log_dir'])
+        log_dir = os.path.join(script_path, '..', + parameters['log_dir'])
         batch_size = int(parameters['batch_size'])
         use_parsl = parameters['use_parsl']
         n_regions = parameters["predict_on_n_regions"]
@@ -39,19 +39,18 @@ def main():
         run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
 
 
-        output_dir = script_path + '/../' + parameters['output_dir'] + '/' + parameters['prediction_data_name'] + '/predictions_' + run_date
+        output_dir = os.path.join(script_path, '..', parameters['output_dir'], parameters['prediction_data_name'], 'predictions_' + run_date)
 
         if int(n_regions) == -1:
             predict_on_n_regions = None
         elif int(n_regions) > 0:
             predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
 
-
-        individuals = script_path + '/../' + parameters['individuals'] if dataset_type == 'personalized' else None
-        vcf_file = script_path + '/../' + parameters['vcf_file'] if dataset_type == 'personalized' else None
+        individuals = os.path.join(script_path, '..', parameters['individuals']) if dataset_type == 'personalized' else None
+        vcf_file = os.path.join(script_path, '..', parameters['vcf_file']) if dataset_type == 'personalized' else None
 
     # modify parsl parameters to add the working directory
-    parsl_parameters['working_dir'] = f'{script_path}/../'
+    parsl_parameters['working_dir'] = os.path.join(script_path, '..')
 
     predictions_log_dir = f'{predictions_log_dir}/{prediction_data_name}/predictions_log_{run_date}'
     if not os.path.isdir(predictions_log_dir):

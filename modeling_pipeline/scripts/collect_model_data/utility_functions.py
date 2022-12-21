@@ -62,7 +62,7 @@ def localParslConfig_threadpool(params):
         executors=[
             ThreadPoolExecutor(
                 label="tpex_Local",
-                max_threads=8,
+                max_threads=10,
                 thread_name_prefix='tpex_run',
                 working_dir=workingdir,
             )

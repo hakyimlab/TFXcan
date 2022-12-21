@@ -15,8 +15,8 @@ global log_dir, write_log, dataset_type
 with open(f'{module_path}/../../metadata/enformer_parameters.json') as f:
     parameters = json.load(f)
     project_dir = parameters['project_dir']
-    log_dir = module_path + '/../../' + parameters['log_dir']
-    vcf_file = module_path + '/../../' + parameters['vcf_file']
+    log_dir = os.path.join(module_path, '../../', parameters['log_dir'])
+    vcf_file = os.path.join(module_path, '../../', parameters['vcf_file'])
     #write_log = True if parameters["write_log"] == 'true' else False
     write_log = parameters["write_log"]
     dataset_type = parameters['dataset_type']
