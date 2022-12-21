@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -l select=1:system=polaris
-#PBS -l walltime=03:00:00,filesystems=grand
+#PBS -l walltime=06:00:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q preemptable  
 #PBS -N create_model_data_for_kawakami
