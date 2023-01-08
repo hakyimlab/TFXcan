@@ -1,6 +1,6 @@
 #!/bin/bash
-#PBS -l select=1:system=polaris
-#PBS -l walltime=06:00:00,filesystems=grand
+#PBS -l select=5:system=polaris
+#PBS -l walltime=00:05:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q preemptable  
 #PBS -N create_model_data_for_kawakami
@@ -31,7 +31,6 @@ conda activate dl-tools
 
 echo "PBS_JOBID = " $PBS_JOBID
 
-project_dir="/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline"
 id="kawakami"
 
 mpiexec -n 1 --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${project_dir}/scripts/collect_model_data/collect_kawakami.py" "${prediction_path}" "${log_dir}" "${id}" "${agg_type}"
@@ -41,7 +40,7 @@ echo "Exit status of training run is: $status"
 
 
 # == A way to run this script ===
-#qsub -v prediction_path=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/enformer_predictions/kawakami/predictions_2022-12-20/kawakami,log_dir=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/predictions_log/kawakami/predictions_log_2022-12-20,id=kawakami,agg_type=aggByMean /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/scripts/collect_model_data/collect_kawakami_pbs.sh 
+#qsub -v prediction_path=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/enformer_predictions/kawakami/predictions_2023-01-05/kawakami,log_dir=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/predictions_log/kawakami/predictions_log_2023-01-05,id=kawakami,agg_type=aggByCenter /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/scripts/collect_model_data/collect_kawakami_pbs.sh 
 
 #qsub -v prediction_path=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/enformer_predictions/kawakami/predictions_2022-12-16/kawakami,log_dir=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_pipeline/predictions_log/kawakami/predictions_log_2022-12-16,id=kawakami,agg_type=aggByMean /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/scripts/collect_model_data/collect_kawakami_pbs.sh 
 

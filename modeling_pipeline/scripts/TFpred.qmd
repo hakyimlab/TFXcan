@@ -31,9 +31,11 @@ library(doParallel)
 project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
 setwd(project_dir)
 
+data_date <- '2023-01-05'
+
 TF <- 'FOXA1'
 id <- 'kawakami'
-kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-20')
+kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_{data_date}')
 ```
 
 ```{r}
@@ -42,22 +44,9 @@ kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/{id}_aggByCent
 dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
 ```
 
-```{r}
-# using the aggByCenter 
-kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/kawakami_aggByMean_FOXA1_compiled.csv.gz'))
-dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
-```
-
-```{r}
-length(unique(kawakami_center_dt$V1))
-```
-
-
-
 Ground truth (or class)
-
 ```{r}
-ground_truth_path <- Sys.glob(paste0(project_dir, '/../impact_pipeline/motif_intervals/kawakami/intervals_2022-12-15/ground_truth/', id, '_', TF, '_*.txt'))
+ground_truth_path <- glue('{project_dir}/../impact_pipeline/motif_intervals/kawakami/intervals_{data_date}/ground_truth/{id}_{TF}_*.txt') |> Sys.glob()
 ground_truth_path
 ```
 
@@ -67,7 +56,7 @@ head(ground_truth)
 ```
 
 ```{r}
-gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$id, ]
+gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$V1, ]
 dim(gt) ; length(unique(gt$V1))
 ```
 
@@ -84,7 +73,7 @@ find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
 ```
 
 ```{r}
-find_duplicates_in_dataframe(gt, col='V1')
+find_duplicates_in_dataframe(gt, col='V1') # there should be no duplicates
 ```
 Keep first occurrence of duplicates
 ```{r}
@@ -94,17 +83,17 @@ dim(gt_dedup)
 
 Merge `gt_dedup` with the data
 ```{r}
-new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='id')
+new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='V1')
 new_dt[1:5, 1:5]
 ```
 
 ```{r}
 #new_dt <- new_dt[, -c('class')]
-colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
+colnames(new_dt) <- c('region', 'class', 'binding_counts', paste('f_', 1:(ncol(new_dt)-3), sep=''))
 new_dt[1:5, 1:5] ; dim(new_dt)
 ```
 
-Split into 80-20
+Split into 80-20 (for now, no splitting)
 ```{r}
 set.seed(2022)
 tr_size <- ceiling(nrow(new_dt) * 1)
@@ -128,10 +117,14 @@ if(!dir.exists(save_dir)){
 }
 ```
 ```{r}
-write.csv(x=train, file=gzfile(glue('{save_dir}/train_enet_{Sys.Date()}.csv.gz')), quote=F, row.names=F)
+data.table::fwrite(x=train, file=glue('{save_dir}/train_enet_{Sys.Date()}.csv'), quote=F, row.names=F)
+#gzip(glue('{save_dir}/train_enet_{Sys.Date()}.csv'), destname=glue('{save_dir}/train_enet_{Sys.Date()}.csv.gz'))
+cmd <- glue("pigz -k {save_dir}/train_enet_{Sys.Date()}.csv")
+system(cmd)
 #write.csv(x=test, file=gzfile(paste0(save_dir, '/test_enet.csv.gz')))
 ```
 
+Read it back in to ensure that the data was correctly saved and all that
 ```{r}
 temp_dt <- data.table::fread(glue('{save_dir}/train_enet_{Sys.Date()}.csv.gz'))
 temp_dt[1:5, 1:5] ; temp_dt |> dim()
@@ -142,7 +135,6 @@ Good!
 
 ```{r}
 # split the data
-
 X_train <- kawakami_center_dt[, -c(1,2)] |> as.matrix()
 y_train <- kawakami_center_dt[, c(1,2)] |> as.data.frame()
 ```
@@ -182,6 +174,168 @@ nbc[nbc > 0.9]
 ```
 
 
+## 
+
+```{r}
+dt_train <- temp_dt[1:1000, ] #data.table::fread(data_file)
+print(dim(dt_train))
+
+# split the data
+X_train <- dt_train[, -c(1,2,3)] |> as.matrix()
+y_train <- dt_train[, c(1,2,3)] |> as.data.frame()
+print(head(y_train)) ; y_train$class |> table()
+```
+
+```{r}
+set.seed(2022)
+cv_model <- glmnet::cv.glmnet(x=X_train, y=y_train$class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=F, nfolds=3, trace.it=F)
+print(cv_model)
+```
+
+### linear regression
+```{r}
+vbc <- y_train$binding_counts
+nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
+```
+
+```{r}
+linear_cvfit <- cv.glmnet(x=X_train, y=nbc, type.measure = "mse", nfolds = 3, alpha=0.5)
+
+print(linear_cvfit) ; plot(linear_cvfit)
+```
+
+```{r}
+linear_glmfit <- glmnet(x=X_train, y=nbc, nlambda=50, alpha=1)
+print(linear_glmfit)
+```
+
+```{r}
+dt_test <- temp_dt[1001:2000, ] #data.table::fread(data_file)
+print(dim(dt_test))
+
+# split the data
+X_test <- dt_test[, -c(1,2,3)] |> as.matrix()
+y_test <- dt_test[, c(1,2,3)] |> as.data.frame()
+print(head(y_test)) ; y_test$class |> table()
+```
+
+```{r}
+train_predictions <- predict(linear_cvfit, X_train, type='response', s=linear_cvfit$lambda.min)
+```
+
+```{r}
+test_predictions <- predict(linear_cvfit, X_test, type='response', s=linear_cvfit$lambda.min)
+#test_predictions
+```
+
+```{r}
+vbc_test <- y_test$binding_counts
+nbc_test <- (vbc - min(vbc_test))/(max(vbc_test) - min(vbc_test))
+```
+
+```{r}
+plot(test_predictions, nbc_test)
+```
+
+
+```{r}
+plot(train_predictions, nbc)
+```
+
+
+
+
+### Annotations
+
+```{r}
+enformer_annotations <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/metadata/enformer_tracks_annotated-resaved.txt')
+
+enformer_annotations$feature_names <- paste('f_', 1:5313, sep='')
+
+enformer_annotations[1:5, ]
+```
+
+```{r}
+foxa1_tracks <- enformer_annotations[enformer_annotations$target == 'FOXP3', ]$feature_names
+```
+
+```{r}
+enformer_annotations[startsWith(enformer_annotations$target, 'FOX'), ]
+```
+
+```{r}
+collate_coefficients <- function(fit){
+    min_error_index <- fit$index['min', ]
+    one_sd_index <- fit$index['1se', ]
+
+    dimensions <- fit$glmnet.fit$beta@Dim
+    coef_mat <- as.data.frame(summary(fit$glmnet.fit$beta))
+
+    temp_mat <- matrix(data=NA, nrow=dimensions[1], ncol=dimensions[2])
+    #print(dim(temp_mat))
+    for(i in 1:nrow(coef_mat)){
+        temp_mat[coef_mat[i, 'i'], coef_mat[i, 'j']] <- coef_mat[i, 'x']
+    }
+
+    temp_mat[is.na(temp_mat)] <- 0
+
+    fit_beta <- cbind(temp_mat[, min_error_index], temp_mat[, one_sd_index])
+    # what features were used?
+    feature_data <- enformer_annotations[enformer_annotations$feature_names %in% (fit$glmnet.fit$beta |> rownames()), c('assay', 'feature_names')]
+
+    fit_beta <- as.data.frame(cbind(fit_beta, feature_data))
+
+    return(fit_beta)
+}
+```
+
+```{r}
+coeffs <- collate_coefficients(linear_cvfit)
+```
+
+```{r}
+coeffs[coeffs[, 4] %in% foxa1_tracks, ]
+```
+
+```{r}
+a <- coeffs[abs(coeffs[, 1]) > 0, ]$feature_names
+a
+```
+
+```{r}
+enformer_annotations[enformer_annotations$feature_names %in% a, ]
+```
+
+### Plotting
+
+```{r}
+foxa1_features <- data.frame(temp_dt)[, c('binding_counts', foxa1_tracks)]
+foxa1_features[1:5, ]
+```
+
+```{r}
+plot(foxa1_features$f_954, foxa1_features$binding_counts)
+```
+
+```{r}
+cor.test(foxa1_features$f_3724, foxa1_features$binding_counts)
+```
+
+```{r}
+apply(foxa1_features[, 2:ncol(foxa1_features)], 2, function(each_col){
+  cor.test(each_col, foxa1_features[, 1])
+})
+```
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -190,12 +344,12 @@ nbc[nbc > 0.9]
 I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
 ```{r}
 # path to the data
-training_data <- paste0(project_dir, '/data/enet_data/data_2022-12-16/train_enet_2022-12-16.csv.gz')
+training_data <- glue("{project_dir}/data/enet_data/data_{data_date}/train_enet_{data_date}.csv.gz")
 training_data ; file.exists(training_data)
 ```
 
 ```{r}
-mtinfo <- 'with_mixing_parameters'
+mtinfo <- 'single_large'
 ```
 
 ```{r}
@@ -213,7 +367,7 @@ system("qstat -u temi")
 
 Read in the model(s)
 ```{r}
-enet_binary_model <- readRDS(paste0(project_dir, '/models/enet_models/kawakami_center_binary_matched_2022-12-16.rds'))
+enet_binary_model <- readRDS(paste0(project_dir, '/models/enet_models/kawakami_center_binary_single_large_2022-12-22.rds'))
 enet_binary_model
 ```
 

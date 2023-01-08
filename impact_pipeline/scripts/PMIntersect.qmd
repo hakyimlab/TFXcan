@@ -1,0 +1,218 @@
+---
+title: "PMIntersect (Peak Motif Intersect) approaches to defining bound and unbound regions"
+author: "Temi"
+date: 'Thursday Jan 5 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+```
+
+```{r}
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline'
+#setwd(project_dir)
+```
+
+```{r}
+output_dir <- glue('{project_dir}/explore_impact')
+id <- 'kawakami'
+TF <- 'FOXA1'
+cell_line <- 'LuCaP'
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer') #glue('/home/temi/miniconda3/envs/homer-env/share/homer') # /home/temi/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl
+common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
+```
+
+```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
+valid_chromosomes
+```
+
+Directories and e.t.c.
+### Step 1: Use Homer to predict genome-wide motifs and select a threshold
+
+Here I select those with a score >= 9
+```{r}
+genome_wide_predicted_motifs <- data.table::fread(glue('{common_dir}/{TF}_{cell_line}_scanMotifsGenomewide_sort.txt'))
+dim(genome_wide_predicted_motifs) ; genome_wide_predicted_motifs[1:5, ]
+```
+
+```{r}
+threshold <- 9
+predicted_motifs <- genome_wide_predicted_motifs[genome_wide_predicted_motifs$V6 >= threshold, ]
+dim(predicted_motifs) ; predicted_motifs[1:5, ]
+```
+
+```{r}
+# first reformat the predicted motifs
+tf_motifs <- predicted_motifs %>% dplyr::select(chr=V2, start=V3, end=V4, strand=V5, score=V6)
+tf_motifs_granges <- with(tf_motifs, GRanges(chr, IRanges(start,end), strand, score))
+tf_motifs_granges <- tf_motifs_granges[seqnames(tf_motifs_granges) %in% valid_chromosomes]
+```
+
+### Step 2: Prepare the peak files
+
+make the granges appropriate for impact
+```{r}
+chip_file <- glue('{project_dir}/processed_data/impact_files/kawakami-human/bedtools-intersected-regions/FOXA1_intersected_files.bed')
+chip_dt <- data.table::fread(chip_file, select=c(1:5))
+chip_dt[1:5, ]
+```
+
+### Step 3: The sorted peak files per individual
+
+```{r}
+peak_files_dir <- glue('/lus/grand/projects/covid-ct/imlab/data/kawakami-human/sorted_bed_files/FOXA1')
+peak_files_paths <- list.files(peak_files_dir, full.names=T)
+```
+
+```{r}
+# read in all the files
+peak_files_list <- purrr::map(.x=peak_files_paths, .f=data.table::fread, .progress=T)
+peak_files_list[[1]] |> head()
+```
+
+Some of these have duplicates because a peak can be close to two or more genes and that peak can appear twice or thereabouts in the peak file
+So, I can redo this to retain only unique peaks/rows
+```{r}
+# distinct(v1, v2, v3, .keep_all = T)
+
+pmi_dt_list <- purrr::map(.x=peak_files_paths, function(each_file){
+
+    dt <- data.table::fread(each_file) %>%
+        distinct(V1, V2, V3, .keep_all=T) %>%
+        dplyr::select(chr=V1, start=V2, end=V3) %>% # select the chr, start and end columns
+        with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+
+    dt <- dt[seqnames(dt) %in% valid_chromosomes]
+
+    overlaps <- GenomicRanges::findOverlaps(query=dt, subject=tf_motifs_granges, type='any')
+
+    positive_dt <- tf_motifs_granges[subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 1)
+
+    negative_dt <- tf_motifs_granges[-subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 0)
+
+    return(rbind(positive_dt, negative_dt) |> as.data.frame())
+
+}, .progress=T)
+
+pmi_dt_list[[1]] |> head()
+```
+
+```{r}
+# modify the class names
+pmi_dt_list <- lapply(seq_along(pmi_dt_list), function(i){
+    colnames(pmi_dt_list[[i]])[4] <- paste('class_', i, sep='')
+    return(pmi_dt_list[[i]])
+})
+pmi_dt_list[[1]] |> head()
+```
+
+```{r}
+class_distribution <- sapply(pmi_dt_list, function(each_dt){
+    table(each_dt$class)
+})
+class_distribution
+```
+
+maybe make a plot later
+
+### Step 4: merge all the files and add the binding counts and class
+```{r}
+dt_merged <- pmi_dt_list %>% reduce(full_join, by = c('chr', 'start', 'end')) 
+dt_merged$binding_counts <- rowSums(dt_merged[, -c(1:3)])
+dt_merged$binding_class <- ifelse(dt_merged$binding_counts > 0, 1, 0)
+dt_merged <- dt_merged %>%
+    dplyr::relocate(c('binding_class', 'binding_counts'), .after=end)
+
+dt_merged$chr <- as.character(dt_merged$chr)
+
+dt_merged[1:5, ]
+```
+
+### Step : Save the files
+
+```{r}
+save_object <- list(binding_matrix=dt_merged, file_names=peak_files_paths)
+```
+
+```{r}
+todays_date <- Sys.Date()
+save_dir <- glue('{project_dir}/intersected_objects/kawakami/regions_data_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+saveRDS(save_object, file=glue('{save_dir}/regions_information.RData'))
+```
+
+
+### Step : Raead in the file
+
+```{r}
+save_dir <- glue('{project_dir}/intersected_objects/kawakami/regions_data_2023-01-05')
+binding_rdata <- readRDS(glue('{save_dir}/regions_information.RData'))
+```
+
+```{r}
+kawakami_dt <- binding_rdata$binding_matrix
+```
+
+```{r}
+# choose peaks with binding_counts > 11
+kawakami_dt_pos <- kawakami_dt[kawakami_dt$binding_counts > 10, ][, 1:5]
+kawakami_dt_pos |> head() ; dim(kawakami_dt_pos)
+```
+
+```{r}
+set.seed(2023)
+kawakami_dt_neg <- dplyr::slice_sample(kawakami_dt[kawakami_dt$binding_counts == 0, ], n=20000)[, 1:5]
+kawakami_dt_neg |> head() ; dim(kawakami_dt_neg)
+```
+
+```{r}
+kawakami_dr <- rbind(kawakami_dt_pos, kawakami_dt_neg) %>%
+    tidyr::unite('region', c(chr, start, end), remove=T)
+
+kawakami_dr[1:5, ]
+```
+
+```{r}
+dataset <- 'kawakami'
+todays_date <- Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+#k_set <- with(kawakami_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(kawakami_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(kawakami_dr)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(kawakami_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(kawakami_dr)}.txt'), col.names=F, quote=F, row.names=F)
+```

@@ -1,11 +1,12 @@
 #!/bin/bash
-#PBS -l walltime=00:59:00,filesystems=grand
+#PBS -l select=1:system=polaris
+#PBS -l walltime=04:59:00,filesystems=grand
 #PBS -A covid-ct
-#PBS -q debug-scaling    
-#PBS -N train_enet
+#PBS -q preemptable    
+#PBS -N train_enet_attempt_1
 #PBS -k doe
-#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/train_enet.out
-#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/train_enet.err
+#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/train_enet_attempt_1.out
+#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/log/train_enet_attempt_2.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR

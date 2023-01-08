@@ -9,6 +9,7 @@ genotypes/*
 temp/*
 old_scripts/
 *__*__/*
+TFpred_pipeline/*
 
 # include
 !scripts/
@@ -22,6 +23,7 @@ old_scripts/
 !README.md
 !modeling_pipeline/
 !.gitignore
+!TFpred_pipeline/scripts/
 
 
 # temp/*

@@ -2,76 +2,12 @@
 import pandas as pd
 import numpy as np
 
-# these are the bins
+# these are the bins/ positions
 upstream = list(range(0, 8))
-center = [8]
+center = 8
+pre_center = 7
+post_center = 9
 downstream = list(range(9, 17))
-
-def localParslConfig_htpool(params):
-
-    # Make a config that runs on two nodes
-    from parsl.executors import HighThroughputExecutor
-    from parsl.providers import LocalProvider
-    from parsl.config import Config
-    from parsl.channels import LocalChannel
-    from parsl.launchers import MpiExecLauncher
-
-    import os
-
-    workingdir = params['working_dir'] #'/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict'
-    rundir = os.path.join(workingdir, 'runinfo')
-    #rundir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/enformer_predict/runinfo'
-
-    #parsl.clear()
-
-    local_htex = Config(
-        executors=[
-            HighThroughputExecutor(
-                label="htex_Local",
-                max_workers=8, # vs max_workers
-                available_accelerators=8,
-                worker_debug=True,
-                cores_per_worker=1, # how many cores per worker #nodes_per_block, 2 is usually enough or 1.
-                working_dir=workingdir,
-                provider=LocalProvider(
-                    channel=LocalChannel(),
-                    init_blocks=1,
-                    max_blocks=1,
-                    launcher=MpiExecLauncher(),
-                    worker_init='source ~/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib'
-                ),
-            )
-        ],
-        strategy=None,
-        run_dir=rundir
-    )
-
-    return(local_htex)
-
-def localParslConfig_threadpool(params):
- 
-    import parsl
-    from parsl.executors import ThreadPoolExecutor
-    from parsl.config import Config
-
-    import os
-    workingdir = params['working_dir']
-    rundir = os.path.join(workingdir, 'runinfo')
-    parsl.clear()
-    local_tpex = Config(
-        executors=[
-            ThreadPoolExecutor(
-                label="tpex_Local",
-                max_threads=10,
-                thread_name_prefix='tpex_run',
-                working_dir=workingdir,
-            )
-        ],
-        strategy=None,
-        run_dir=rundir
-    )
-
-    return(local_tpex)
 
 # can aggregate by the mean of all bins, mean of the upstream and/or downstream alone, or just select the center
 def agg_by_mean(pred_tracks, use_bins=None):
@@ -95,7 +31,7 @@ def agg_by_mean(pred_tracks, use_bins=None):
 
     return dt
 
-def agg_by_center(pred_tracks, center=8):
+def agg_by_center(pred_tracks, center):
 
     y = []
     X = []
@@ -111,7 +47,7 @@ def agg_by_center(pred_tracks, center=8):
 
     return dt
 
-def agg_byall(pred_tracks, center=8):
+def agg_byall(pred_tracks):
     
     return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
 
@@ -119,15 +55,25 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
     import h5py
     import numpy as np
-    import os
+    import os, sys
     import pandas as pd
     #import tqdm
     # read in one of the files
 
-    try:
-        import utility_functions
-    except ModuleNotFoundError:
-        print(f'[ERROR] Utility_functions module not found.')
+    # try:
+    #     import utility_functions
+    # except ModuleNotFoundError:
+    #     try:
+    #         fpath = os.path.join(base_path, 'scripts', 'collect_model_data')
+    #         sys.path.append(fpath)
+    #         print(sys.path)
+    #         import utility_functions
+    #     except ModuleNotFoundError:
+    #         print(f'[ERROR] utility_functions module not found at python app level.')
+
+    # fpath = os.path.join(base_path, 'scripts', 'collect_model_data')
+    # predict_utils_one = f'{fpath}/utility_functions.py'
+    # exec(open(predict_utils_one).read(), globals(), globals())
 
     #exec(open(f'{base_path}/modeling_pipeline/scripts/collect_model_data/utility-functions.py').read(), globals(), globals())
     # bpath = os.path.join(base_path, 'modeling_pipeline')
@@ -151,11 +97,13 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
     data_dict = {}
     for agg_type in agg_types:
-        if agg_type == 'aggByMean': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions)
-        if agg_type == 'aggByCenter': data_dict[agg_type] = utility_functions.agg_by_center(kawakami_predictions)
-        if agg_type == 'aggByUpstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=upstream)
-        if agg_type == 'aggByDownstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=downstream)
-        if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = utility_functions.agg_by_mean(kawakami_predictions, use_bins=upstream + downstream)
+        if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(kawakami_predictions)
+        if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=center)
+        if agg_type == 'aggByPreCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=pre_center)
+        if agg_type == 'aggByPostCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=post_center)
+        if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream)
+        if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=downstream)
+        if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream + downstream)
 
     #test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream = agg_byall(kawakami_predictions)
     #data_list = [test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream]

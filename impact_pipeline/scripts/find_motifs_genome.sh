@@ -31,11 +31,11 @@ conda activate r-env
 echo "PBS_JOBID = " $PBS_JOBID
 
 project_dir="/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/impact_pipeline"
-homer_dir="~/miniconda3/envs/homer-env/share/homer"
+#homer_dir="~/miniconda3/envs/homer-env/share/homer"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 perl="`which perl`"
 
-homer_cmd=`ls ~/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl`
+homer_cmd=`ls /lus/grand/projects/covid-ct/imlab/users/temi/software/homer/bin/findMotifsGenome.pl`
 
 if [[ -f ${homer_cmd} ]]; then 
     printf "${homer_cmd} exists."
