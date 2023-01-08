@@ -11,6 +11,8 @@ old_scripts/
 *__*__/*
 TFpred_pipeline/*
 
+.*
+
 # include
 !scripts/
 !metadata/
