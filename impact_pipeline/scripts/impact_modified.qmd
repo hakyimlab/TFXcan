@@ -8,6 +8,7 @@ format:
     number-sections: true
     code-line-numbers: true
 ---
+Kawakami, intersected, using IMPACT to define positive and negative sets
 
 ```{r}
 library(glue)
@@ -28,14 +29,14 @@ output_dir <- glue('{project_dir}/explore_impact')
 id <- 'kawakami'
 TF <- 'FOXA1'
 cell_line <- 'LuCaP'
-homer_dir <- glue('/home/temi/miniconda3/envs/homer-env/share/homer') # /home/temi/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer') #glue('/home/temi/miniconda3/envs/homer-env/share/homer') # /home/temi/miniconda3/envs/homer-env/share/homer/bin/findMotifsGenome.pl
 common_dir <- glue('{project_dir}/processed_data/impact_files/common_files/{TF}')
 ```
 
 Directories and e.t.c.
 ### Step 1: Use Homer to predict genome-wide motifs and select a threshold
 
-Here I select those with a score >= 11
+Here I select those with a score >= 9
 ```{r}
 genome_wide_predicted_motifs <- data.table::fread(glue('{common_dir}/{TF}_{cell_line}_scanMotifsGenomewide_sort.txt'))
 dim(genome_wide_predicted_motifs) ; genome_wide_predicted_motifs[1:5, ]
@@ -55,13 +56,17 @@ chip_file <- glue('{project_dir}/processed_data/impact_files/kawakami-human/bedt
 chip_dt <- data.table::fread(chip_file, select=c(1:5))
 chip_dt[1:5, ]
 ```
+
+
 Select 200 peaks to test with (These are randomly selected peaks)
 ```{r}
-set.seed(2022)
-chip_dt <- chip_dt[sample(1:nrow(chip_dt), nrow(chip_dt), replace=F), ]
-nrow(chip_dt)
+# shuffle or randomize the peaks
+# set.seed(2022)
+# chip_dt <- chip_dt[sample(1:nrow(chip_dt), nrow(chip_dt), replace=F), ]
+# nrow(chip_dt)
 ```
 ```{r}
+# convert into a granges object
 chip_granges <- with(chip_dt, GenomicRanges::GRanges(chrom, IRanges(start, end), strand='*', num=num, list=list))
 chip_granges
 ```
@@ -146,11 +151,48 @@ chip_regions <- chip_regions_full[which(is.na(m) == F),]
 ```
 
 ```{r}
-chip_regions_newpeaks <- matrix(0,nrow(chip_regions),6) #dummy var number of rows 
+# chip_regions_newpeaks <- matrix(0,nrow(chip_regions),6) #dummy var number of rows 
 
-for (i in 1:nrow(chip_regions)){
-    print(paste0("row ", i, " of ", nrow(chip_regions)))
-    w <- which(motif_instances$PositionID == chip_regions[i,4]) #match peakID, gauranteed to have a match 
+# for (i in 1:nrow(chip_regions)){
+#     print(paste0("row ", i, " of ", nrow(chip_regions)))
+#     w <- which(motif_instances$PositionID == chip_regions[i,4]) #match peakID, gauranteed to have a match 
+
+#     #only choose 1 motif, take the one with the top score
+#     w1 <- w[match(max(motif_instances$MotifScore[w]), motif_instances$MotifScore[w])]
+
+#     if (motif_instances$Strand[w1] == "+"){
+#         centerpeak <- motif_instances$Offset[w1] + floor(0.5*(nchar(motif_instances$Sequence[w1]))) #this is relative to start 
+#     }else{
+#         centerpeak <- motif_instances$Offset[w1] - floor(0.5*(nchar(motif_instances$Sequence[w1])))
+#     }
+#     newstart <- chip_regions$starts[i]+centerpeak #previous version of impact -windowsize/2 #establish left bound of peaks
+#     newend <- newstart + 1 #previous version of impact +windowsize #establish right bound of peaks 
+#     chip_regions_newpeaks[i,1] <- as.character(chip_regions$seqnames[i])
+#     chip_regions_newpeaks[i,2] <- newstart
+#     chip_regions_newpeaks[i,3] <- newend
+#     chip_regions_newpeaks[i,4] <- as.character(chip_regions$names[i]) #preserve old information
+#     chip_regions_newpeaks[i,5] <- as.character(chip_regions$scores[i])
+#     chip_regions_newpeaks[i,6] <- as.character(chip_regions$strands[i])
+# }
+
+# write.table(chip_regions_newpeaks, glue("{output_dir}/{id}_{TF}_{cell_line}_train_df_newpeaks.txt"), sep = "\t", quote = F, row.names = FALSE, col.names = FALSE)
+# chip_regions_newpeaks[1:5, ]
+```
+
+```{r}
+library(pbapply)
+```
+
+
+```{r}
+# which column is starts
+starts_col <- which(colnames(chip_regions) == 'starts')
+ends_col <- which(colnames(chip_regions) == 'ends')
+
+chip_regions_newpeaks <- pbapply::pbapply(chip_regions, 1, function(each_row){
+    each_row <- as.list(each_row)
+
+    w <- which(motif_instances$PositionID == each_row[[4]]) #match peakID, gauranteed to have a match 
 
     #only choose 1 motif, take the one with the top score
     w1 <- w[match(max(motif_instances$MotifScore[w]), motif_instances$MotifScore[w])]
@@ -160,16 +202,16 @@ for (i in 1:nrow(chip_regions)){
     }else{
         centerpeak <- motif_instances$Offset[w1] - floor(0.5*(nchar(motif_instances$Sequence[w1])))
     }
-    newstart <- chip_regions$starts[i]+centerpeak #previous version of impact -windowsize/2 #establish left bound of peaks
-    newend <- newstart + 1 #previous version of impact +windowsize #establish right bound of peaks 
-    chip_regions_newpeaks[i,1] <- as.character(chip_regions$seqnames[i])
-    chip_regions_newpeaks[i,2] <- newstart
-    chip_regions_newpeaks[i,3] <- newend
-    chip_regions_newpeaks[i,4] <- as.character(chip_regions$names[i]) #preserve old information
-    chip_regions_newpeaks[i,5] <- as.character(chip_regions$scores[i])
-    chip_regions_newpeaks[i,6] <- as.character(chip_regions$strands[i])
-}
+    #print(each_row[[starts_col]])
+    each_row[[starts_col]] <- as.numeric(each_row[[starts_col]]) + centerpeak #previous version of impact -windowsize/2 #establish left bound of peaks
+    each_row[[ends_col]] <- each_row[[starts_col]] + 1
 
+    return(c(each_row |> unlist()))
+
+}) |> t()
+```
+
+```{r}
 write.table(chip_regions_newpeaks, glue("{output_dir}/{id}_{TF}_{cell_line}_train_df_newpeaks.txt"), sep = "\t", quote = F, row.names = FALSE, col.names = FALSE)
 chip_regions_newpeaks[1:5, ]
 ```
@@ -493,35 +535,23 @@ data.table::fwrite(training_set, glue('{save_dir}/{id}_{TF}_{nrow(training_set)}
 ### Plotting
 
 ```{r}
-positive_set %>%
+ps <- positive_set %>%
     dplyr::group_by(chr) %>%
     dplyr::summarise(cnts=n()) %>%
-    as.data.frame() %>%
-    pull(chr, cnts) %>%
-    barplot(cnts)
+    as.data.frame()
+
+ns <- negative_set %>%
+    dplyr::group_by(chr) %>%
+    dplyr::summarise(cnts=n()) %>%
+    as.data.frame() 
+
+pns <- merge(ps, ns, by='chr', suffixes=c('_positive', '_negative'))
+pns
 ```
 
 ```{r}
-
+barplot(pns[, 2:3] |> t(), beside=T, names.arg=pns[, 1])
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 Nice!
 
 
@@ -530,7 +560,7 @@ Nice!
 
 Remember I have the `chip_granges` and the top 15000 predicted motifs
 ```{r}
-chip_granges
+chip_granges # chip peaks
 ```
 
 ```{r}

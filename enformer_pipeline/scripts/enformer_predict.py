@@ -29,7 +29,7 @@ def main():
         intervals_dir = os.path.join(script_path, '..', parameters['interval_list_dir'])
         TF = parameters['TF']
         predictions_log_dir = os.path.join(script_path, '..', parameters['predictions_log_dir'])
-        log_dir = os.path.join(script_path, '..', + parameters['log_dir'])
+        log_dir = os.path.join(script_path, '..', parameters['log_dir'])
         batch_size = int(parameters['batch_size'])
         use_parsl = parameters['use_parsl']
         n_regions = parameters["predict_on_n_regions"]

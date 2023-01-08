@@ -37,9 +37,11 @@ library(doParallel)
 project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
 setwd(project_dir)
 
+data_date <- '2023-01-05'
+
 TF <- 'FOXA1'
 id <- 'kawakami'
-kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_2022-12-12')
+kawakami_data_dir <- glue('{project_dir}/data/train-test-val/kawakami/data_{data_date}')
 ```
 
 ```{r}
@@ -51,7 +53,7 @@ dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
 Ground truth (or class)
 
 ```{r}
-ground_truth_path <- Sys.glob(paste0(project_dir, '/../impact_pipeline/motif_intervals/kawakami/intervals_2022-12-11/ground_truth/', id, '_', TF, '_*.txt'))
+ground_truth_path <- glue('{project_dir}/../impact_pipeline/motif_intervals/kawakami/intervals_{data_date}/ground_truth/{id}_{TF}_*.txt') |> Sys.glob()
 ground_truth_path
 ```
 
@@ -61,7 +63,7 @@ head(ground_truth)
 ```
 
 ```{r}
-gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$id, ]
+gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$V1, ]
 dim(gt) ; length(unique(gt$V1))
 ```
 
@@ -88,13 +90,13 @@ dim(gt_dedup)
 
 Merge `gt_dedup` with the data
 ```{r}
-new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='id')
+new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='V1')
 new_dt[1:5, 1:5]
 ```
 
 ```{r}
 #new_dt <- new_dt[, -c('class')]
-colnames(new_dt)[1:3] <- c('region', 'class', 'binding_counts')
+colnames(new_dt) <- c('region', 'class', 'binding_counts', paste('f_', 1:(ncol(new_dt)-3), sep=''))
 new_dt[1:5, 1:5] ; dim(new_dt)
 ```
 

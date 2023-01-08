@@ -108,7 +108,6 @@ doParallel::stopImplicitCluster()
 foreach::registerDoSEQ()
 showConnections()
 
-
 unique_id <- 'test'
 
 print(glue('[INFO] Saving cv result for batch {batch_num}'))

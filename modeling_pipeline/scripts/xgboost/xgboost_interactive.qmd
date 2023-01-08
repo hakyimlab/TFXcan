@@ -1,0 +1,75 @@
+---
+title: "Build models on Kawakami data: xgboost"
+author: "Temi"
+date: 'Wednesday Dec 21 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+rm(list=ls())
+
+library(glue)
+library(R.utils)
+library(data.table)
+library(xgboost)
+library(doMC)
+library(ROCR)
+library(Matrix)
+library(reshape2)
+library(tidyverse)
+library(foreach)
+library(doParallel)
+
+```
+
+```{r}
+project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline'
+setwd(project_dir)
+
+TF <- 'FOXA1'
+id <- 'kawakami'
+kawakami_data_dir <- glue('{project_dir}/data/enet_data/data_2022-12-21')
+```
+
+```{r}
+# using the aggByCenter 
+kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/train_enet_2022-12-21.csv.gz'))
+dim(kawakami_center_dt) ; kawakami_center_dt[1:5, 1:5]
+```
+
+```{r}
+#colnames(kawakami_center_dt) <- c('id', paste0('f_', 1:(ncol(kawakami_center_dt) - 1)))
+```
+
+```{r}
+X_train <- kawakami_center_dt[, -c(1,2,3)] |> as.matrix()
+y_train <- kawakami_center_dt[, c(1,2,3)]
+```
+
+
+```{r}
+dtrain <- xgboost::xgb.DMatrix(data=X_train, label=y_train$class)
+```
+
+```{r}
+set.seed(2022)
+xgb_grid_search <- expand.grid(colsample_bytree = c(0.5), max_depth=c(20), eta=c(0.1), gamma=c(20, 50), lambda=c(1, 20), alpha=c(10, 20))
+xgb_grid_search <- xgb_grid_search[sample(1:nrow(xgb_grid_search), nrow(xgb_grid_search)), ] #|> unname()
+xgb_grid_search[1:5, ] ; dim(xgb_grid_search)
+```
+
+```{r}
+params_1 <- xgb_grid_search[1, ] |> unlist() |> as.list()
+params_list <- c(params_1, list(verbosity=0, objective = "binary:logistic", eval_metric='auc', booster='gbtree', nthread=56))
+```
+
+
+```{r}
+xgb_model_trained <- xgb.train(data=dtrain, params=params_list, watchlist=list(train=dtrain), nrounds=500, print_every_n = 20, early_stopping_rounds = 20, verbose=2)
+xgb_model_trained
+```
+

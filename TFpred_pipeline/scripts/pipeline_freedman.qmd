@@ -1,0 +1,395 @@
+---
+title: "Complete TFpred Pipeline - Using Freedman data"
+author: "Temi"
+date: 'Sat Jan 7 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+data_dir <- glue('{imlab_dir}/data/freedman_data/peak_files')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
+```
+
+```{r}
+id <- 'freedman'
+TF <- 'FOXA1'
+```
+
+```{r}
+peaks_dir <- glue('{project_dir}/files/peaks_files/{id}_{TF}')
+if(!dir.exists(peaks_dir)){
+    dir.create(peaks_dir, recursive=T)
+} 
+
+homer_files_dir <- glue('{project_dir}/files/homer_files/{id}_{TF}')
+if(!dir.exists(homer_files_dir)){
+    dir.create(homer_files_dir, recursive=T)
+}
+
+regions_dir <- glue('{project_dir}/files/defined_regions/{id}_{TF}')
+if(!dir.exists(regions_dir)){
+    dir.create(regions_dir, recursive=T)
+}
+
+common_dir <- glue('{project_dir}/files/homer_files/common_files')
+if(!dir.exists(common_dir)){
+    dir.create(common_dir, recursive=T)
+}
+```
+
+Copy the peak file for the transcription factor
+
+```{r}
+TF_files <- list.files(data_dir, pattern=paste0('*', TF), full.names=T)
+TF_files
+```
+
+```{r}
+# using the first one
+file.copy(from=TF_files, to=peaks_dir, overwrite=T, copy.mode=T)
+```
+
+The Freedman peak files need to be merged
+
+```{r}
+grouping_info <- data.table::fread(glue('{project_dir}/metadata/grouping_info.txt')) |> as.data.frame()
+grouping_info
+```
+
+```{r}
+group_ids <- unique(grouping_info$group_id)
+individual_names <- paste0('LuCaP_', group_ids)
+
+# merge_id <- grouping_info[which(grouping_info$group_id == group_id), ]$subgroup_id
+# merge_files <- list.files(data_dir, pattern=paste0('*_LuCaP_', merge_id, '_', TF, '*', collapse='|'), full.names=T)
+```
+
+```{r}
+individual_peaks <- purrr::map(.x=group_ids, function(each_gid){
+
+    merge_ids <- grouping_info[which(grouping_info$group_id == each_gid), ]$subgroup_id
+    merge_files <- list.files(data_dir, pattern=paste0('*_LuCaP_', merge_ids, '_', TF, '*', collapse='|'), full.names=T)
+
+    cols_names <- c('chr','start','end','id','score')
+
+    if(length(merge_files) > 1){
+        out <- lapply(merge_files, function(e){
+            data.table::fread(e)
+        })
+
+        # rbind these
+        out <- do.call('rbind', out) |> as.data.frame()
+        colnames(out) <- cols_names
+    } else {
+        out <- data.table::fread(merge_files)
+        colnames(out) <- cols_names
+    }
+
+    return(out)
+
+}, .progress=T)
+
+names(individual_peaks) <- individual_names
+```
+
+```{r}
+individual_peaks[[1]][1:5, ]
+```
+
+Take the reference set e.g. cistrome, and overlap with these peaks to define per individual bound or unbound regions
+```{r}
+cistrome_ground_truth <- data.table::fread(glue('{project_dir}/motif_intervals/cistrome/intervals_2023-01-06/ground_truth/cistrome_FOXA1_9112.txt'))
+cistrome_ground_truth <- tidyr::separate(cistrome_ground_truth, col=V1, into=c('chr', 'start', 'end'), sep='_') %>%
+    dplyr::mutate(chr, start=as.numeric(start), end=as.numeric(end)) %>%
+    dplyr::select(chr, start, end) %>%
+    as.data.frame()
+cistrome_ground_truth |> head()
+```
+
+```{r}
+tf_cistrome_granges <- with(cistrome_ground_truth, GRanges(chr, IRanges(start,end), strand='*', score=0))
+tf_cistrome_granges <- tf_cistrome_granges[seqnames(tf_cistrome_granges) %in% valid_chromosomes]
+tf_cistrome_granges
+```
+
+
+```{r}
+ind_dt_list <- purrr::map(.x=individual_peaks, function(each_file){
+
+    dt <- each_file %>%
+        dplyr::select(chr, start, end) %>%
+        distinct(chr, start, end, .keep_all=T) %>% # select the chr, start and end columns
+        with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+
+    # I shold reduce these too 
+    dt <- GenomicRanges::reduce(dt)
+
+    dt <- dt[seqnames(dt) %in% valid_chromosomes]
+
+    overlaps <- GenomicRanges::findOverlaps(query=dt, subject=tf_cistrome_granges, type='any')
+
+    positive_dt <- tf_cistrome_granges[subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 1)
+
+    negative_dt <- tf_cistrome_granges[-subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 0)
+
+    return(rbind(positive_dt, negative_dt) |> as.data.frame())
+
+}, .progress=T)
+
+# modify the class names
+ind_dt_list <- lapply(seq_along(ind_dt_list), function(i){
+    colnames(ind_dt_list[[i]])[4] <- individual_names[i]
+    return(ind_dt_list[[i]])
+})
+
+names(ind_dt_list) <- individual_names
+
+ind_dt_list[[1]] |> head()
+
+```
+
+```{r}
+#ind_dt_list[[1]]$class |> table()
+
+lapply(ind_dt_list, function(each_dt){
+    each_dt$class |> table()
+})
+```
+
+#### - merge all the files and add the binding counts and class
+```{r}
+dt_merged <- ind_dt_list %>% purrr::reduce(full_join, by = c('chr', 'start', 'end')) 
+dt_merged$binding_counts <- rowSums(dt_merged[, -c(1:3)], na.rm=T)
+dt_merged$binding_class <- ifelse(dt_merged$binding_counts > 0, 1, 0)
+dt_merged <- dt_merged %>%
+    dplyr::relocate(c('binding_class', 'binding_counts'), .after=end)
+
+# shuffle the data
+set.seed(2023)
+dt_merged <- dt_merged[sample(nrow(dt_merged)), ]
+
+dt_merged$chr <- as.character(dt_merged$chr)
+
+dt_merged[1:5, ]
+```
+
+#### - Save the files
+```{r}
+save_object <- list(binding_matrix=dt_merged, file_names=individual_names)
+```
+
+```{r}
+todays_date <- '2023-01-06' #Sys.Date()
+save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+saveRDS(save_object, file=glue('{save_dir}/regions_information.RData'))
+```
+
+```{r}
+dataset <- 'freedman'
+todays_date <- todays_date #Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+freedman_dr <- dt_merged %>%
+    tidyr::unite('region', c(chr, start, end), remove=T) %>%
+    dplyr::rename(class=binding_class)
+freedman_dr[1:5, 1:5]
+```
+
+
+```{r}
+#k_set <- with(cistrome_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(freedman_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(freedman_dr)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(freedman_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(freedman_dr)}.txt'), col.names=T, quote=F, row.names=F)
+```
+
+```{r}
+predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(freedman_dr)}.txt')
+predictor_file
+```
+
+
+## Step 3: Predict on these regions with ENFORMER
+### Create the enformer_parameters.json file
+```{r}
+metadata_dir <- glue('{project_dir}/metadata')
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
+```
+
+For now, I will do 4 individuals
+```{r}
+enformer_parameters_json <- list()
+
+enformer_parameters_json[['individuals']] <- individual_names[1:4]
+enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
+enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['interval_list_file']] <- predictor_file
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['dataset_type']] <- "personalized"
+enformer_parameters_json[['prediction_data_name']] <- id
+enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['date']] <- '2023-01-06'
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['log_dir']] <- "cobalt_log"
+enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['use_parsl']] <- T
+enformer_parameters_json[['predict_on_n_regions']] <- -1
+enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{id}_{TF}"), "num_of_full_nodes"=10, "walltime"="01:00:00", "min_num_blocks"=0, "max_num_blocks"=1, "queue"="preemptable")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+```
+
+
+#### Copy this command below and run it in another shell (you many need to modify the name of the conda environment and all that )
+
+I can write this into a shell script and call it with `system()`. The problem is that I am currently within a shell (using R) and it won't initialize my conda environment in that way. Pretty sure there is a way around it - but it may be tricky
+```{r}
+# prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+## Step 4: Collect/aggregate the predictions
+
+This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
+The user supplies what aggregation option.
+
+There are currently 7 valid options for aggregations:
+- aggByCenter:
+- aggByMean:
+- aggByUpstream:
+- aggByDownstream:
+- aggByUpstreamDownstream:
+- aggByPreCenter
+- aggByPostCenter
+
+Check that the appropriate scripts exist
+```{r}
+# check that the script exists
+aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions_pbs.sh")
+aggregation_pbs_script ; file.exists(aggregation_pbs_script)
+```
+
+```{r}
+aggregation_python_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions.py")
+aggregation_python_script ; file.exists(aggregation_python_script)
+```
+
+```{r}
+aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{id}_{TF}.json")
+aggregation_config ; file.exists(aggregation_config)
+```
+
+Aggregate the predictions
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+
+# agg_methods <- c(agg_center, agg_precenter)
+agg_methods
+```
+
+
+```{r}
+for(am in agg_methods){
+
+    pbs_script <- glue('qsub -v collect_py={aggregation_python_script},aggregation_config={aggregation_config},agg_type={am} {aggregation_pbs_script}')
+    system(pbs_script)
+
+    # wait a little before submitting the next one
+    date_time <- Sys.time()
+    while((as.numeric(Sys.time()) - as.numeric(date_time)) < 2){}
+}
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+### Note: Please wait a while for this job to be finished.
+
+### Optional
+Remove/clean up all the aggregated batches
+
+```{r}
+for(am in agg_methods){
+    files_to_delete <- Sys.glob(glue('{project_dir}/prediction_folder/aggregated_predictions/{id}_{TF}_{todays_date}/{id}_{am}_{TF}_batch_*.csv.gz'))
+
+    file.remove(files_to_delete)
+}
+```
+
+
+
+
+
+
+
