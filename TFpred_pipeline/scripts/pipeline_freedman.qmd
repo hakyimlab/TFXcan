@@ -387,9 +387,195 @@ for(am in agg_methods){
 }
 ```
 
+### Step 5: Testing
+
+```{r}
+gt_dir <- glue('{project_dir}/motif_intervals/freedman/intervals_{todays_date}/ground_truth')
+```
+
+```{r}
+freedman_ground_truth <- data.table::fread(glue('{gt_dir}/{id}_{TF}_9112.txt')) |> as.data.frame()
+freedman_ground_truth[1:5, 1:5]
+```
+
+```{r}
+ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
+agg_ms <- agg_methods
+data_date <- todays_date
+```
+
+```{r}
+test_dt_list <- purrr::map(.x=ind_names, function(each_ind){
+    ind_gt <- freedman_ground_truth[, c('region', each_ind)]
+    print(head(ind_gt))
+
+    out <- purrr::map(.x=agg_ms, function(each_method){
+        ind_test_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{id}_{TF}_{data_date}/{each_ind}_{each_method}_{TF}.csv.gz')
+        ind_test_dt <- data.table::fread(ind_test_file)
+        gt <- ind_gt[ind_gt$region %in% ind_test_dt$V1, ]
+        gt_dedup <- gt[!duplicated(gt[['region']]),]
+        new_dt <- merge(gt_dedup, ind_test_dt, by.x='region', by.y='V1')
+        colnames(new_dt) <- c('region', 'class', paste('f_', 1:(ncol(new_dt)-2), sep=''))
+        return(new_dt)
+    })
+    names(out) <- agg_ms
+
+    return(out)
+}, .progress=T)
+
+names(test_dt_list) <- ind_names
+```
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+model_id <- 'cistrome'
+```
+
+```{r}
+aggByCenter_model <- glue('{model_dir}/{model_id}_{TF}_{each_method}_binary_{todays_date}.rds')
+aggByCenter_model <- readRDS(aggByCenter_model)
+```
+
+```{r}
+# load all the models
+models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{model_id}_{TF}_{each_method}_binary_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(models_list) <- agg_methods
+```
 
 
+```{r}
+freedman_metrics <- lapply(ind_names, function(each_ind){
+    out <- lapply(agg_ms, function(each_agg){
+        tdt <- test_dt_list[[each_ind]][[each_agg]]
+        X_test_set <- tdt[, -c(1:2)] |> as.matrix()
+        y_test_set <- tdt$class
+        jj <- assess.glmnet(models_list[[each_agg]], newx = X_test_set, newy = y_test_set) |> unlist()
+        return(jj['auc'])
+    })
 
+    names(out) <- agg_ms
+    out <- do.call('rbind', out)
+    return(out)
+})
+names(freedman_metrics) <- ind_names
+```
 
+```{r}
+fmetrics <- do.call('cbind', freedman_metrics)
+colnames(fmetrics) <- names(freedman_metrics)
+fmetrics
+```
 
+#### A heatplot
+```{r}
+res_df <- data.frame(fmetrics)
+res_df$agg_method <- rownames(res_df)
+res_for_plot <- reshape2::melt(res_df, measure.vars = c(ind_names))
+```
+```{r}
+colnames(res_for_plot) <- c("agg_method","individual", "AUC")
+res_for_plot$AUC <- as.numeric(res_for_plot$AUC)
+ggplot(res_for_plot, aes(x=individual, y=factor(agg_method), fill=AUC)) + 
+    geom_tile() +
+    theme_classic() +
+    theme(text = element_text(size = 15))  + 
+    labs(title=glue("AUC of Cistrome models on {length(ind_names)} individuals for {TF}"),
+        x='Individuals', y='aggregation method/model') +
+    scale_fill_gradient(low = "white", high = "red") +
+    geom_text(aes(label = round(AUC, 2)), color = "black", size = 4)
+```
 
+```{r}
+freedman_predictions <- lapply(ind_names, function(each_ind){
+    out <- lapply(agg_ms, function(each_agg){
+        tdt <- test_dt_list[[each_ind]][[each_agg]]
+        X_test_set <- tdt[, -c(1:2)] |> as.matrix()
+        y_test_set <- tdt$class
+        pp <- predict(models_list[[each_agg]],X_test_set, type='response') #, newy = y_test_set) |> unlist()
+        jj <- cbind(y_test_set, pp) 
+        colnames(jj) <- c('class', 'probabilities')
+        return(jj)
+    })
+
+    names(out) <- agg_ms
+    return(out)
+})
+names(freedman_predictions) <- ind_names
+```
+
+```{r}
+b <- freedman_predictions$LuCaP_136[[1]] |> as.data.frame()
+b$class <- factor(b$class)
+b$predicted_class <- ifelse(b$probabilities > 0.5, 1, 0)
+
+b$summary <- with(b, ifelse((class == 1 & predicted_class == 1), 'TP', 
+    ifelse((class == 1 & predicted_class == 0), 'FN', 
+        ifelse((class == 0 & predicted_class == 0), 'TN', 'FP'))))
+
+# boxplot(probabilities ~ class, data=b, col=c('aquamarin# boxplot(probabilities ~ class, data=b, col=c('aquamarine', 'darkorange'))
+#e', 'darkorange'))
+# mtext('Boxplot of distribution of probabilities', line=1, cex=1.5)
+
+# stripchart(probabilities ~ class, vertical = T, data = b, 
+#     method = "jitter", pch = 20, col = 'darkorange')
+#stripchart(probabilities ~ class, vertical = T, data = b[b$class==0, ], 
+    #method = "jitter", add = TRUE, pch = 20, col = 'aquamarine')
+
+# # Add data points
+# mylevels <- levels(b$class)
+# levelProportions <- summary(b$class)/nrow(b)
+# for(i in 1:length(mylevels)){
+ 
+#   thislevel <- mylevels[i]
+#   thisvalues <- b[b$class==thislevel, "probabilities"]
+   
+#   # take the x-axis indices and add a jitter, proportional to the N in each level
+#   myjitter <- jitter(rep(i, length(thisvalues)), amount=levelProportions[i]/2)
+#   points(myjitter, thisvalues, pch=20, col=rgb(0,0,0,.9)) 
+   
+# }
+```
+
+```{r}
+bcl1 <- b[b$class == 1, ]
+bcl0 <- b[b$class == 0, ]
+
+bcl1_true <- bcl1[bcl1$predicted_class == 1, ]
+bcl0_true <- bcl0[bcl0$class == 0, ]
+bcl1_false <- bcl1[bcl1$predicted_class == 0, ]
+bcl0_false <- bcl0[bcl0$class == 1, ]
+```
+
+```{r}
+sc_at_x <- c(1, 1.5)
+plt_xlim <- NULL
+
+stripchart(probabilities ~ class, data=bcl1_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=sc_at_x, ylim=c(0, 1))
+
+stripchart(probabilities ~ class, data=bcl0_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='aquamarine', ylim=c(0, 1), at=sc_at_x)
+
+stripchart(probabilities ~ class, data=bcl1_false, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='grey', ylim=c(0, 1), at=sc_at_x)
+
+stripchart(probabilities ~ class, data=bcl0_false, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='grey', ylim=c(0, 1), at=sc_at_x)
+
+boxplot(probabilities ~ class, data=b, add=T, at = c(1.2, 1.7), boxwex=0.08, axes=F)
+axis(1, at=c(1.1, 1.6), labels = c(0, 1), line=2)
+```
+
+```{r}
+stripchart(probabilities ~ class, data=bcl1_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=sc_at_x, ylim=c(0, 1))
+```
+
+```{r}
+
+stripchart(b[b$summary=='TP', ]$probabilities, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=1, ylim=c(0, 1))
+
+stripchart(b[b$summary=='FN', ]$probabilities, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='grey', add = T, at=1, ylim=c(0, 1))
+```
