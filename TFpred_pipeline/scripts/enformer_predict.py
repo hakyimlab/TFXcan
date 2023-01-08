@@ -1,6 +1,6 @@
 # Usage: This script is used to predict on batches using ENFORMER on individuals' regions
 # Author: Temi
-# Date: Thursday 13 Jan 2022
+# Date: Thursday 13 Jan 2023
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
@@ -92,6 +92,7 @@ def main():
     # decorate the prediction function with or without parsl
     prediction_fxn = return_prediction_function(use_parsl)
 
+    # determine what individuals to predict on and all that
     if dataset_type == 'personalized':
         if isinstance(individuals, list):
             id_list = individuals
@@ -105,6 +106,12 @@ def main():
     elif dataset_type == 'reference':
         id_list = [prediction_data_name]
         print(f'[INFO] Predicting on a reference set')
+
+    # I need a log file ==> for personalized predictions, all logs should be in the same file
+    # read in the log file for this individual ; doing this so that the log file is not opened everytime
+    logfile_csv = f'{predictions_log_dir}/predictions_log_{run_date}.csv'
+    # better to read the file in and pass it around than to just pass the file path adn read it everytime
+    logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
         
     for each_id in id_list:
         
@@ -129,20 +136,13 @@ def main():
         a = pd.read_table(interval_list_file, sep=' ', header=None)
         list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
 
-        # I need a log file
-        # read in the log file for this individual ; doing this so that the log file is not opened everytime
-        logfile_csv = f'{predictions_log_dir}/predictions_log_{run_date}.csv'
-
-        # better to read the file in and pass it around than to just pass the file path adn read it everytime
-        logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
-
         tic_prediction = time.perf_counter() # as opposed to process_time
 
         batches = generate_batch(list_of_regions, batch_n=batch_size)
         count = 0
         app_futures = []
         for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
-            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv, dataset_type=dataset_type, params_path=params_path))
+            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv, dataset_type=dataset_type))
 
             count = count + 1
 
@@ -160,6 +160,7 @@ def main():
 
     print(f'[INFO] Finished all predictions')  
 
+    # == After predictions are complete, a json file will be written out to help with aggregation
     if dataset_type == 'reference':
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')
 
