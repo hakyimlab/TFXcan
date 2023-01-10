@@ -1,5 +1,5 @@
 ---
-title: "Complete TFpred Pipeline - Using Cistrome data"
+title: "Complete TFPred Pipeline - Using Cistrome data"
 author: "Temi"
 date: 'Sat Jan 7 2023'
 format: 
@@ -48,6 +48,7 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```{r}
 id <- 'cistrome'
 TF <- 'FOXA1'
+todays_date <- '2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
 ```
 
@@ -552,7 +553,6 @@ TF <- jfile$transcription_factor
 id <- jfile$each_id
 ```
 
-
 ```{r}
 # agg_methods <- c(agg_center, agg_precenter, agg_postcenter)
 # agg_methods
@@ -701,6 +701,31 @@ system("qstat -u temi")
 ## Step 7: Read in the models and explore and all that 
 
 ```{r}
+library(RColorBrewer)
+library(ggthemes)
+library(forcats)
+library(ggrepel)
+library(glmnet)
+```
+
+```{r}
+TF <- 'GATA3'
+```
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods
+```
+
+```{r}
 enformer_annotations <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/metadata/enformer_tracks_annotated-resaved.txt')
 enformer_annotations$feature_names <- paste('f_', 1:5313, sep='')
 enformer_annotations[1:5, ]
@@ -727,6 +752,7 @@ collate_coefficients <- function(fit){
     feature_data <- enformer_annotations[enformer_annotations$feature_names %in% (fit$glmnet.fit$beta |> rownames()), c('assay', 'feature_names')]
 
     fit_beta <- as.data.frame(cbind(fit_beta, feature_data))
+    colnames(fit_beta)[1:2] <- c('lambda.1se', 'lambda.min')
 
     return(fit_beta)
 }
@@ -742,6 +768,8 @@ test_model <- function(model, X_test_set, y_test_set){
 ```
 
 ```{r}
+model_dir <- glue('{project_dir}/models')
+
 # load all the models
 models_list <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -754,25 +782,89 @@ models_list <- purrr::map(.x=agg_methods, function(each_method){
 names(models_list) <- agg_methods
 ```
 
-Since these are cv.glmnet objects, I need to select the lambda that corresponds to the highest metric
-either use `lambda.min` or `lambda.1se`
+Collect the coefficients per model
 
 ```{r}
-whlm <- which(model_rds$lambda == model_rds[['lambda.min']])
-model_rds$cvm[whlm]
+models_coefficients <- purrr::map(.x=agg_methods, function(each_method){
+    dt <- collate_coefficients(models_list[[each_method]])
+    dt$agg_model <- each_method
+    return(dt)
+})
+names(models_coefficients) <- agg_methods
 ```
 
 ```{r}
-temp_roc <- roc.glmnet(models_list[[agg_methods[1]]]$fit.preval, newy=training_data_list[[agg_methods[1]]]$class, family='binomial')
-best_temp_roc <- temp_roc[[whlm]]
-best_temp_roc |> head()
+pdt <- models_coefficients$aggByPostCenter
+pdt[1:10, ]
 ```
 
 ```{r}
-plot(best_temp_roc)
+assays <- unique(enformer_annotations$assay)
+names(useColors) <- assays[!is.na(assays)]
+useColors <- RColorBrewer::brewer.pal(n=length(useColors), name='Dark2')
+useColors
 ```
 
-### Test on the rest of Cistrome (if the test data exists)
+```{r}
+plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter', annotate_dt=list()){
+
+    # set the colors
+    # uc <- useColors %>% as.data.frame() %>%
+    #     tibble::rownames_to_column('assay')
+    #     colnames(uc)[2] <- 'plt_colors'
+
+    # unique(coeff$assay)[!is.na(unique(coeff))]
+
+    # print(uc)
+
+    # coeff_dt <- coeff_dt %>%
+    #     dplyr::left_join(uc, by = 'assay')
+
+    pdt <- enformer_annotations %>%
+        dplyr::select(feature_names, target) %>%
+        full_join(coeff_dt, by=c('feature_names')) %>%
+        dplyr::arrange(assay, desc(lambda.1se)) %>%
+        dplyr::mutate(assay = factor(assay), plt_order=1:nrow(.)) %>%
+        dplyr::filter(abs(lambda.1se) > 0)
+
+    plt_grps <- pdt %>% 
+        group_by(assay) %>%
+        mutate(lmax=max(lambda.1se), lmin=min(lambda.1se)) %>%
+        dplyr::filter(((lambda.1se == max(lambda.1se)) | (lambda.1se == min(lambda.1se)))) %>% dplyr::filter(assay %in% c('TF ChIP-seq', 'Histone ChIP-seq'))
+
+    tf_specific_annotations <- pdt[!is.na(pdt$target) & startsWith(pdt$target, TF), ]
+
+    # lollipop plot
+    pdt %>%
+        dplyr::mutate(feature_names=forcats::fct_reorder(feature_names, -plt_order)) %>%
+        ggplot(., aes(y = lambda.1se, x=feature_names)) +
+            geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names, colour=assay)) +
+        ggplot2::geom_point(size=0.9, aes(colour=assay)) +
+        labs(title=glue('Plot of coefficients of {TF} {agg_method} predictors'), x = 'non-zero tracks/predictors', y='coefficients') +
+        geom_text_repel(data = plt_grps, aes(label = target), box.padding = unit(0.45, "lines")) +
+        geom_text_repel(data = tf_specific_annotations, aes(label = target), color='black', box.padding = unit(0.45, "lines")) + 
+        scale_color_manual(values = useColors) +
+        theme(axis.text.x=element_blank(),
+            axis.ticks.x=element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            panel.background = element_blank(),
+            axis.line.y = element_line(linewidth = 0.2, linetype = "solid", colour = "black"))
+}
+```
+
+```{r}
+temps <- purrr::map(.x=names(models_coefficients), function(each_aggm){
+    plot_and_annotate_coefficients(models_coefficients[[each_aggm]], 'GATA3', each_aggm)
+})
+```
+
+```{r}
+ggpubr::ggarrange(plotlist=temps, common.legend=T, legend='top', nrow=length(temps))
+```
+
+#### Test on the rest of Cistrome (if the test data exists)
 ```{r}
 test_id <- 'cistrome'
 # load all the training data
@@ -804,9 +896,201 @@ tm <- do.call('rbind', cistrome_test_assess_metrics)[, 'auc']
 tm <- tm[order(tm,decreasing = TRUE)]
 xbp <- barplot(tm, xaxt='n', space=0.1, xlab=NULL, ylab='AUC', col=ifelse(tm == max(tm),"green", ifelse(tm == min(tm), 'red', 'grey'))) #names.arg=names(tm), las=1.5)
 text(cex=0.9, x=xbp+0.05, y=0.0, names(tm), xpd=TRUE, srt=25, pos=2)
-mtext(glue('AUC of models on {id} test data for {TF}'), side=3, cex=1.5)
-mtext('aggregation method/models', side=1, line=3)
+mtext(glue('AUC of models on {id} test data for {TF}'), side=3, cex=1.2, line=2)
+mtext('aggregation method/models', side=1, line=4)
 text(xbp, 0.6, labels=round(tm, 3),cex=1,pos=3) 
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### IGNORE THE REST OF THE NOTEBOOK 
+- I have some old codes here and I don't want to delete them yet
+
+<!-- 
+```{r}
+all_mcs %>%  
+    dplyr::mutate(feature_names=forcats::fct_reorder(feature_names, -plt_order)) %>%
+    ggplot(.) + 
+    aes(y = lambda.1se, x=feature_names) + 
+    geom_point() + 
+    geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names, colour=assay)) + facet_wrap( ~ agg_model) + theme(axis.text.x=element_blank(),
+            axis.ticks.x=element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank(),
+            panel.border = element_blank(),
+            panel.background = element_blank(),
+            axis.line.y = element_line(linewidth = 0.2, linetype = "solid", colour = "black"))
+
+```
+
+
+
+#### panelled plot
+
+```{r}
+all_mcs <- enformer_annotations %>%
+    dplyr::select(feature_names, target) %>%
+    full_join(all_mcs, by=c('feature_names')) %>%
+    dplyr::arrange(assay, desc(lambda.1se)) %>%
+    dplyr::mutate(assay = factor(assay), plt_order=1:nrow(.)) %>%
+    dplyr::filter(abs(lambda.1se) > 0)
+```
+
+```{r}
+plt_grps <- pdt %>% 
+    group_by(assay) %>%
+    mutate(lmax=max(lambda.1se), lmin=min(lambda.1se)) %>%
+    dplyr::filter(((lambda.1se == max(lambda.1se)) | (lambda.1se == min(lambda.1se)))) %>% dplyr::filter(assay %in% c('TF ChIP-seq', 'Histone ChIP-seq'))
+```
+
+```{r}
+tf_specific_annotations <- pdt[!is.na(pdt$target) & startsWith(pdt$target, 'FOX'), ]
+tf_specific_annotations
+```
+
+```{r}
+pdt <- enformer_annotations %>%
+    dplyr::select(feature_names, target) %>%
+    full_join(pdt, by=c('feature_names')) %>%
+    dplyr::arrange(assay, desc(lambda.1se)) %>%
+    dplyr::mutate(assay = factor(assay), plt_order=1:nrow(.)) %>%
+    dplyr::filter(abs(lambda.1se) > 0)
+    pdt[1:10, ]
+```
+
+
+
+
+```{r}
+# pdt %>%
+#     ggplot(., aes(y = lambda.1se, x=feature_names, col=assay)) +
+#         geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names), color='black') + 
+#     ggplot2::geom_point() +
+#     ggthemes::theme_base() +
+#     ylab('coefficients') +
+#     theme(axis.title.x=element_blank(),
+#         axis.text.x=element_blank(),
+#         axis.ticks.x=element_blank()) +
+#     scale_color_brewer(palette='Dark2')
+```
+
+```{r}
+agg_method <- c('aggByPreCenter')
+```
+
+
+```{r}
+ pdt %>%
+    dplyr::mutate(feature_names=forcats::fct_reorder(feature_names, -plt_order)) %>%
+    ggplot(., aes(y = lambda.1se, x=feature_names, col=assay)) +
+        geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names)) +
+    ggplot2::geom_point(size=0.9) +
+    theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.line.y = element_line(linewidth = 0.2, 
+            linetype = "solid", colour = "black")) +
+    scale_fill_manual(values=useColors) + 
+    labs(title=glue('Plot of coefficients of {TF} {agg_method} predictors'), 
+        x = 'non-zero tracks/predictors', y='coefficients') +
+    geom_text_repel(data = plt_grps,
+        aes(label = target), 
+       box.padding = unit(0.45, "lines")) +
+    geom_text_repel(data = tf_specific_annotations,
+        aes(label = target), color='black', 
+       box.padding = unit(0.45, "lines")) 
+```
+
+```{r}
+coeff_dt <- models_coefficients$aggByPostCenter
+```
+
+
+
+
+```{r}
+plot_and_annotate_coefficients(models_coefficients$aggByPostCenter, 'FOXA1')
+```
+
+
+
+
+
+```{r}
+plot_tracks_coefficients(models_coefficients$aggByPostCenter)
+```
+
+
+```{r}
+
+df_beta_list <- models_coefficients
+
+useColors <- RColorBrewer::brewer.pal(n=8, name='Dark2')
+df_beta_labels <- c('For lambda with minimum mean cv error', 'For largest lambda with 1 s.e within the mininum error')
+
+for(mi in seq_along(df_beta_list)){
+    bmodel_df_beta <- df_beta_list[[mi]] |> as.data.frame()
+    bmodel_df_beta_split <- split(bmodel_df_beta, bmodel_df_beta$assay)
+
+    # define the layout
+    layout(matrix(c(1,3,2,3), nrow = 2, ncol = 2, byrow = T), height=c(5, 5), width=c(8,2))
+    par(mar=c(0.5,2.5,2,2) + 0.1, oma=c(3.5, 2.0, 3.5, 0.5) + 0.1)
+
+    for(i in 1:2){
+        ylimits <- c(min(bmodel_df_beta[, i]), max(bmodel_df_beta[, i]))
+        #print(ylimits)
+
+        plot(x=bmodel_df_beta_split[[1]] |> row.names() |> as.numeric(), y=bmodel_df_beta_split[[1]][, i], type='l', col=useColors[1], xlim=c(1, nrow(bmodel_df_beta)), ylim=ylimits, xaxt='n', main=df_beta_labels[i])
+
+        for(j in 2:length(bmodel_df_beta_split)){
+            lines(x=bmodel_df_beta_split[[j]] |> row.names() |> as.numeric(), y=bmodel_df_beta_split[[j]][, i], col=useColors[j])
+        }
+    #mtext('TTTT', side=1, outer=T, cex=1.2)
+    }
+
+    axis(1, at=seq(1, nrow(bmodel_df_beta)))
+    mtext('tracks', side=1, outer=T, cex=1.2, line=2, adj=0.4)
+    mtext('coefficients', side=2, outer=T, cex=1.2)
+    #mtext(glue('{names(best_features)[mi]}: {best_features[[mi]]}'), side=3, outer=T, cex=1.3, adj=0)
+
+    par(mai=c(0,0,0,0))
+    plot.new()
+    legend('right', legend=names(bmodel_df_beta_split), col=useColors[1:length(bmodel_df_beta_split)], lty=1, bty='n')
+}
+```
+
+
+
+Since these are cv.glmnet objects, I need to select the lambda that corresponds to the highest metric
+either use `lambda.min` or `lambda.1se`
+
+```{r}
+whlm <- which(model_rds$lambda == model_rds[['lambda.min']])
+model_rds$cvm[whlm]
+```
+
+```{r}
+temp_roc <- roc.glmnet(models_list[[agg_methods[1]]]$fit.preval, newy=training_data_list[[agg_methods[1]]]$class, family='binomial')
+best_temp_roc <- temp_roc[[whlm]]
+best_temp_roc |> head()
+```
+
+```{r}
+plot(best_temp_roc)
 ```
 
 
@@ -845,10 +1129,6 @@ test_model(models_list[[agg_methods[1]]], X_test, y_test$class)
 ```{r}
 assess.glmnet(models_list[[agg_methods[1]]], X_test |> as.matrix(), y_test$class)
 ```
-
-
-
-
 
 ```{r}
 print(names(models_list))
@@ -907,3 +1187,36 @@ training_data_metrics[[1]] |> head()
 
 
 
+
+
+```{r}
+# layout(matrix(c(1, 2, 3, 4, 5), nrow=5, ncol=1, byrow=T), height=c(6, 6, 6, 6, 6))
+# layout.show(5)
+plot_tracks_coefficients <- function(model_coeffs, which_s='lambda.1se'){
+
+    require(RColorBrewer)
+    useColors <- RColorBrewer::brewer.pal(n=8, name='Dark2')
+
+    bmodel_df_beta <- model_coeffs |> as.data.frame()
+    bmodel_df_beta_split <- split(bmodel_df_beta, bmodel_df_beta$assay)
+
+    ylimits <- c(min(bmodel_df_beta[, which_s]), max(bmodel_df_beta[, which_s]))
+
+    plot(x=bmodel_df_beta_split[[1]] |> row.names() |> as.numeric(), y=bmodel_df_beta_split[[1]][, which_s], type='l', col=useColors[1], xlim=c(1, nrow(bmodel_df_beta)), ylim=ylimits, xaxt='n', main=which_s)
+
+    for(j in 2:length(bmodel_df_beta_split)){
+        lines(x=bmodel_df_beta_split[[j]] |> row.names() |> as.numeric(), y=bmodel_df_beta_split[[j]][, which_s], col=useColors[j])
+    }
+
+    axis(1, at=seq(1, nrow(bmodel_df_beta)))
+    mtext('tracks/predictors', side=1, cex=1.2, line=2, adj=0.4)
+    mtext('coefficients', side=2, cex=1.2)
+    #mtext(glue('{names(best_features)[mi]}: {best_features[[mi]]}'), side=3, outer=T, cex=1.3, adj=0)
+
+    par(mai=c(0,0,0,0))
+    legend('right', legend=names(bmodel_df_beta_split), col=useColors[1:length(bmodel_df_beta_split)], lty=1, bty='n')
+
+}
+```
+
+```{r} -->
