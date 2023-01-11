@@ -61,6 +61,8 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
     if each_id in ['kawakami', 'cistrome']:
         pred_type = 'ref'
+    elif each_id in ['random']:
+        pred_type = 'random'
     else:
         pred_type = 'var'
 

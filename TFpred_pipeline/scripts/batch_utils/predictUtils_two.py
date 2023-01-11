@@ -7,7 +7,7 @@ import logging, json
 import os, sys
 import argparse
 
-global module_path, log_dir, write_log, dataset_type
+global module_path, log_dir, write_log, sequence_source
 
 # read in the config_file
 whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os.path.dirname(__file__)
@@ -28,10 +28,12 @@ if __name__ == 'predictUtils_two':
         else:
             project_dir = parameters['project_dir']
 
+        sequence_source = parameters['sequence_source']
+        if sequence_source == 'personalized':
+            vcf_file = parameters['vcf_file']
+
         log_dir = os.path.join(project_dir, parameters['log_dir'])
-        vcf_file = parameters['vcf_file']
         write_log = parameters["write_log"]
-        dataset_type = parameters['dataset_type']
         fasta_file = parameters['hg38_fasta_file']
         model_path = parameters['model_path']
 
@@ -135,6 +137,13 @@ def logger(msg, level, logfile):
     if level == 'error'   : log.error(msg)
 
     return None
+
+
+def generate_random_sequence_inputs(size=393216):
+    import numpy as np
+    r_seq_list = np.random.choice(['A', 'G', 'T', 'C'], size)
+    return(''.join(r_seq_list))
+
 
 def check_query(sample, query, output_dir, logfile):
     """
@@ -311,7 +320,7 @@ def replace_variants_in_reference_sequence(query_sequences, mapping_dict):
     a = map(lambda i: mapping_dict.get(i, sequence_list[i]), range(len(sequence_list)))
     return(''.join(list(a)))
 
-def create_individual_input_for_enformer(region, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log, dataset_type=dataset_type):
+def create_individual_input_for_enformer(region, fasta_func, hap_type = 'hap1', vcf_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log, sequence_source=sequence_source):
     '''
     Given a region in the genome, a reference genome (fasta) and a VCF file, create an individual's sequence for that region
 
@@ -325,37 +334,41 @@ def create_individual_input_for_enformer(region, fasta_func, hap_type = 'hap1', 
         A new sequence with all the changes applied.
     '''
 
-    if dataset_type == 'reference':
-        a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
-    elif dataset_type == 'personalized':
-        #vcf_object = vcf_func() # make_cyvcf_object() #
-        a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
-
-    # check that all the sequences in a are valid
-    if all(i == 'N' for i in a['sequences']) or (a is None):
-        #print(f'[INPUT ERROR] {region} is invalid; all nucleotides are N.')
-        if write_log['error']:
-            err_msg = f'[INPUT ERROR] {region} is invalid; all nucleotides are N.'
-            MEMORY_ERROR_FILE = f"{log_dir}/error_details.log"
-            setup_logger('error_log', MEMORY_ERROR_FILE)
-            logger(err_msg, 'error', 'run_error')
-
-        #vcf_object.close()
-        return(None)
+    if sequence_source == 'random':
+        return({'sequence': generate_random_sequence_inputs(), 'sequence_source':'random', 'region':region})
     else:
-        if dataset_type == 'reference':
-            return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
-        elif dataset_type == 'personalized':
-            vcf_object = vcf_func()
-            b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
-            vcf_object.close()
+        if sequence_source == 'reference':
+            a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
+        elif sequence_source == 'personalized':
+            #vcf_object = vcf_func() # make_cyvcf_object() #
+            a = extract_reference_sequence(region, fasta_func, resize_for_enformer)
         
-            if b: # go on and change the variants by position
-                c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
-                variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
-                return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
-            else: # return the reference
+        # check that all the sequences in a are valid
+        if all(i == 'N' for i in a['sequences']) or (a is None):
+            #print(f'[INPUT ERROR] {region} is invalid; all nucleotides are N.')
+            if write_log['error']:
+                err_msg = f'[INPUT ERROR] {region} is invalid; all nucleotides are N.'
+                MEMORY_ERROR_FILE = f"{log_dir}/error_details.log"
+                setup_logger('error_log', MEMORY_ERROR_FILE)
+                logger(err_msg, 'error', 'run_error')
+
+            #vcf_object.close()
+            return(None)
+        else:
+            if sequence_source == 'reference':
                 return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
+            elif sequence_source == 'personalized':
+                vcf_object = vcf_func()
+                b = find_variants_in_vcf_file(vcf_object, a['interval_object'])
+                vcf_object.close()
+            
+                if b: # go on and change the variants by position
+                    c = create_mapping_dictionary(b, a['interval_object'].start, haplotype=hap_type)
+                    variant_sequence = replace_variants_in_reference_sequence(a['sequences'], c)
+                    return({'sequence':variant_sequence, 'sequence_source':'var', 'region':region})
+                else: # return the reference
+                    return({'sequence': a['sequences'], 'sequence_source':'ref', 'region':region})
+        
 
 def save_h5_prediction(prediction, sample, region, seq_type, output_dir):
     """
@@ -438,7 +451,7 @@ def enformer_predict_on_batch(batch_region, sample, model, output_dir, predictio
         #print(f'[CACHE INFO] (model) [{get_model.cache_info()}, {get_gpu_name()}, {sample}]')
 
         for each_region in batch_region:
-            each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None, dataset_type=dataset_type)
+            each_region_seq_info = create_individual_input_for_enformer(region=each_region['query'], vcf_func=vcf_func, fasta_func=None, hap_type = 'hap1', resize_for_enformer=True, resize_length=None, sequence_source=sequence_source)
 
             if (each_region_seq_info is not None) and (len(each_region_seq_info['sequence']) == 393216): #(b['sequence'] is not None) and (len(b['sequence']) == 393216):
                 sequence_encoded = kipoiseq.transforms.functional.one_hot_dna(each_region_seq_info['sequence']).astype(np.float32) #one_hot_encode(sequence)

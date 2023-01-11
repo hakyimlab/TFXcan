@@ -46,7 +46,7 @@ def main():
         use_parsl = parameters['use_parsl']
         n_regions = parameters["predict_on_n_regions"]
         parsl_parameters = parameters['parsl_parameters']
-        dataset_type = parameters['dataset_type']
+        sequence_source = parameters['sequence_source']
         prediction_data_name = parameters['prediction_data_name']
         run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
 
@@ -62,8 +62,8 @@ def main():
             predict_on_n_regions = (n_regions + 1) if isinstance(n_regions, int) else None
 
         # personalized parameters 
-        individuals = parameters['individuals'] if dataset_type == 'personalized' else None
-        vcf_file = parameters['vcf_file']if dataset_type == 'personalized' else None
+        individuals = parameters['individuals'] if sequence_source == 'personalized' else None
+        vcf_file = parameters['vcf_file']if sequence_source == 'personalized' else None
     
     # write the params_path to a config.json file in a predefined folder
     config_data = {'params_path': params_path}
@@ -93,7 +93,7 @@ def main():
     prediction_fxn = return_prediction_function(use_parsl)
 
     # determine what individuals to predict on and all that
-    if dataset_type == 'personalized':
+    if sequence_source == 'personalized':
         if isinstance(individuals, list):
             id_list = individuals
             pass
@@ -103,9 +103,12 @@ def main():
             else:
                 id_list = [individuals]
         print(f'[INFO] Predicting for these individuals: {id_list}')
-    elif dataset_type == 'reference':
+    elif sequence_source == 'reference':
         id_list = [prediction_data_name]
         print(f'[INFO] Predicting on a reference set')
+    elif sequence_source == 'random':
+        id_list = [prediction_data_name]
+        print(f'[INFO] Predicting on a randomly generated set')
 
     # I need a log file ==> for personalized predictions, all logs should be in the same file
     # read in the log file for this individual ; doing this so that the log file is not opened everytime
@@ -118,11 +121,14 @@ def main():
         # this is specific to an individual but is cached per individual
         # I want to cache this but it is a bit tricky to do for now
         #global make_cyvcf_object
-        if dataset_type == 'personalized':
+        if sequence_source == 'personalized':
             def make_cyvcf_object(vcf_file=vcf_file, sample=each_id):
                 import cyvcf2
                 return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
-        elif dataset_type == 'reference':
+        elif sequence_source == 'reference':
+            make_cyvcf_object = None
+            pass
+        elif sequence_source == 'random':
             make_cyvcf_object = None
             pass
 
@@ -142,7 +148,7 @@ def main():
         count = 0
         app_futures = []
         for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
-            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv, dataset_type=dataset_type))
+            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv))
 
             count = count + 1
 
@@ -161,21 +167,29 @@ def main():
     print(f'[INFO] Finished all predictions')  
 
     # == After predictions are complete, a json file will be written out to help with aggregation
-    if dataset_type == 'reference':
+    if sequence_source == 'reference':
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')
 
-        agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'dataset_type':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, individuals:None}
+        agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'sequence_source':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, 'individuals':None}
 
         with(open(f'{metadata_dir}/aggregation_config_{prediction_data_name}_{TF}.json', mode='w')) as wj:
             json.dump(agg_dt, wj) 
 
-    elif dataset_type == 'personalized':
+    elif sequence_source == 'personalized':
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')
 
-        agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'dataset_type':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, 'individuals':individuals}
+        agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'sequence_source':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, 'individuals':individuals}
 
         with(open(f'{metadata_dir}/aggregation_config_{prediction_data_name}_{TF}.json', mode='w')) as wj:
-            json.dump(agg_dt, wj)              
+            json.dump(agg_dt, wj)     
+
+    elif sequence_source == 'random':
+        print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')
+
+        agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'sequence_source':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, 'individuals':None}
+
+        with(open(f'{metadata_dir}/aggregation_config_{prediction_data_name}_{TF}.json', mode='w')) as wj:
+            json.dump(agg_dt, wj)         
                     
 if __name__ == '__main__':
     main()
