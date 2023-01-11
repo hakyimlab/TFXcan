@@ -41,7 +41,7 @@ with open(f'{args.metadata_file}') as f:
 
     enformer_predictions_path = parameters['enformer_prediction_path']
     log_file = parameters['log_file']
-    dataset_type = parameters['dataset_type']# e.g. "kawakami" or "cistrome"
+    sequence_source = parameters['sequence_source']# e.g. "kawakami" or "cistrome"
     todays_date = parameters['run_date']
     base_path = parameters['predictions_folder']
     TF = parameters['transcription_factor']
@@ -49,14 +49,14 @@ with open(f'{args.metadata_file}') as f:
 
 agg_type = args.agg_type
 
-print(f'[INFO] Currently on {dataset_type}')
+print(f'[INFO] Currently on {sequence_source}')
 
-save_dir = f'{base_path}/aggregated_predictions/{dataset_type}_{TF}_{todays_date}'
+save_dir = f'{base_path}/aggregated_predictions/{sequence_source}_{TF}_{todays_date}'
 if not os.path.isdir(save_dir):
     os.makedirs(save_dir)
 
 if individuals is None:
-    ids_names = [dataset_type]
+    ids_names = [sequence_source]
 elif isinstance(individuals, list):
     ids_names = individuals
 

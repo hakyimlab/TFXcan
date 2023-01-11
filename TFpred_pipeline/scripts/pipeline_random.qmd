@@ -1,0 +1,372 @@
+---
+title: "Complete TFPred Pipeline - Using Cistrome data"
+author: "Temi"
+date: 'Mon Jan 9 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+# Introduction and usage
+
+This script should be run interactively
+This script contains the entire TFPred pipeline or the idea of it. 
+- Collects the ChIP peaks
+- Overlaps the peaks with predicted motifs to define positive and negative sets
+- Uses ENFORMER to predict on these regions
+- Aggregates these predictions
+- Trains on these regions
+- Provides some metrics
+
+The TFPred pipeline works only on a reference set - this script does not predict on individual data (as yet)
+
+Load libraries
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+
+## Step 1: Set up
+
+- collect the sorted bed files for the TF
+- check that all files are available
+
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+```
+
+```{r}
+dataset_type <- 'random' # change this variable name 
+TF <- 'FOXA1'
+todays_date <- data_date <- '2023-01-06' #Sys.Date()
+#TF <- 'GATA3'
+```
+
+
+## Step 2: Collect/aggregate the predictions
+
+This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
+The user supplies what aggregation option.
+
+There are currently 7 valid options for aggregations:
+- aggByCenter:
+- aggByMean:
+- aggByUpstream:
+- aggByDownstream:
+- aggByUpstreamDownstream:
+- aggByPreCenter
+- aggByPostCenter
+
+
+Aggregate the predictions
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods
+```
+
+Check that the appropriate scripts exist
+```{r}
+# check that the script exists
+aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions_pbs.sh")
+aggregation_pbs_script ; file.exists(aggregation_pbs_script)
+```
+
+```{r}
+aggregation_python_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions.py")
+aggregation_python_script ; file.exists(aggregation_python_script)
+```
+
+```{r}
+dataset_type <- 'random'
+TF <- 'FOXA1'
+
+aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset_type}_{TF}.json")
+aggregation_config ; file.exists(aggregation_config)
+
+```
+
+```{r}
+for(am in agg_methods){
+
+    pbs_script <- glue('qsub -v collect_py={aggregation_python_script},aggregation_config={aggregation_config},agg_type={am} {aggregation_pbs_script}')
+    system(pbs_script)
+
+    # wait a little before submitting the next one
+    date_time <- Sys.time()
+    while((as.numeric(Sys.time()) - as.numeric(date_time)) < 1){}
+}
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+### Optional
+Remove/clean up all the aggregated batches
+
+```{r}
+for(am in agg_methods){
+    files_to_delete <- Sys.glob(glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset_type}_{TF}_{todays_date}/{dataset_type}_{am}_{TF}_batch_*.csv.gz'))
+
+    file.remove(files_to_delete)
+}
+```
+
+
+#### Load in the cistrome models
+
+```{r}
+model_data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
+```
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+
+model_id <- 'cistrome'
+# load all the models
+models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{id}_{TF}_{each_method}_binary_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(models_list) <- agg_methods
+```
+
+### load in the cistrome training data
+```{r}
+test_id <- 'cistrome'
+# load all the training data
+cistrome_data_dir <- glue('{project_dir}/model_data/{test_id}_{TF}/data_{todays_date}')
+train_data_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    train_dt <- data.table::fread(glue("{cistrome_data_dir}/train_{each_method}.csv.gz"))
+    return(train_dt)
+
+}, .progress=T)
+
+names(train_data_list) <- agg_methods
+```
+
+
+### Read in the random predictions
+```{r}
+random_set <- purrr::map(.x=agg_methods, function(each_method){
+
+    random_agg_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset_type}_{TF}_{data_date}/{dataset_type}_{each_method}_{TF}.csv.gz')
+    random_center_dt <- data.table::fread(random_agg_file)
+
+    ft <- train_data_list[[each_method]] |> as.data.frame()
+    random_center_dt <- random_center_dt[random_center_dt$V1 %in% ft$region, ]
+
+
+
+    #
+    set.seed(2023)
+    random_class <- sample(c(0, 1), nrow(random_center_dt), replace=T)
+    new_dt <- cbind(random_center_dt[, 1], random_class, random_center_dt[ , -1])
+    colnames(new_dt) <- c('region', 'class', paste('f_', 1:(ncol(new_dt)-2), sep=''))
+
+    return(new_dt)
+
+}, .progress=T)
+
+names(random_set) <- agg_methods
+```
+
+```{r}
+lapply(random_set, dim)
+```
+
+
+```{r}
+random_set$aggByPreCenter[1:5, 1:5]
+```
+
+### 
+```{r}
+training_beta_predictions <- lapply(agg_methods, function(each_method){
+    model <- models_list[[each_method]]
+    whlm <- which(model$lambda == model[['lambda.1se']])
+    model_beta <- model$glmnet.fit$beta |> as.matrix()
+    bst_beta <- model_beta[, whlm]
+
+    new_x <- train_data_list[[each_method]][, -c(1:3)] |> as.matrix()
+    #print(new_x[1:5, 1:5])
+
+    prediction_estimates <- new_x %*% matrix(bst_beta)
+
+    return(prediction_estimates)
+})
+
+training_beta_predictions <- do.call('cbind', training_beta_predictions)
+colnames(training_beta_predictions) <- agg_methods
+```
+
+```{r}
+boxplot(training_beta_predictions)
+```
+
+```{r}
+random_beta_predictions <- lapply(agg_methods, function(each_method){
+    model <- models_list[[each_method]]
+    whlm <- which(model$lambda == model[['lambda.1se']])
+    model_beta <- model$glmnet.fit$beta |> as.matrix()
+    bst_beta <- model_beta[, whlm]
+
+    new_x <- random_set[[each_method]][, -c(1:2)] |> as.matrix()
+    #print(new_x[1:5, 1:5])
+
+    prediction_estimates <- new_x %*% matrix(bst_beta)
+
+    return(prediction_estimates)
+})
+
+random_beta_predictions <- do.call('cbind', random_beta_predictions)
+colnames(random_beta_predictions) <- agg_methods
+```
+```{r}
+boxplot(random_beta_predictions)
+```
+
+
+```{r}
+make_list <- function(lst1, lst2, cnames_agg=agg_methods, cnames_dt=c('a', 'b')){
+
+    out_list <- lapply(agg_methods, function(each_m){
+        dt <- cbind(lst1[, each_m], lst2[, each_m])
+        colnames(dt) <- cnames_dt
+        return(dt)
+    })
+
+    #print(out_list)
+
+    names(out_list) <- agg_methods
+
+    return(out_list)
+
+}
+```
+
+```{r}
+out_dt <- make_list(training_beta_predictions, random_beta_predictions, agg_methods, c('training', 'random'))
+```
+
+```{r}
+out_dt$aggByPreCenter[1:5, ]
+```
+
+```{r}
+boxplot(out_dt$aggByPreCenter)
+```
+
+```{r}
+with(out_dt$aggByPreCenter |> as.data.frame(), t.test(training, random, paired=F))
+```
+
+```{r}
+boxplot(out_dt$aggByPreCenter)
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+```
+
+
+```{r}
+
+box_plots <- lapply(agg_methods, function(each_m){
+    out_dt[[each_m]] %>%
+        as.data.frame() %>%
+        tidyr::pivot_longer(cols=c('training', 'random')) %>%
+        ggplot(., aes(x=name, y=value)) + 
+            geom_boxplot() +
+        theme_classic() +
+        labs(x='dataset, X', y=expression(X*beta))
+
+})
+
+
+ggpubr::ggarrange(plotlist=box_plots, common.legend=T, legend='top')
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+one_model <- models_list$aggByPostCenter
+whlm <- which(one_model$lambda == one_model[['lambda.1se']])
+one_model$cvm[whlm]
+```
+
+```{r}
+temp_beta <- one_model$glmnet.fit$beta |> as.matrix()
+bst_beta <- temp_beta[, whlm]
+```
+
+```{r}
+prediction_estimates <- new_x %*% matrix(bst_beta)
+```
+
+
+
+```{r}
+g <- predict(one_model$glmnet.fit, as.matrix(agg_transform_list$aggByPostCenter))
+```
+
+```{r}
+glmnet::coef.glmnet(one_model$glmnet.fit, s=one_model[['lambda.1se']])
+```
+
+```{r}
+new_x <- agg_transform_list$aggByPostCenter[, -c(1:2)] |> as.matrix()
+new_x[1:5, 1:5]
+```
+
+```{r}
+prediction_estimates <- glmnet::predict.glmnet(one_model$glmnet.fit, s=one_model[['lambda.1se']], newx=new_x)
+```
+
+
+
+
+
+
+
+
+

@@ -1,7 +1,8 @@
 #!/bin/bash
+#PBS -l select=1:system=polaris
 #PBS -l walltime=00:59:00,filesystems=home:grand
 #PBS -A covid-ct
-#PBS -q debug-scaling    
+#PBS -q preemptable   
 #PBS -N scan_genomewide_motifs
 #PBS -k doe
 #PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/scan_genomewide_motifs.out
