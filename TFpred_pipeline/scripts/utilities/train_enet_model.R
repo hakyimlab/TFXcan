@@ -62,7 +62,7 @@ saveRDS(cv_binary_model, file=rds_file)
 
 # vbc <- y_train$binding_counts
 # nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
-cv_linear_model <- glmnet::cv.glmnet(x=X_train, y=y_train$norm_bc, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T, parallel=T, nfolds=3)
+cv_linear_model <- glmnet::cv.glmnet(x=X_train, y=y_train$norm_bc, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T, parallel=T, nfolds=5)
 print(cv_linear_model)
 print(glue('[INFO] Saving `{id_data}_{TF}_{metainfo}_linear_{training_date}.rds` to {output_dir}'))
 rds_file <- glue('{output_dir}/{id_data}_{TF}_{metainfo}_linear_{training_date}.rds')
