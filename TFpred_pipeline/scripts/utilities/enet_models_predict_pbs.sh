@@ -2,11 +2,11 @@
 #PBS -l select=1:system=polaris
 #PBS -l walltime=01:00:00,filesystems=grand
 #PBS -A covid-ct
-#PBS -q preemptable    
-#PBS -N train_enet
+#PBS -q debug-scaling    
+#PBS -N prediction_scores
 #PBS -k doe
-#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/train_enet.out
-#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/train_enet.err
+#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/prediction_scores.out
+#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/prediction_scores.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
@@ -36,9 +36,9 @@ echo "PBS_JOBID = " $PBS_JOBID
 #Rscript="~/miniconda3/envs/r-env/bin/Rscript"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${training_script}" "${data_file}" "${id_data}" "${TF}" "${metainfo}" "${output_dir}" "${training_date}"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${pscore_script}" "${model_dir}" "${model_id}" "${individual_data_dir}" "${TF}" "${model_type}" "${run_date}" "${output_dir}" "${ground_truth_file}"
 
 status=$?
-echo "Exit status of training run for ${metainfo} is: $status"
+echo "Exit status of pscore run is: $status"
 
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh

@@ -1,5 +1,5 @@
 {
-  "individuals": ["LuCaP_136", "LuCaP_141", "LuCaP_145", "LuCaP_167"],
+  "individuals": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt",
   "vcf_file": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz",
   "project_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline",
   "sub_dir": true,
@@ -26,7 +26,7 @@
   "parsl_parameters": {
     "job_name": "enformer_predict_freedman_FOXA1",
     "num_of_full_nodes": 10,
-    "walltime": "02:00:00",
+    "walltime": "24:00:00",
     "min_num_blocks": 0,
     "max_num_blocks": 1,
     "queue": "preemptable"

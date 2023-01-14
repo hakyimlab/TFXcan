@@ -44,11 +44,127 @@ project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
 ```
 
 ```{r}
-dataset_type <- 'random' # change this variable name 
+dataset <- 'random' # change this variable name 
 TF <- 'FOXA1'
-todays_date <- data_date <- '2023-01-06' #Sys.Date()
+todays_date <- data_date <- '2023-01-11' #Sys.Date()
 #TF <- 'GATA3'
 ```
+
+### create random enformer predictions based on 
+```{r}
+metadata_dir <- glue('{project_dir}/metadata')
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
+```
+
+```{r}
+# /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/motif_intervals/freedman/intervals_2023-01-11/predictors/freedman_FOXA1_47000.txt
+pdataset <- 'cistrome'
+predictor_file <- Sys.glob(glue('{project_dir}/motif_intervals/{pdataset}/intervals_{data_date}/predictors/{pdataset}_{TF}_*.txt'))
+
+predictor_file ; file.exists(predictor_file)
+```
+
+#### Before predicting, create a random ground truth per region
+
+```{r}
+pf <- data.table::fread(predictor_file, header=F)
+set.seed(2023)
+random_ground_truth <- sample(c(0, 1), nrow(pf), replace=T)
+```
+
+```{r}
+random_dr <- cbind(pf, random_ground_truth, 0) |> as.data.frame()
+colnames(random_dr) <- c('region', 'class', 'binding_counts')
+random_dr[1:5, ]
+```
+
+
+```{r}
+dataset <- 'random'
+todays_date <- todays_date #Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+#k_set <- with(random_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(random_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(random_dr)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(random_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(random_dr)}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+```{r}
+predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(random_dr)}.txt')
+predictor_file
+```
+
+### Predict on these random regions with ENFORMER
+
+```{r}
+enformer_parameters_json <- list()
+
+# you may change these as appropriate
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['prediction_data_name']] <- dataset
+enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['date']] <- todays_date
+enformer_parameters_json[['interval_list_file']] <- predictor_file
+enformer_parameters_json[['sequence_source']] <- "random"
+
+# no need to change these
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
+enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['vcf_file']] <- NA
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['log_dir']] <- "cobalt_log"
+enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['use_parsl']] <- TRUE
+enformer_parameters_json[['predict_on_n_regions']] <- -1
+enformer_parameters_json[['write_log']] <- list('memory'=FALSE, 'error'=TRUE, 'time'=FALSE, 'cache'=FALSE)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="01:00:00", "min_num_blocks"=0, "max_num_blocks"=1, "queue"="preemptable")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+```
+
+
+#### Copy this command below and run it in another shell (you many need to modify the name of the conda environment and all that )
+
+I can write this into a shell script and call it with `system()`. The problem is that I am currently within a shell (using R) and it won't initialize my conda environment in that way. Pretty sure there is a way around it - but it may be tricky
+```{r}
+# prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```
+
+```{r}
+system('qstat -u temi')
+```
+
 
 
 ## Step 2: Collect/aggregate the predictions
@@ -94,10 +210,10 @@ aggregation_python_script ; file.exists(aggregation_python_script)
 ```
 
 ```{r}
-dataset_type <- 'random'
+dataset <- 'random'
 TF <- 'FOXA1'
 
-aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset_type}_{TF}.json")
+aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
 aggregation_config ; file.exists(aggregation_config)
 
 ```

@@ -2,22 +2,26 @@
 import pandas as pd
 import numpy as np
 
-def agg_byall(pred_tracks):
+# def agg_byall(pred_tracks):
     
-    return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
+#     return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
 
-def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, base_path, save_dir, agg_types, batch_num=None):
+def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, base_path, save_dir, agg_types, batch_num=None):
 
     import h5py
     import numpy as np
-    import os, sys
+    import os, sys, subprocess, tqdm
     import pandas as pd
+    import multiprocessing
+
     # these are the bins/ positions
     upstream = list(range(0, 8))
     center = 8
     pre_center = 7
     post_center = 9
     downstream = list(range(9, 17))
+
+    global read_file
 
     # can aggregate by the mean of all bins, mean of the upstream and/or downstream alone, or just select the center
     def agg_by_mean(pred_tracks, use_bins=None):
@@ -57,8 +61,6 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
 
         return dt
 
-    kawakami_predictions = {}
-
     if each_id in ['kawakami', 'cistrome']:
         pred_type = 'ref'
     elif each_id in ['random']:
@@ -66,56 +68,70 @@ def collect_modeling_data_for_kawakami(each_id, log_data, predictions_path, TF, 
     else:
         pred_type = 'var'
 
-    for dt in log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist():
-        fle = f'{predictions_path}/{dt}_predictions.h5'
+    print(f'[INFO] Seeing {multiprocessing.cpu_count()} CPUs')
+    print(f'[INFO] Starting job for {each_id}')
+
+    def read_file(motif, dir = predictions_path):
+        import os
+        import h5py
+
+        output = {}
+        fle = f'{predictions_path}/{motif}_predictions.h5'
         if os.path.isfile(fle):
             with h5py.File(fle, 'r') as f:
                 filekey = list(f.keys())[0]
-                kawakami_predictions[dt] = np.vstack(list(f[filekey]))
+                output[motif] = np.vstack(list(f[filekey]))
         else:
-            print(f'[ERROR] {dt} predictions file does not exist.')
+            print(f'[ERROR] {motif} predictions file does not exist.')
 
-    print(f'[INFO] Finished collecting {len(kawakami_predictions)} predictions for {each_id}')
+        return(output)
 
-    #dt_aggbycenter = agg_by_center(kawakami_predictions, center=8)
-    #data_list = [dt_aggbycenter]
+    if __name__ == '__main__':
 
-    data_dict = {}
-    for agg_type in agg_types:
-        if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(kawakami_predictions)
-        if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=center)
-        if agg_type == 'aggByPreCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=pre_center)
-        if agg_type == 'aggByPostCenter': data_dict[agg_type] = agg_by_center(kawakami_predictions, center=post_center)
-        if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream)
-        if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=downstream)
-        if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(kawakami_predictions, use_bins=upstream + downstream)
+        for agg_type in agg_types:
 
-    #test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream = agg_byall(kawakami_predictions)
-    #data_list = [test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream]
+            motifs_list = log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist()
+            print(len(motifs_list))
+            #print(motifs_list[0:5])
 
-    for i, agg_type in enumerate(data_dict):
+            pool = multiprocessing.Pool(16)
+            outputs_list = pool.map(read_file, motifs_list)
+            predictions =  {k: v for d in outputs_list for k, v in d.items()}
 
-        #ty = pd.concat([pd.Series(list(kawakami_predictions.keys())), pd.DataFrame(dt)], axis=1)
-        ty = pd.DataFrame(data_dict[agg_type])
-        print(f'[INFO] Dimension of collected data is {ty.shape[0]} by {ty.shape[1]}')
+            print(f'[INFO] Successfully read all files: {len(predictions)}')
 
-        column_names = ['id']
-        column_names.extend([f'f_{i}' for i in range(1, ty.shape[1])])
+            data_dict = {}
+        
+            if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(predictions)
+            if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(predictions, center=center)
+            if agg_type == 'aggByPreCenter': data_dict[agg_type] = agg_by_center(predictions, center=pre_center)
+            if agg_type == 'aggByPostCenter': data_dict[agg_type] = agg_by_center(predictions, center=post_center)
+            if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=upstream)
+            if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=downstream)
+            if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=upstream + downstream)
 
-        #print(len(column_names))
-        ty = ty.set_axis(column_names, axis=1, inplace=False)
-        print(ty.iloc[0:5, 0:5])
+            #ty = pd.concat([pd.Series(list(predictions.keys())), pd.DataFrame(dt)], axis=1)
+            ty = pd.DataFrame(data_dict[agg_type])
+            print(f'[INFO] Dimension of collected data is {ty.shape[0]} by {ty.shape[1]}')
 
-        if batch_num is None:
-            ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}.csv.gz', index=False, compression='gzip')
-        else:
-            ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}_batch_{batch_num}.csv.gz', index=False, compression='gzip')
+            column_names = ['id']
+            column_names.extend([f'f_{i}' for i in range(1, ty.shape[1])])
+
+            #print(len(column_names))
+            ty = ty.set_axis(column_names, axis=1, inplace=False)
+            print(ty.iloc[0:5, 0:5])
+
+            print(f'[INFO] Saving file to {save_dir}/{each_id}_{agg_type}_{TF}.csv.gz')
+            if batch_num is None:
+                ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}.csv.gz', index=False, compression='gzip')
+                print(f'[INFO] Finished saving data for {each_id}')
+            else:
+                ty.to_csv(path_or_buf=f'{save_dir}/{each_id}_{agg_type}_{TF}_batch_{batch_num}.csv.gz', index=False, compression='gzip')
+                print(f'[INFO] Finished saving data for {each_id} for batch {batch_num}')
             
-    print(f'[INFO] Finished saving data for {each_id} for batch {batch_num}')
-
     return(0)
 
-def return_prediction_function(use_parsl, fxn=collect_modeling_data_for_kawakami):
+def return_prediction_function(use_parsl, fxn=aggregate_enformer_predictions):
     '''
     Decorate or not the `run_batch_predictions` function based on whether `use_parsl` is true or false
     Returns: 
@@ -151,6 +167,31 @@ def generate_batch(lst, batch_n, len_lst = None):
         n_elems = math.ceil(len(lst)/batch_n)
     for i in range(0, len(lst), n_elems):
         yield lst[i:(i + n_elems)]
+
+
+
+# def pool_read_files(log_dt = log_data):
+    #     import multiprocessing
+    #     import pandas as pd
+
+    #     pool = multiprocessing.Pool(64)
+    #     motifs_list = log_dt.loc[log_dt['sequence_type'] == pred_type, ].motif.values.tolist()
+    #     outputs_list = pool.map(read_file, motifs_list)
+    #     return {k: v for d in outputs_list for k, v in d.items()}
+
+    # for dt in tqdm.tqdm(log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist()):
+    #     fle = f'{predictions_path}/{dt}_predictions.h5'
+    #     if os.path.isfile(fle):
+    #         with h5py.File(fle, 'r') as f:
+    #             filekey = list(f.keys())[0]
+    #             predictions[dt] = np.vstack(list(f[filekey]))
+    #     else:
+    #         print(f'[ERROR] {dt} predictions file does not exist.')
+
+    # print(f'[INFO] Finished collecting {len(predictions)} predictions for {each_id}')
+
+    #dt_aggbycenter = agg_by_center(predictions, center=8)
+    #data_list = [dt_aggbycenter]
 
 
 # def get_bed_files(dcids=[1], data_type='TF', cistrome_dir='/projects/covid-ct/imlab/data/cistrome/compressed', data_info=None):
@@ -224,7 +265,10 @@ def generate_batch(lst, batch_n, len_lst = None):
 
 
 
+   #test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream = agg_byall(predictions)
+    #data_list = [test_aggbymean, test_aggbycenter, test_aggbymean_upstream, test_aggbymean_downstream, test_aggbymean_upstream_downstream]
 
+            #for i, agg_type in enumerate(data_dict):
 
 
 # # ===== 
