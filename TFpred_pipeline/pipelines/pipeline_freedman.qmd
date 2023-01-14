@@ -444,6 +444,12 @@ system('qstat -u temi')
 ```
 
 
+
+```{r}
+library(ggthemes)
+library(ggsignif)
+```
+
 ```{r}
 #ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
 individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt', header=F)
@@ -455,6 +461,8 @@ ind_names
 pscores_list <- readRDS(glue('{pscore_dir}/freedman_{TF}_prediction_scores_{run_date}.rds'))
 ```
 
+
+#### t-test across re
 ```{r}
 pscores_ttest_regions <- lapply(ind_names, function(each_ind){
     ind_prediction_score <- pscores_list[[each_ind]]
@@ -486,7 +494,7 @@ all_t_test
 ```
 
 ```{r}
-# boxplots
+# combine all the predicted values
 out <- lapply(ind_names, function(each_ind){
     temp <- pscores_list[[each_ind]] |> as.data.frame()
     temp$individual <- each_ind
@@ -498,6 +506,34 @@ out <- lapply(ind_names, function(each_ind){
 all_pscores <- do.call(dplyr::bind_rows, out)
 ```
 
+```{r}
+# boxplot(aggByCenter ~ class, data=all_pscores, frame.plot=F, ylab='predicted scores', width=0.2)
+# mtext('Predicted scores across all regions across all individuals', side=3, line=2, cex=1.5, adj=0)
+```
+
+```{r}
+all_pscores %>%
+    dplyr::mutate(class= as.factor(class)) %>%
+    ggplot(.) + aes(x=class, y=aggByCenter, fill=class) + 
+    geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions across all individuals', y='predicted scores') +
+    theme(axis.title=element_text(size=15),
+        plot.title=element_text(size=20),
+        axis.text=element_text(size=12))
+```
+
+```{r}
+temp_dt <- all_pscores[, c('class', 'aggByCenter', 'individual')] 
+temp_dt$individual <- as.factor(temp_dt$individual)
+temp_dt[1:5, ]
+```
+
+```{r}
+glm(class ~ 0 + aggByCenter + individual, data=temp_dt, family=binomial) |> summary()
+```
+
+
+
+#### same plot but grouped by individual
 ```{r}
 temp <- all_pscores[, c('class', agg_methods[7], 'individual')]
 temp <- temp %>% 
@@ -550,7 +586,7 @@ temp %>%
 
 ```
 
-
+### Exploring TFPredScores or predicted scores
 # across individuals
 
 ```{r}
@@ -558,9 +594,9 @@ pscores_list$LuCaP_167[1:5, ]
 ```
 
 ```{r}
-lapply(pscores_list, function(each_pscore){
-    tt <- each_pscore[, c('region', 'class')]
-})
+# lapply(pscores_list, function(each_pscore){
+#     tt <- each_pscore[, c('region', 'class')]
+# })
 ```
 ```{r}
 gt_dir <- glue('{project_dir}/motif_intervals/freedman/intervals_{todays_date}/ground_truth')
@@ -572,15 +608,17 @@ freedman_ground_truth[1:5, 1:5]; freedman_ground_truth |> dim()
 ```
 
 ```{r}
-fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list$LuCaP_167$region, ]
+fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list$LuCaP_167$region, c('region', 'class', 'binding_counts', ind_names)]
 fgt[1:5, ] ; dim(fgt)
 ```
 
-
+Filter out the regions that are all 0 or 1 (since there will be not variability when doing the tests)
 ```{r}
-conds <- apply(fgt[, -c(1:3)], 1, function(each_r){
+conds <- apply(fgt[, ind_names], 1, function(each_r){
     each_r <- each_r |> unlist() |> unname() |> as.numeric()
     #print(each_r)
+    # sum_cond <- sum(each_r)
+
     cond_a <- all(each_r == 1) 
     cond_b <- all(each_r == 0)
 
@@ -594,8 +632,15 @@ varying_classes |> dim()
 ```
 
 ```{r}
-View(varying_classes)
+varying_classes$ncounts <- rowSums(varying_classes[, ind_names])
+#cond_ncounts <- (varying_classes$ncounts > 1) | (varying_classes$ncounts < 15)
+# pick only those regions with ncounts > 1
+varying_classes <- varying_classes[!varying_classes$ncounts %in% c(1,2,3, 13,14,15), ]
+varying_classes |> dim()
+
+#any(r == 0) ; any(rowSums(varying_classes[, -c(1:3)]) == 16)
 ```
+
 
 ```{r}
 pscores_dt <- lapply(ind_names, function(each_ind){
@@ -608,17 +653,129 @@ pscores_dt <- do.call('rbind', pscores_dt) |> as.data.frame()
 dim(pscores_dt) ; pscores_dt[1:5, ]
 ```
 
+
 ```{r}
-boxplot(aggByCenter ~ class, data=pscores_dt, main='Predicted scores across all regions across all individuals', frame.plot=F, ylab='predicted scores')
+qqplot_extended <- function(pvector, main=NULL, ...) {
+    o = -log10(sort(pvector,decreasing=F))
+    e = -log10( 1:length(o)/length(o) )
+    plot(e,o,pch=19,cex=1, main=main, ...,
+        xlab=expression(Expected~~-log[10](italic(p))),
+        ylab=expression(Observed~~-log[10](italic(p))),
+        xlim=c(0,max(e)), ylim=c(0,max(o)))
+    lines(e,e,col="red")
+}
 ```
 
 ```{r}
-test_chr <- 'chr15_90490235_90490244'
+pscores_pvalues_logreg <- purrr::map(.x=varying_classes$region, function(each_region){
+    
+    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+    tgt <- glm(class ~ aggByCenter, data=pscores_ind_region, family=binomial, control=glm.control(maxit=150)) |> summary()
+    return(tgt$coefficients[2,4] |> unlist() |> unname())
+
+}, .progress=T)
 ```
+
+```{r}
+pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_logreg)) |> as.data.frame()
+pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
+pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
+pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
+pvalues_regions[1:5, ]
+```
+
+```{r}
+qqplot_extended(pvalues_regions$V2, frame=F)
+```
+
+```{r}
+# pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
+#     pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+#     #return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+#     return(wilcox.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+
+# }, .progress=T)
+```
+
+```{r}
+pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
+    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+    return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+    #return(coin::wilcox_test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+
+}, .progress=T)
+```
+
+```{r}
+pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_ttest)) |> as.data.frame()
+pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
+pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
+pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
+pvalues_regions[1:5, ]
+```
+
+```{r}
+qqplot_extended(pvalues_regions$V2, frame=F)
+```
+
+```{r}
+adj_pvalues <- p.adjust(pvalues_regions$V2, method = 'bonferroni' )
+```
+
+```{r}
+qqplot_extended(adj_pvalues, frame=F)
+```
+
+#### Pick the top 12 regions and plot them
+```{r}
+#test_chr <- 'chr15_90490235_90490244'
+
+top_regions <- pvalues_regions[1:9, ]$V1
+
+pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscores_dt$individual %in% ind_names), ]
+
+pscores_top_regions %>%
+    dplyr::mutate(class = as.factor(class), region=as.factor(region)) %>%
+    ggplot(.) + aes(x=class, y=aggByCenter, group=class) + 
+    geom_boxplot() + 
+    geom_jitter(col='red') + 
+    facet_wrap(~region, scales='free') + theme_bw() +
+    labs(title='Boxplot of top 9 regions (ranked by p-values)', y='prediction scores') +
+    theme(plot.title=element_text(size=20), 
+        axis.title=element_text(size=18))
+```
+
+```{r}
+
+top_regions <- pvalues_regions$V1
+
+pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscores_dt$individual %in% ind_names), ]
+
+
+bcounts <- pscores_top_regions %>%
+    dplyr::mutate(region=as.factor(region)) %>%
+    group_by(region) %>%
+    summarise(nbinds = sum(class)) 
+    
+bcounts %>% View()
+```
+
+```{r}
+prb_counts <- merge(pvalues_regions, bcounts, by.x='V1', by.y='region')
+prb_counts <- prb_counts %>% arrange(V2)
+prb_counts[1:5, ]
+```
+
+
 ```{r}
 pscores_try_one <- pscores_dt[(pscores_dt$region == test_chr) & (pscores_dt$individual %in% ind_names), ]
 pscores_try_one
 ```
+
+```{r}
+coin::wilcox_test(class ~ aggByCenter, data=pscores_try_one)
+```
+
 
 ```{r}
 tgt <- glm(class ~ aggByCenter, data=pscores_try_one, family='binomial') |> summary()
@@ -648,60 +805,6 @@ glm(class ~ aggByCenter, data = pscores_try_one, family = "binomial") |> summary
 
 ```{r}
 t.test(x=pscores_try_one$aggByCenter, y=pscores_try_one$class, family = "binomial", alpha=0.5)
-```
-
-```{r}
-qqplot_extended <- function(pvector, main=NULL, ...) {
-    o = -log10(sort(pvector,decreasing=F))
-    e = -log10( 1:length(o)/length(o) )
-    plot(e,o,pch=19,cex=1, main=main, ...,
-        xlab=expression(Expected~~-log[10](italic(p))),
-        ylab=expression(Observed~~-log[10](italic(p))),
-        xlim=c(0,max(e)), ylim=c(0,max(o)))
-    lines(e,e,col="red")
-}
-```
-
-```{r}
-pscores_pvalues_logreg <- purrr::map(.x=varying_classes$region, function(each_region){
-    
-    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
-    tgt <- glm(class ~ aggByCenter, data=pscores_ind_region, family='binomial') |> summary()
-    return(tgt$coefficients[2,4] |> unlist() |> unname())
-
-}, .progress=T)
-```
-
-```{r}
-pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_logreg)) |> as.data.frame()
-pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
-pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
-pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
-pvalues_regions[1:5, ]
-```
-
-```{r}
-qqplot_extended(pvalues_regions$V2, frame=F)
-```
-
-```{r}
-pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
-    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
-    return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
-
-}, .progress=T)
-```
-
-```{r}
-pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_ttest)) |> as.data.frame()
-pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
-pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
-pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
-pvalues_regions[1:5, ]
-```
-
-```{r}
-qqplot_extended(pvalues_regions$V2, frame=F)
 ```
 
 

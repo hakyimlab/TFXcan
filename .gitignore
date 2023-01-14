@@ -26,6 +26,8 @@ TFpred_pipeline/*
 !modeling_pipeline/
 !.gitignore
 !TFpred_pipeline/scripts/
+!TFpred_pipeline/pipelines/
+
 
 
 # temp/*
