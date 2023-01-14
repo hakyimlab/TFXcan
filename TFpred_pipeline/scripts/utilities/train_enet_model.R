@@ -38,30 +38,42 @@ dt_train <- data.table::fread(data_file)
 print(dim(dt_train))
 
 # split the data
-X_train <- dt_train[, -c(1,2,3)] |> as.matrix()
-y_train <- dt_train[, c(1,2,3)] |> as.data.frame()
+X_train <- dt_train[, -c(1,2,3,4)] |> as.matrix()
+y_train <- dt_train[, c(1,2,3,4)] |> as.data.frame()
 print(head(y_train))
 
 print(glue('[INFO] Found {parallel::detectCores()} cores\n\n'))
 
 # build two models
-print(glue('[INFO] Starting to build {metainfo} enet model\n\n'))
+
 set.seed(2023)
 
 cl <- 48 #parallel::makeCluster(5)
 doParallel::registerDoParallel(cl)
 #print(glue('[INFO] Registering {len(foreach::getDoParWorkers())} workers/cores for {mix} mixing parameter\n'))
 
-cv_model <- glmnet::cv.glmnet(x=X_train, y=y_train$class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T, nfolds=3, trace.it=F)
-print(cv_model)
-doParallel::stopImplicitCluster()
-
-print(glue('[INFO] Finished with {metainfo} training\n\n'))
-print(glue('[INFO] Saving the {metainfo} cv model\n\n'))
-
+print(glue('[INFO] Starting to build binary {metainfo} enet model\n\n'))
+cv_binary_model <- glmnet::cv.glmnet(x=X_train, y=y_train$class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T, nfolds=3, trace.it=F)
+print(cv_binary_model)
 print(glue('[INFO] Saving `{id_data}_{TF}_{metainfo}_binary_{training_date}.rds` to {output_dir}'))
 rds_file <- glue('{output_dir}/{id_data}_{TF}_{metainfo}_binary_{training_date}.rds')
-saveRDS(cv_model, file=rds_file)
+saveRDS(cv_binary_model, file=rds_file)
+
+
+# vbc <- y_train$binding_counts
+# nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
+cv_linear_model <- glmnet::cv.glmnet(x=X_train, y=y_train$norm_bc, family = "gaussian", type.measure = "mse", alpha = 0.5, keep=T, parallel=T, nfolds=3)
+print(cv_linear_model)
+print(glue('[INFO] Saving `{id_data}_{TF}_{metainfo}_linear_{training_date}.rds` to {output_dir}'))
+rds_file <- glue('{output_dir}/{id_data}_{TF}_{metainfo}_linear_{training_date}.rds')
+saveRDS(cv_linear_model, file=rds_file)
+
+
+print(glue('[INFO] Finished with {metainfo} model training and saving\n\n'))
+
+doParallel::stopImplicitCluster()
+
+
 
 # register a parallel backend
 # cl <- 24

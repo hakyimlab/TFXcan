@@ -1,6 +1,6 @@
 #!/bin/bash
-#PBS -l select=2:system=polaris
-#PBS -l walltime=00:59:00,filesystems=grand
+#PBS -l select=10:system=polaris
+#PBS -l walltime=06:00:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q preemptable  
 #PBS -N aggregate_predictions
@@ -31,7 +31,8 @@ conda activate dl-tools
 echo "PBS_JOBID = " $PBS_JOBID
 printf "Aggregation type: ${agg_type}\n"
 
-mpiexec -n 1 --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${collect_py}" --metadata_file "${aggregation_config}" --agg_type "${agg_type}"
+python3 "${collect_py}" --metadata_file "${aggregation_config}" --agg_types "${agg_types}"
+#mpiexec -n 1 --ppn 1 --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${collect_py}" --metadata_file "${aggregation_config}" --agg_types "${agg_types}"
 
 status=$?
 echo "Exit status of aggregating ${agg_type} is: $status"
@@ -48,3 +49,8 @@ echo "Exit status of aggregating ${agg_type} is: $status"
 
 # echo "Exit status of training run is: $status"
 # exit $status
+
+
+# qsub -v collect_py=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/scripts/utilities/aggregate_predictions.py,aggregation_config=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/aggregation_config_freedman_FOXA1.json,agg_types="aggByCenter aggByPreCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean" /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/scripts/utilities/aggregate_predictions_pbs.sh
+
+# python3 ../scripts/utilities/aggregate_predictions.py --metadata_file /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/aggregation_config_freedman_FOXA1.json --agg_types aggByCenter aggByPreCenter aggByPostCenter

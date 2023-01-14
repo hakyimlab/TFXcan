@@ -48,7 +48,7 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```{r}
 dataset <- 'cistrome' # change this variable name 
 TF <- 'FOXA1' #HOXB13' #'PPARG'
-todays_date <- data_date <- Sys.Date() #2023-01-06' #Sys.Date()
+todays_date <- data_date <- '2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
 ```
 
@@ -232,6 +232,7 @@ dim(predicted_motifs) ; predicted_motifs[1:5, ]
 tf_motifs <- predicted_motifs %>% dplyr::select(chr=V2, start=V3, end=V4, strand=V5, score=V6)
 tf_motifs_granges <- with(tf_motifs, GRanges(chr, IRanges(start,end), strand, score))
 tf_motifs_granges <- tf_motifs_granges[seqnames(tf_motifs_granges) %in% valid_chromosomes]
+tf_motifs_granges
 ```
 
 #### - The sorted peak files per individual/file
@@ -564,13 +565,18 @@ TF <- jfile$transcription_factor
 ```
 
 ```{r}
-# predictor_file <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/*.txt'))
-# predictor_file
+predictor_file <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/{dataset}_{TF}_*.txt'))
+predictor_file
 ```
 
 ```{r}
 ground_truth_path <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/{basename(predictor_file)}')
 ground_truth <- data.table::fread(ground_truth_path)
+
+# linearize the binding counts
+vbc <- ground_truth$V3
+nbc <- (vbc - min(vbc))/(max(vbc) - min(vbc))
+ground_truth$norm_bc <- nbc
 
 #ground_truth <- data.table::fread(predictor_file)
 head(ground_truth)
@@ -599,7 +605,7 @@ agg_transform_list <- purrr::map(.x=agg_methods, function(each_method){
     gt <- ground_truth[ground_truth$V1 %in% cistrome_center_dt$V1, ]
     gt_dedup <- gt[!duplicated(gt[['V1']]),]
     new_dt <- merge(gt_dedup, cistrome_center_dt, by.x='V1', by.y='V1')
-    colnames(new_dt) <- c('region', 'class', 'binding_counts', paste('f_', 1:(ncol(new_dt)-3), sep=''))
+    colnames(new_dt) <- c('region', 'class', 'binding_counts', 'norm_bc', paste('f_', 1:(ncol(new_dt)-4), sep=''))
 
     return(new_dt)
 
@@ -664,7 +670,7 @@ temp_dt[1:5, 1:5] ; temp_dt |> dim() ; temp_dt$class |> table()
 ```
 
 ```{r}
-rm(c('temp_dt', 'agg_transform_list'))
+rm(list = c('temp_dt', 'agg_transform_list'))
 ```
 
 Good!
@@ -674,6 +680,8 @@ Good!
 I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
 
 ```{r}
+model_data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
+
 model_dir <- glue('{project_dir}/models')
 if(!dir.exists(model_dir)){
     dir.create(model_dir, recursive=T)
@@ -727,6 +735,7 @@ library(ggthemes)
 library(forcats)
 library(ggrepel)
 library(glmnet)
+library(ggpubr)
 ```
 
 ```{r}
@@ -788,37 +797,71 @@ test_model <- function(model, X_test_set, y_test_set){
 }
 ```
 
+#### Read in both the linear and logistic (binary) models
+
 ```{r}
 model_dir <- glue('{project_dir}/models')
+model_type <- 'binary'
 
 # load all the models
-models_list <- purrr::map(.x=agg_methods, function(each_method){
+logistic_models_list <- purrr::map(.x=agg_methods, function(each_method){
 
-    agg_rds <- glue('{model_dir}/{dataset}_{TF}_{each_method}_binary_{todays_date}.rds')
+    agg_rds <- glue('{model_dir}/{dataset}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
     model_rds <- readRDS(agg_rds)
     return(model_rds)
 
 }, .progress=T)
 
-names(models_list) <- agg_methods
-```
-
-Collect the coefficients per model
-
-```{r}
-models_coefficients <- purrr::map(.x=agg_methods, function(each_method){
-    dt <- collate_coefficients(models_list[[each_method]])
-    dt$agg_model <- each_method
-    return(dt)
-})
-names(models_coefficients) <- agg_methods
+names(logistic_models_list) <- agg_methods
 ```
 
 ```{r}
-pdt <- models_coefficients$aggByPostCenter
-pdt[1:10, ]
+model_dir <- glue('{project_dir}/models')
+model_type <- 'linear'
+
+# load all the models
+linear_models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{dataset}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(linear_models_list) <- agg_methods
 ```
 
+#### Read in the training and test data
+```{r}
+train_dataset <- 'cistrome'
+#train_date <- 
+# load all the training data
+cistrome_data_dir <- glue('{project_dir}/model_data/{train_dataset}_{TF}/data_{todays_date}')
+train_data_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    train_dt <- data.table::fread(glue("{cistrome_data_dir}/train_{each_method}.csv.gz"))
+    return(train_dt)
+
+}, .progress=T)
+
+names(train_data_list) <- agg_methods
+```
+
+```{r}
+test_dataset <- 'cistrome'
+# load all the training data
+cistrome_data_dir <- glue('{project_dir}/model_data/{test_dataset}_{TF}/data_{todays_date}')
+test_data_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    test_dt <- data.table::fread(glue("{cistrome_data_dir}/test_{each_method}.csv.gz"))
+    return(test_dt)
+
+}, .progress=T)
+
+names(test_data_list) <- agg_methods
+```
+
+Colors to be used for plotting
 ```{r}
 assays <- unique(enformer_annotations$assay)
 assays <- assays[!is.na(assays)]
@@ -826,6 +869,27 @@ useColors <- RColorBrewer::brewer.pal(n=length(assays), name='Dark2')
 names(useColors) <- assays[!is.na(assays)]
 useColors
 ```
+
+
+#### Analyse the linear models ========================
+
+Collect the coefficients per model
+
+```{r}
+linear_models_coefficients <- purrr::map(.x=agg_methods, function(each_method){
+    dt <- collate_coefficients(linear_models_list[[each_method]])
+    dt$agg_model <- each_method
+    return(dt)
+})
+names(linear_models_coefficients) <- agg_methods
+```
+
+```{r}
+# an example
+pdt <- linear_models_coefficients$aggByPostCenter
+pdt[1:10, ]
+```
+
 
 ```{r}
 plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter', annotate_dt=list()){
@@ -877,14 +941,96 @@ plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter
 ```
 
 ```{r}
-temps <- purrr::map(.x=names(models_coefficients), function(each_aggm){
-    plot_and_annotate_coefficients(models_coefficients[[each_aggm]], TF, each_aggm)
+temps <- purrr::map(.x=names(linear_models_coefficients), function(each_aggm){
+    plot_and_annotate_coefficients(linear_models_coefficients[[each_aggm]], TF, each_aggm)
 })
 ```
 
 ```{r}
-ggpubr::ggarrange(plotlist=temps, common.legend=T, legend='top', nrow=length(temps))
+plts <- ggpubr::ggarrange(plotlist=temps, common.legend=T, legend='top', nrow=length(temps))
+ggpubr::annotate_figure(plts, top=text_grob("Using binding counts", size=15))
 ```
+
+#### Plot the mse of the training and test performance
+
+```{r}
+# roc
+cistrome_train_assess_metrics <- purrr::map(.x=agg_methods, function(each_method){
+
+    a <- assess.glmnet(linear_models_list[[each_method]], newx=train_data_list[[each_method]][ , -c(1:4)] |> as.matrix(), newy=train_data_list[[each_method]]$norm_bc, family='gaussian')
+
+    a |> unlist() 
+
+}, .progress=T)
+names(cistrome_train_assess_metrics) <- agg_methods
+```
+
+```{r}
+# roc
+cistrome_test_assess_metrics <- purrr::map(.x=agg_methods, function(each_method){
+
+    a <- assess.glmnet(linear_models_list[[each_method]], newx=test_data_list[[each_method]][ , -c(1:4)] |> as.matrix(), newy=test_data_list[[each_method]]$norm_bc, family='gaussian')
+
+    a |> unlist() 
+
+}, .progress=T)
+names(cistrome_test_assess_metrics) <- agg_methods
+```
+
+```{r}
+tm_train <- do.call('rbind', cistrome_train_assess_metrics)[, 'mse.lambda.1se']
+tm_train <- tm_train[order(tm_train, decreasing = FALSE)]
+
+tm_test <- do.call('rbind', cistrome_test_assess_metrics)[, 'mse.lambda.1se']
+tm_test <- tm_test[order(tm_test, decreasing = FALSE)]
+
+# xbp <- barplot(tm_train, xaxt='n', space=0.1, xlab=NULL, ylab='mean squared error (mse)', col=ifelse(tm_train == min(tm_train),"green", ifelse(tm_train == max(tm_train), 'red', 'grey'))) #names.arg=names(tm_train), las=1.5)
+# text(cex=0.9, x=xbp+0.05, y=0.0, names(tm_train), xpd=TRUE, srt=25, pos=2)
+# mtext(glue('mse of models on {dataset} train data for {TF}'), side=3, cex=1.2, line=2)
+# mtext('aggregation method/models', side=1, line=4)
+# text(xbp, 0.05, labels=round(tm_train, 3),cex=1,pos=3) 
+```
+
+```{r}
+tm_train <- data.frame(tm_train)
+tm_train <- tm_train %>% tibble::rownames_to_column('agg_model')
+
+tm_test <- data.frame(tm_test)
+tm_test <- tm_test %>% tibble::rownames_to_column('agg_model')
+
+tm <- merge(tm_train, tm_test, by = 'agg_model')
+colnames(tm) <- c('agg_model', 'train', 'test')
+tm
+```
+
+```{r}
+tm_plt <- tm %>% pivot_longer(c('train', 'test')) 
+tm_plt
+```
+
+```{r}
+tm_plt %>% 
+    ggplot(.) + aes(x=reorder(agg_model, value), y=value, fill=name) +
+    geom_bar(stat = "identity", position = 'dodge') +
+    scale_fill_brewer(palette='Dark2') +
+    theme_classic() +
+    labs(x='aggregation method/model', y='mean squared error (mse)', title=glue('Mean squared error of models on {dataset} data for {TF}')) +
+    theme(axis.text.x = element_text(angle=35, size=12, color='black', vjust=0.8),
+        axis.text.y = element_text(size=12, color='black'),
+        axis.title=element_text(size=14),
+        plot.title = element_text(size=18),
+        legend.key.size = unit(1, 'cm')) + 
+        guides(fill=guide_legend(title="")) +
+    geom_text(aes(label=round(value, 3)), size = 4, vjust=-0.5, position = position_dodge(width=0.9))
+```
+
+
+
+
+
+
+## ============= Binary/binomial models ===============
+
 
 #### Plot the AUC of the training performance
 ```{r}
@@ -906,7 +1052,7 @@ names(train_data_list) <- agg_methods
 # roc
 cistrome_train_assess_metrics <- purrr::map(.x=agg_methods, function(each_method){
 
-    a <- assess.glmnet(models_list[[each_method]], newx=train_data_list[[each_method]][ , -c(1:3)] |> as.matrix(), newy=train_data_list[[each_method]]$class, family='binomial')
+    a <- assess.glmnet(linear_models_list[[each_method]], newx=train_data_list[[each_method]][ , -c(1:4)] |> as.matrix(), newy=train_data_list[[each_method]]$norm_bc, family='gaussian')
 
     a |> unlist() 
 
@@ -915,13 +1061,13 @@ names(cistrome_train_assess_metrics) <- agg_methods
 ```
 
 ```{r}
-tm_train <- do.call('rbind', cistrome_train_assess_metrics)[, 'auc']
-tm_train <- tm_train[order(tm_train,decreasing = TRUE)]
-xbp <- barplot(tm_train, xaxt='n', space=0.1, xlab=NULL, ylab='AUC', col=ifelse(tm_train == max(tm_train),"green", ifelse(tm_train == min(tm_train), 'red', 'grey'))) #names.arg=names(tm_train), las=1.5)
+tm_train <- do.call('rbind', cistrome_train_assess_metrics)[, 'mse.lambda.1se']
+tm_train <- tm_train[order(tm_train, decreasing = FALSE)]
+xbp <- barplot(tm_train, xaxt='n', space=0.1, xlab=NULL, ylab='mean squared error (mse)', col=ifelse(tm_train == min(tm_train),"green", ifelse(tm_train == max(tm_train), 'red', 'grey'))) #names.arg=names(tm_train), las=1.5)
 text(cex=0.9, x=xbp+0.05, y=0.0, names(tm_train), xpd=TRUE, srt=25, pos=2)
-mtext(glue('AUC of models on {dataset} train data for {TF}'), side=3, cex=1.2, line=2)
+mtext(glue('mse of models on {dataset} train data for {TF}'), side=3, cex=1.2, line=2)
 mtext('aggregation method/models', side=1, line=4)
-text(xbp, 0.6, labels=round(tm_train, 3),cex=1,pos=3) 
+text(xbp, 0.05, labels=round(tm_train, 3),cex=1,pos=3) 
 ```
 
 
@@ -992,31 +1138,8 @@ tm_plt %>%
         plot.title = element_text(size=18),
         legend.key.size = unit(1, 'cm')) + 
         guides(fill=guide_legend(title="")) +
-    geom_text(aes(label=round(value, 2)), size = 4, vjust=-0.5, position = position_dodge(width=0.9))
+    geom_text(aes(label=round(value, 3)), size = 4, vjust=-0.5, position = position_dodge(width=0.9))
 ```
-
-```{r}
-
-```
-
-
-
-```{r}
-xplt <- tibble::column_to_rownames(tm, 'agg_model') %>% dplyr::arrange(desc(train)) |> as.matrix() |> t()
-
-xbp <- barplot(xplt, beside=T, ylab='AUC', xaxt='n', ylim=c(0, 1))
-
-# names.arg=colnames(xplt)
-
-text(cex=0.9, x=xbp+0.05, y=0.0, labels=colnames(xplt), xpd=TRUE, srt=25, pos=2)
-
-text(xbp, xplt + 0.01, labels=round(xplt, 2),cex=1,pos=3, srt=45)
-
-mtext(glue('AUC of {TF} models on {dataset} data'), side=3, cex=1.2, line=2)
-mtext('aggregation method/models', side=1, line=4)
-```
-
-
 
 
 
