@@ -16,8 +16,6 @@ def polaris_htParslConfig(params):
     # I want to put the cobalt directives 
     sch_options = ['#PBS -l filesystems=home:grand:eagle',
                     f'#PBS -N {job_name}',
-                    f'#PBS -o {workingdir}/cobalt_log/{job_name}.out',
-                    f'#PBS -e {workingdir}/cobalt_log/{job_name}.err',
                     f'#PBS -k doe'
     ]
 
@@ -26,7 +24,7 @@ def polaris_htParslConfig(params):
     user_opts = {
         'polaris': {
             # Node setup: activate necessary conda environment and such.
-            'worker_init': 'source /home/temi/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib',
+            'worker_init': 'source /home/temi/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib; echo Running on host `hostname`; echo Running on nodes `cat $PBS_NODEFILE`',
             'scheduler_options': f'{sch_options}',
             # ALCF allocation to use
             'account': 'covid-ct',
@@ -36,9 +34,10 @@ def polaris_htParslConfig(params):
     pbs_htex = Config(
         executors=[
             HighThroughputExecutor(
-                label='htex_Cobalt',
+                label='htex_PBS',
                 available_accelerators=4,  # Pin each worker to a different GPU
                 max_workers=4,
+                cpu_affinity = 'alternating',
                 address=address_by_hostname(),
                 provider=PBSProProvider(
                     launcher=MpiExecLauncher(
@@ -46,7 +45,7 @@ def polaris_htParslConfig(params):
                     ),  # Ensures 1 manger per node, work on all 64 cores
                     account=user_opts['polaris']['account'],
                     queue=params['queue'], #preemptable',
-                    cpus_per_node=32,
+                    cpus_per_node=64,
                     select_options='ngpus=4',
                     worker_init=user_opts['polaris']['worker_init'],
                     scheduler_options=user_opts['polaris']['scheduler_options'],
@@ -58,7 +57,8 @@ def polaris_htParslConfig(params):
                 ),
             )
         ],
-        run_dir=rundir
+        run_dir=rundir,
+        retries=6
     )
     return pbs_htex
 

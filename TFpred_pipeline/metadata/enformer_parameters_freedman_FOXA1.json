@@ -30,5 +30,6 @@
     "min_num_blocks": 0,
     "max_num_blocks": 1,
     "queue": "preemptable"
-  }
+  },
+  "create_hdf5_file": false
 }
