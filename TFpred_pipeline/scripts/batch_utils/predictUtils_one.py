@@ -33,6 +33,8 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
         Check the call logs or stacks for the source of the error. 
     """
   
+    print(f'Starting on batch {batch_num}')
+
     import sys, os, tqdm, faulthandler, time
 
     mpath = os.path.join(script_path, 'batch_utils') #os.path.dirname(__file__) #
@@ -64,6 +66,7 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
         toc = time.perf_counter()
 
         print(f'[INFO] (time) to predict on this batch is {toc - tic}')
+
         return(reg_prediction) # returns 0 returned by enformer_predict
 
 def return_prediction_function(use_parsl, fxn=run_batch_predictions):
@@ -105,3 +108,36 @@ def generate_batch(lst, batch_n, len_lst = None):
         
     for i in range(0, len(lst), n_elems):
         yield lst[i:(i + n_elems)]
+
+
+def make_h5_db(h5_file, csv_file, files_list, files_path, dataset):
+    import h5py
+    import pandas as pd
+
+    with h5py.File(f"{h5_file}", "w") as f_dst:
+        #h5files = [f for f in os.listdir(f'{project_dir}/') if f.endswith(".h5")]
+
+        dset = f_dst.create_dataset(f'{dataset}_dataset', shape=(len(files_list), 17, 5313), dtype='f4')
+        for i, filename in enumerate(files_list):
+            with h5py.File(files_path[i]) as f_src:
+                dset[i] = f_src[filename]
+
+    pd.DataFrame(files_list, columns=['motif']).to_csv(f"{csv_file}")
+
+    return(0)
+
+def make_h5_db_parsl(use_parsl, fxn=make_h5_db):
+    '''
+    Decorate or not the `make_h5_db` function based on whether `use_parsl` is true or false
+
+    Returns: 
+        function object
+        The function if parsl is not used
+        The parsl decorated function if parsl is meant to be used
+    
+    '''
+    from parsl.app.app import python_app
+    if use_parsl == True:
+        return python_app(fxn)
+    elif use_parsl == False:
+        return fxn

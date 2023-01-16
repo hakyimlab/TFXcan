@@ -48,6 +48,7 @@ def main():
         parsl_parameters = parameters['parsl_parameters']
         sequence_source = parameters['sequence_source']
         prediction_data_name = parameters['prediction_data_name']
+        create_hdf5_file = parameters["create_hdf5_file"]
         run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
 
         metadata_dir = parameters['metadata_dir']
@@ -164,8 +165,34 @@ def main():
         elif use_parsl == False:
             print(f'[INFO] Finished predictions for {each_id}: {app_futures} ...\n')
 
-    print(f'[INFO] Finished all predictions')  
+    print(f'[INFO] Finished predicting for all inputs.')
+    
 
+    if create_hdf5_file == True:
+        print(f'[INFO] Creating HDF5 database(s)')
+        finished_predictions = pd.read_csv(logfile_csv)
+        make_db = make_h5_db_parsl(use_parsl = use_parsl)
+
+        db_parsl = []
+        for each_id in id_list:
+            motifs_list = finished_predictions.loc[finished_predictions['individual'] == each_id, ].motif.values.tolist()
+            motifs_list = list(set(motifs_list))
+
+            print(f'[INFO] Creating HDF5 database for {each_id} for {len(motifs_list)} predictions.')
+
+            motifs_list_paths = [f'{output_dir}/{each_id}/{i}_predictions.h5' for i in motifs_list]
+            csv_file = f'{output_dir}/{each_id}_{TF}_predictions.csv'
+            h5_file = f'{output_dir}/{each_id}_{TF}_predictions.hdf5'
+            db_parsl.append(make_db(h5_file = h5_file, csv_file = csv_file, files_list = motifs_list, files_path = motifs_list_paths, dataset = each_id))
+
+        
+        print(db_parsl)
+        if use_parsl == True:
+            exec_parsl = [q.result() for q in tqdm.tqdm(db_parsl, desc=f'[INFO] Executing database futures.')] 
+            print(exec_parsl)
+
+    print(f'[INFO] Success for all.')
+        
     # == After predictions are complete, a json file will be written out to help with aggregation
     if sequence_source == 'reference':
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')

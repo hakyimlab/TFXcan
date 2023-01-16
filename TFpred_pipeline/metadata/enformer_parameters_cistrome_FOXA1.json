@@ -24,10 +24,10 @@
   },
   "parsl_parameters": {
     "job_name": "enformer_predict_cistrome_FOXA1",
-    "num_of_full_nodes": 10,
+    "num_of_full_nodes": 5,
     "walltime": "01:00:00",
     "min_num_blocks": 0,
-    "max_num_blocks": 1,
+    "max_num_blocks": 3,
     "queue": "preemptable"
   }
 }
