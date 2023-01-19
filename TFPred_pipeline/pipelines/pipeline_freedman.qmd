@@ -1,0 +1,1453 @@
+---
+title: "Complete TFpred Pipeline - Using Freedman data"
+author: "Temi"
+date: 'Sat Jan 7 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+data_dir <- glue('{imlab_dir}/data/freedman_data/peaks_liftover')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
+```
+
+```{r}
+dataset <- 'freedman'
+TF <- 'FOXA1'
+todays_date <- data_date <- '2023-01-11' #Sys.Date()
+```
+
+```{r}
+peaks_dir <- glue('{project_dir}/files/peaks_files/{dataset}_{TF}')
+if(!dir.exists(peaks_dir)){
+    dir.create(peaks_dir, recursive=T)
+} 
+
+homer_files_dir <- glue('{project_dir}/files/homer_files/{dataset}_{TF}')
+if(!dir.exists(homer_files_dir)){
+    dir.create(homer_files_dir, recursive=T)
+}
+
+regions_dir <- glue('{project_dir}/files/defined_regions/{dataset}_{TF}')
+if(!dir.exists(regions_dir)){
+    dir.create(regions_dir, recursive=T)
+}
+
+common_dir <- glue('{project_dir}/files/homer_files/common_files')
+if(!dir.exists(common_dir)){
+    dir.create(common_dir, recursive=T)
+}
+```
+
+Copy the peak file for the transcription factor
+
+```{r}
+TF_files <- list.files(data_dir, pattern=paste0('*', TF), full.names=T)
+TF_files
+```
+
+```{r}
+# using the first one
+file.copy(from=TF_files, to=peaks_dir, overwrite=T, copy.mode=T)
+```
+
+The Freedman peak files need to be merged
+
+```{r}
+grouping_info <- data.table::fread(glue('{project_dir}/metadata/grouping_info.txt')) |> as.data.frame()
+grouping_info
+```
+
+```{r}
+group_ids <- unique(grouping_info$group_id)
+individual_names <- paste0('LuCaP_', group_ids)
+
+# merge_id <- grouping_info[which(grouping_info$group_id == group_id), ]$subgroup_id
+# merge_files <- list.files(data_dir, pattern=paste0('*_LuCaP_', merge_id, '_', TF, '*', collapse='|'), full.names=T)
+```
+
+```{r}
+individual_peaks <- purrr::map(.x=group_ids, function(each_gid){
+
+    merge_ids <- grouping_info[which(grouping_info$group_id == each_gid), ]$subgroup_id
+    merge_files <- list.files(data_dir, pattern=paste0('*_LuCaP_', merge_ids, '_', TF, '*', collapse='|'), full.names=T)
+
+    cols_names <- c('chr','start','end','dataset','score')
+
+    if(length(merge_files) > 1){
+        out <- lapply(merge_files, function(e){
+            data.table::fread(e)
+        })
+
+        # rbind these
+        out <- do.call('rbind', out) |> as.data.frame()
+        colnames(out) <- cols_names
+    } else {
+        out <- data.table::fread(merge_files)
+        colnames(out) <- cols_names
+    }
+
+    return(out)
+
+}, .progress=T)
+
+names(individual_peaks) <- individual_names
+```
+
+```{r}
+individual_peaks[[1]][1:5, ]
+```
+
+Take the reference set e.g. cistrome, and overlap with these peaks to define per individual bound or unbound regions
+```{r}
+cistrome_ground_truth <- data.table::fread(Sys.glob(glue('{project_dir}/motif_intervals/cistrome/intervals_{data_date}/ground_truth/cistrome_{TF}_*.txt')))
+cistrome_ground_truth <- tidyr::separate(cistrome_ground_truth, col=V1, into=c('chr', 'start', 'end'), sep='_') %>%
+    dplyr::mutate(chr, start=as.numeric(start), end=as.numeric(end)) %>%
+    dplyr::select(chr, start, end) %>%
+    as.data.frame()
+cistrome_ground_truth |> head()
+```
+
+```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
+valid_chromosomes
+```
+
+
+```{r}
+tf_cistrome_granges <- with(cistrome_ground_truth, GRanges(chr, IRanges(start,end), strand='*', score=0))
+tf_cistrome_granges <- tf_cistrome_granges[seqnames(tf_cistrome_granges) %in% valid_chromosomes]
+tf_cistrome_granges
+```
+
+```{r}
+each_file <- individual_peaks[[1]]
+dim(each_file)
+```
+
+
+
+```{r}
+ind_dt_list <- purrr::map(.x=individual_peaks, function(each_file){
+
+    dt <- each_file %>%
+        dplyr::select(chr, start, end) %>%
+        distinct(chr, start, end, .keep_all=T) %>% # select the chr, start and end columns
+        with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+
+    # I shold reduce these too 
+    dt <- GenomicRanges::reduce(dt)
+
+    dt <- dt[seqnames(dt) %in% valid_chromosomes]
+
+    overlaps <- GenomicRanges::findOverlaps(query=dt, subject=tf_cistrome_granges, type='any')
+
+    positive_dt <- tf_cistrome_granges[subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 1)
+
+    negative_dt <- tf_cistrome_granges[-subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 0)
+
+    return(rbind(positive_dt, negative_dt) |> as.data.frame())
+
+}, .progress=T)
+
+# modify the class names
+ind_dt_list <- lapply(seq_along(ind_dt_list), function(i){
+    colnames(ind_dt_list[[i]])[4] <- individual_names[i]
+    return(ind_dt_list[[i]])
+})
+
+names(ind_dt_list) <- individual_names
+
+ind_dt_list[[1]] |> head()
+
+```
+
+```{r}
+#ind_dt_list[[1]]$class |> table()
+
+lapply(ind_dt_list, function(each_dt){
+    each_dt[, 4] |> table()
+})
+```
+
+#### - merge all the files and add the binding counts and class
+```{r}
+dt_merged <- ind_dt_list %>% purrr::reduce(full_join, by = c('chr', 'start', 'end')) 
+dt_merged$binding_counts <- rowSums(dt_merged[, -c(1:3)], na.rm=T)
+dt_merged$binding_class <- ifelse(dt_merged$binding_counts > 0, 1, 0)
+dt_merged <- dt_merged %>%
+    dplyr::relocate(c('binding_class', 'binding_counts'), .after=end)
+
+# shuffle the data
+set.seed(2023)
+dt_merged <- dt_merged[sample(nrow(dt_merged)), ]
+
+dt_merged$chr <- as.character(dt_merged$chr)
+
+dt_merged[1:5, ]
+```
+
+#### - Save the files
+```{r}
+save_object <- list(binding_matrix=dt_merged, file_names=individual_names)
+```
+
+```{r}
+#todays_date <- '2023-01-06' #Sys.Date()
+save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+saveRDS(save_object, file=glue('{save_dir}/regions_information.RData'))
+```
+
+```{r}
+dataset <- 'freedman'
+todays_date <- todays_date #Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+freedman_dr <- dt_merged %>%
+    tidyr::unite('region', c(chr, start, end), remove=T) %>%
+    dplyr::rename(class=binding_class)
+freedman_dr[1:5, 1:5]
+```
+
+```{r}
+dim(freedman_dr)
+```
+
+
+```{r}
+#k_set <- with(cistrome_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(freedman_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(freedman_dr)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(freedman_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(freedman_dr)}.txt'), col.names=T, quote=F, row.names=F)
+```
+
+```{r}
+predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(freedman_dr)}.txt')
+predictor_file
+```
+
+
+## Step 3: Predict on these regions with ENFORMER
+### Create the enformer_parameters.json file
+```{r}
+metadata_dir <- glue('{project_dir}/metadata')
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
+```
+
+For now, I will do 4 individuals
+```{r}
+enformer_parameters_json <- list()
+
+# '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
+enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/individuals.txt')
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['interval_list_file']] <- predictor_file
+enformer_parameters_json[['prediction_data_name']] <- dataset
+enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['date']] <- data_date
+enformer_parameters_json[['create_hdf5_file']] <- FALSE
+
+enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['use_parsl']] <- T
+enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
+enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['sequence_source']] <- "personalized"
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['log_dir']] <- "cobalt_log"
+enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['predict_on_n_regions']] <- -1
+enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=4, "queue"="preemptable")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+param_file
+```
+
+
+#### Copy this command below and run it in another shell (you many need to modify the name of the conda environment and all that )
+
+I can write this into a shell script and call it with `system()`. The problem is that I am currently within a shell (using R) and it won't initialize my conda environment in that way. Pretty sure there is a way around it - but it may be tricky
+```{r}
+# prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+## Step 4: Collect/aggregate the predictions
+
+This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
+The user supplies what aggregation option.
+
+There are currently 7 valid options for aggregations:
+- aggByCenter:
+- aggByMean:
+- aggByUpstream:
+- aggByDownstream:
+- aggByUpstreamDownstream:
+- aggByPreCenter
+- aggByPostCenter
+
+Check that the appropriate scripts exist
+```{r}
+# check that the script exists
+aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions_pbs.sh")
+aggregation_pbs_script ; file.exists(aggregation_pbs_script)
+```
+
+```{r}
+aggregation_python_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions.py")
+aggregation_python_script ; file.exists(aggregation_python_script)
+```
+
+```{r}
+aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
+aggregation_config ; file.exists(aggregation_config)
+```
+
+Aggregate the predictions
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+
+# agg_methods <- c(agg_center, agg_precenter)
+agg_methods
+```
+
+```{r}
+pbs_script <- glue('qsub -v aggregate_py={aggregation_python_script},aggregation_config={aggregation_config} {aggregation_pbs_script}')
+print(pbs_script)
+```
+
+```{r}
+system(pbs_script)
+```
+```{r}
+system('qstat -u temi')
+```
+
+
+
+```{r}
+# for(am in agg_methods){
+
+#     pbs_script <- glue('qsub -v collect_py={aggregation_python_script},aggregation_config={aggregation_config},agg_type={am} {aggregation_pbs_script}')
+#     system(pbs_script)
+
+#     # wait a little before submitting the next one
+#     date_time <- Sys.time()
+#     while((as.numeric(Sys.time()) - as.numeric(date_time)) < 2){}
+# }
+```
+
+### Note: Please wait a while for this job to be finished.
+
+### Optional
+Remove/clean up all the aggregated batches
+
+```{r}
+# for(am in agg_methods){
+#     files_to_delete <- Sys.glob(glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}/{dataset}_{am}_{TF}_batch_*.csv.gz'))
+
+#     file.remove(files_to_delete)
+# }
+```
+
+### Step 5: Testing
+
+#### Stand alone script to collect prediction scores (TFScores)
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+model_id <- 'cistrome'
+individual_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
+model_type <- 'linear'
+run_date <- todays_date
+pscore_dir <- glue('{project_dir}/prediction_scores')
+if(!dir.exists(pscore_dir)){
+    dir.create(pscore_dir, recursive=T)
+} else {
+    print('Prediction scores folder exists')
+}
+
+gt_dir <- glue('{project_dir}/motif_intervals/freedman/intervals_{todays_date}/ground_truth')
+gt_file <- Sys.glob(glue('{gt_dir}/{dataset}_{TF}_*.txt'))
+```
+
+```{r}
+pscore_R_script <- glue('{project_dir}/scripts/utilities/enet_models_predict.R')
+pscore_pbs_script <- glue('{project_dir}/scripts/utilities/enet_models_predict_pbs.sh')
+```
+
+```{r}
+pbs_script <- glue('qsub -v pscore_script={pscore_R_script},model_dir={model_dir},model_id={model_id},individual_data_dir={individual_data_dir},TF={TF},model_type={model_type},run_date={run_date},output_dir={pscore_dir},ground_truth_file={gt_file} {pscore_pbs_script}')
+print(pbs_script)
+```
+
+```{r}
+system(pbs_script)
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+
+```{r}
+library(ggthemes)
+library(ggsignif)
+```
+
+```{r}
+#ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
+individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt', header=F)
+ind_names <- individuals$V1#[-1]#[1:5
+ind_names
+```
+
+```{r}
+pscores_list <- readRDS(glue('{pscore_dir}/freedman_{TF}_prediction_scores_{run_date}.rds'))
+```
+
+
+#### t-test across re
+```{r}
+pscores_ttest_regions <- lapply(ind_names, function(each_ind){
+    ind_prediction_score <- pscores_list[[each_ind]]
+    out <- lapply(agg_methods, function(each_method){
+        tdt <- ind_prediction_score[, each_method]
+
+        ones <- tdt[ind_prediction_score$class == 1]
+        zeros <- tdt[ind_prediction_score$class == 0]
+        # print(any(is.na(zeros))) ; print(length(zeros))
+        st <- t.test(ones, zeros, na.action=na.omit)
+        return(st$p.value)
+    })
+    names(out) <- agg_methods
+    return(out)
+})
+names(pscores_ttest_regions) <- ind_names
+```
+
+```{r}
+a <- pscores_list$LuCaP_173[, c('class', 'aggByPreCenter')]
+ones <- a[a$class == 1, ]$aggByPreCenter
+zeros <- a[a$class == 0, ]$aggByPreCenter
+t.test(ones, zeros)$p.value
+```
+
+
+```{r}
+all_t_test <- do.call('cbind',
+
+    lapply(pscores_ttest_regions, function(each_elem){
+        do.call('rbind', each_elem)
+    })
+
+) |> as.data.frame()
+colnames(all_t_test) <- ind_names
+all_t_test
+```
+
+```{r}
+# combine all the predicted values
+out <- lapply(ind_names, function(each_ind){
+    temp <- pscores_list[[each_ind]] |> as.data.frame()
+    temp$individual <- each_ind
+
+    return(temp)
+    
+})
+
+all_pscores <- do.call(dplyr::bind_rows, out)
+```
+
+```{r}
+# boxplot(aggByCenter ~ class, data=all_pscores, frame.plot=F, ylab='predicted scores', width=0.2)
+# mtext('Predicted scores across all regions across all individuals', side=3, line=2, cex=1.5, adj=0)
+```
+
+
+
+```{r}
+
+purrr::map(.x=agg_methods, function(each_agg){
+
+    bpt <- all_pscores %>%
+        dplyr::mutate(class= as.factor(class)) %>%
+        ggplot(.) + aes(x=class, y=.data[[each_agg]], fill=class) + 
+        geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
+        theme(axis.title=element_text(size=12),
+            plot.title=element_text(size=15),
+            axis.text=element_text(size=12), legend.position = "none")
+
+    
+    dt <- all_pscores %>%
+        dplyr::group_by(class) %>%
+        dplyr::summarise(group_mean = mean(.data[[each_agg]]))
+
+    
+    dpt <- all_pscores %>%
+        dplyr::mutate(class= as.factor(class)) %>%
+        ggplot(., aes(x=.data[[each_agg]], fill=class)) + 
+        geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
+        geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
+        theme(axis.title=element_text(size=12),
+            plot.title=element_text(size=15),
+            axis.text=element_text(size=12))
+
+    
+    dpt + annotation_custom(
+        ggplotGrob(bpt), 
+        xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
+    )
+
+})
+
+
+
+```
+
+```{r}
+bpt <- all_pscores %>%
+        dplyr::mutate(class= as.factor(class)) %>%
+        ggplot(.) + aes(x=class, y=.data[[each_agg]], fill=class) + 
+        geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
+        theme(axis.title=element_text(size=12),
+            plot.title=element_text(size=15),
+            axis.text=element_text(size=12), legend.position = "none")
+
+    
+    dt <- all_pscores %>%
+        dplyr::group_by(class) %>%
+        dplyr::summarise(group_mean = mean(.data[[each_agg]]))
+
+    
+    dpt <- all_pscores %>%
+        dplyr::mutate(class= as.factor(class)) %>%
+        ggplot(., aes(x=.data[[each_agg]], fill=class)) + 
+        geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
+        geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
+        theme(axis.title=element_text(size=12),
+            plot.title=element_text(size=15),
+            axis.text=element_text(size=12))
+
+    
+    dpt + annotation_custom(
+        ggplotGrob(bpt), 
+        xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
+    )
+```
+
+
+```{r}
+bpt <- all_pscores %>%
+    dplyr::mutate(class= as.factor(class)) %>%
+    ggplot(.) + aes(x=class, y=aggByCenter, fill=class) + 
+    geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
+    theme(axis.title=element_text(size=12),
+        plot.title=element_text(size=15),
+        axis.text=element_text(size=12), legend.position = "none")
+```
+
+```{r}
+dt <- all_pscores %>%
+    dplyr::group_by(class) %>%
+    dplyr::summarise(group_mean = mean(aggByPostCenter))
+```
+
+```{r}
+
+dpt <- all_pscores %>%
+    dplyr::mutate(class= as.factor(class)) %>%
+    ggplot(., aes(x=aggByCenter, fill=class)) + 
+    geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
+    geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
+    theme(axis.title=element_text(size=12),
+        plot.title=element_text(size=15),
+        axis.text=element_text(size=12))
+```
+
+```{r}
+dpt + 
+  annotation_custom(
+    ggplotGrob(bpt), 
+    xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
+  )
+```
+
+
+
+```{r}
+temp_dt <- all_pscores[, c('class', 'aggByCenter', 'individual')] 
+temp_dt$individual <- as.factor(temp_dt$individual)
+temp_dt[1:5, ]
+```
+
+```{r}
+glm(class ~ 0 + aggByCenter + individual, data=temp_dt, family=binomial) |> summary()
+```
+
+```{r}
+pscores_differences_regions <- lapply(ind_names, function(each_ind){
+    ind_prediction_score <- pscores_list[[each_ind]]
+    out <- lapply(agg_methods, function(each_method){
+        tdt <- ind_prediction_score[, each_method]
+
+        ones <- mean(tdt[ind_prediction_score$class == 1], na.rm=T)
+        zeros <- mean(tdt[ind_prediction_score$class == 0], na.rm=T)
+        # print(any(is.na(zeros))) ; print(length(zeros))
+        st <- ones - zeros
+        return(st)
+    })
+    names(out) <- agg_methods
+    return(out)
+})
+names(pscores_differences_regions) <- ind_names
+```
+
+
+```{r}
+mean_differences <- do.call('cbind',
+
+    lapply(pscores_differences_regions, function(each_elem){
+        do.call('rbind', each_elem)
+    })
+
+) |> as.data.frame()
+colnames(mean_differences) <- ind_names
+mean_differences
+```
+
+
+
+
+
+#### same plot but grouped by individual
+```{r}
+temp <- all_pscores[, c('class', agg_methods[7], 'individual')]
+temp <- temp %>% 
+    mutate(class = as.character(class) |> as.factor(), individual=as.factor(individual))
+
+summary(temp)
+```
+
+```{r}
+plt_levels <- temp$individual |> levels()
+plt_levels
+```
+
+```{r}
+ttest_pvalues <- formatC(all_t_test[agg_methods[7], ] |> unlist(), format = "e", digits = 2)
+ttest_pvalues <- ttest_pvalues[plt_levels]
+ttest_pvalues
+```
+
+```{r}
+xmins <- vector('numeric', length(ind_names))
+xmins[1] <- 0.85 ; i <- 2
+while(i <= length(xmins)){
+    xmins[i] <- xmins[i-1] + 1
+    i <- i + 1
+}
+xmins
+```
+
+```{r}
+xmaxs <- vector('numeric', length(ind_names))
+xmaxs[1] <- 1.15 ; i <- 2
+while(i <= length(xmaxs)){
+    xmaxs[i] <- xmaxs[i-1] + 1
+    i <- i + 1
+}
+xmaxs
+```
+
+```{r}
+ytip <- max(temp[[agg_methods[7]]]) + 0.07
+
+#  geom_boxplot(aes(group=class), width=0.1)
+temp %>%
+    ggplot(.) + aes(x=.data[['individual']], y=.data[[agg_methods[7]]]) + 
+    geom_violin(aes(fill=.data[['class']])) + 
+    geom_boxplot(aes(fill=.data[['class']]), position=position_dodge(0.9), width=0.2) +
+    geom_signif(annotation = ttest_pvalues, tip_length = 0.02, y_position = ytip, xmin = xmins, xmax = xmaxs) + theme_minimal() + ggthemes::geom_rangeframe() +
+    labs(title=agg_methods[7], y='TFPred score')
+
+```
+
+### Exploring TFPredScores or predicted scores
+# across individuals
+
+```{r}
+pscores_list$LuCaP_167[1:5, ]
+```
+
+```{r}
+# lapply(pscores_list, function(each_pscore){
+#     tt <- each_pscore[, c('region', 'class')]
+# })
+```
+```{r}
+gt_dir <- glue('{project_dir}/motif_intervals/freedman/intervals_{todays_date}/ground_truth')
+```
+
+```{r}
+freedman_ground_truth <- data.table::fread(Sys.glob(glue('{gt_dir}/{dataset}_{TF}_*.txt'))) |> as.data.frame()
+freedman_ground_truth[1:5, 1:5]; freedman_ground_truth |> dim()
+```
+
+```{r}
+fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list$LuCaP_167$region, c('region', 'class', 'binding_counts', ind_names)]
+fgt[1:5, ] ; dim(fgt)
+```
+
+Filter out the regions that are all 0 or 1 (since there will be not variability when doing the tests)
+
+
+```{r}
+fgt$filter <- fgt[, ind_names] |> rowSums() |> unname()
+varying_classes <- fgt[!fgt$filter %in% c(0,1,2,3,17,16,15,14), ]
+#varying_classes <- varying_classes[, colnames(varying_classes) != 'filter']
+varying_classes |> dim()
+```
+
+
+```{r}
+pscores_dt <- lapply(ind_names, function(each_ind){
+    one_ind <- pscores_list[[each_ind]]
+    one_ind$individual <- each_ind
+    return(one_ind)
+})
+pscores_dt <- do.call('rbind', pscores_dt) |> as.data.frame()
+
+dim(pscores_dt) ; pscores_dt[1:5, ]
+```
+
+
+```{r}
+qqplot_extended <- function(pvector, main=NULL, ...) {
+    obs = -log10(sort(pvector,decreasing=F))
+    exp = -log10(1:length(obs)/length(obs) )
+
+    plot(exp, obs, pch=19, cex=1, main=main, ...,
+        xlab=expression(Expected~~-log[10](italic(p))),
+        ylab=expression(Observed~~-log[10](italic(p))),
+        xlim=c(0,max(exp)), ylim=c(0,max(obs)))
+    lines(exp, exp, col="red")
+}
+```
+
+```{r}
+pscores_pvalues_logreg <- purrr::map(.x=varying_classes$region, function(each_region){
+    
+    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+    tgt <- glm(class ~ aggByPreCenter, data=pscores_ind_region, family=binomial, control=glm.control(maxit=150)) |> summary()
+    return(tgt$coefficients[2,4] |> unlist() |> unname())
+
+}, .progress=T)
+```
+
+```{r}
+pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_logreg)) |> as.data.frame()
+pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
+pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
+pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
+pvalues_regions[1:5, ]
+```
+
+```{r}
+qqplot_extended(pvalues_regions$V2, frame.plot=F)
+mtext('qqplot of p-values (logistic regression)', at=0.5, line=1, cex=1.5)
+```
+
+```{r}
+# pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
+#     pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+#     #return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+#     return(wilcox.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+
+# }, .progress=T)
+```
+
+```{r}
+pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
+    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
+    return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+    #return(coin::wilcox_test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+
+}, .progress=T)
+```
+
+```{r}
+pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_ttest)) |> as.data.frame()
+pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
+pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
+pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
+pvalues_regions[1:5, ]
+```
+
+```{r}
+qqplot_extended(pvalues_regions$V2, frame.plot=F)
+mtext('qqplot of p-values (t-test)', at=0.5, line=1, cex=1.5)
+```
+
+```{r}
+hist(pvalues_regions$V2, freq=T, xlab='p-value', main=NULL, breaks = seq(min(pvalues_regions$V2), max(pvalues_regions$V2), length.out = 70))
+mtext('Histogram of p-values', cex=1.5, at=0.2)
+```
+
+
+```{r}
+adj_pvalues <- p.adjust(pvalues_regions$V2, method = 'bonferroni' )
+```
+
+```{r}
+qqplot_extended(adj_pvalues, frame=F)
+```
+
+
+Mean differences
+
+```{r}
+m0 <- pscores_dt %>% 
+    dplyr::select(region, class, aggByPreCenter, individual) %>%
+    dplyr::filter(class == 0) %>%
+    dplyr::group_by(region) %>% 
+    dplyr::summarise(mean_0 = mean(aggByPreCenter)) %>%
+    dplyr::select(region, mean_0)
+
+m1 <- pscores_dt %>% 
+    dplyr::select(region, class, aggByPreCenter, individual) %>%
+    dplyr::filter(class == 1) %>%
+    dplyr::group_by(region) %>% 
+    dplyr::summarise(mean_1 = mean(aggByPreCenter)) %>%
+    dplyr::select(region, mean_1)
+```
+
+```{r}
+merged <- merge(m0, m1, by='region')
+merged[1:5, ]
+```
+
+```{r}
+mean_diffs <- with(merged, (mean_0 - mean_1))
+hist(mean_diffs, freq=T, xlab='mean differences', main=NULL, breaks = seq(min(mean_diffs), max(mean_diffs), length.out = 50))
+mtext('Histogram of mean differences', cex=1.5, adj=0)
+```
+
+```{r}
+five_num <- fivenum(mean_diffs)
+names(five_num) <- c('minimum', 'first_quartile', 'median', 'third_quartile','maximum')
+five_num |> as.data.frame()
+```
+
+
+#### Pick the top 12 regions and plot them
+```{r}
+#test_chr <- 'chr15_90490235_90490244'
+
+top_regions <- pvalues_regions[1:12, ]$V1
+
+pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscores_dt$individual %in% ind_names), ]
+
+pscores_top_regions %>%
+    dplyr::mutate(class = as.factor(class), region=as.factor(region)) %>%
+    ggplot(.) + aes(x=class, y=aggByCenter, group=class) + 
+    geom_boxplot() + 
+    geom_jitter(col='red') + 
+    facet_wrap(~region, scales='free') + theme_bw() +
+    labs(title='Boxplot of top 9 regions (ranked by p-values)', y='prediction scores') +
+    theme(plot.title=element_text(size=20), 
+        axis.title=element_text(size=18))
+```
+
+```{r}
+pscores_top_regions %>%
+    dplyr::mutate(class = as.factor(class), region=as.factor(region)) %>%
+    ggplot(.) + aes(x=aggByCenter, fill=class) + 
+    geom_density() + 
+    facet_wrap(~region, scales='free') + theme_bw() +
+    labs(title='Density plot of top 9 regions (ranked by p-values)', y='density') +
+    theme(plot.title=element_text(size=20), 
+        axis.title=element_text(size=18))
+```
+
+
+
+Correlation between number of bindings and pvalues?
+```{r}
+
+top_regions <- pvalues_regions$V1
+
+pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscores_dt$individual %in% ind_names), ]
+
+
+bcounts <- pscores_top_regions %>%
+    dplyr::mutate(region=as.factor(region)) %>%
+    group_by(region) %>%
+    summarise(nbinds = sum(class)) 
+    
+bcounts %>% View()
+```
+
+```{r}
+prb_counts <- merge(pvalues_regions, bcounts, by.x='V1', by.y='region')
+prb_counts <- prb_counts %>% arrange(V2)
+colnames(prb_counts) <- c('region', 'pvalue', 'nbinds')
+prb_counts[1:5, ]
+```
+
+```{r}
+pt <- prb_counts %>%
+    dplyr::group_by(nbinds) %>%
+    dplyr::summarise(counts = sum(pvalue <= 0.001)) %>% t()
+
+colnames(pt) <- pt[1, ]
+pt <- pt[-1, ]
+
+bp <- barplot(pt, width=0.5, names.arg=colnames(pt), xlab='Binding count/strength', ylab='number of regions bound', ylim=c(0, max(pt) + 10))
+mtext('Number of regions with pvalues <= 0.001 \nper binding count group', cex=1.5, adj=0.25, line=0)
+text(bp, y = pt + 5, labels=pt)
+
+# pt %>%
+#     ggplot(., aes(as.factor(nbinds), counts)) + geom_bar(stat='identity') +
+#     theme_bw() +
+#     scale_x_discrete("binding counts across individual", breaks = 1:9,labels=as.character(pt$nbinds))
+```
+
+
+
+```{r}
+pscores_try_one <- pscores_dt[(pscores_dt$region == test_chr) & (pscores_dt$individual %in% ind_names), ]
+pscores_try_one
+```
+
+```{r}
+coin::wilcox_test(class ~ aggByCenter, data=pscores_try_one)
+```
+
+
+```{r}
+tgt <- glm(class ~ aggByCenter, data=pscores_try_one, family='binomial') |> summary()
+tgt$coefficients
+```
+
+```{r}
+boxplot(aggByCenter ~ class, data=pscores_try_one)
+```
+
+```{r}
+pscores_try_one %>% ggplot(.) + aes(class, aggByCenter, group=class) + geom_boxplot() + geom_jitter()
+```
+
+```{r}
+wilcox.test(pscores_try_one$aggByCenter, pscores_try_one$class)$p.value
+```
+
+
+```{r}
+t.test(pscores_try_one$aggByCenter, pscores_try_one$class)$p.value
+```
+
+```{r}
+glm(class ~ aggByCenter, data = pscores_try_one, family = "binomial") |> summary()
+```
+
+```{r}
+t.test(x=pscores_try_one$aggByCenter, y=pscores_try_one$class, family = "binomial", alpha=0.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
+agg_ms <- agg_methods
+data_date <- todays_date
+```
+
+
+```{r}
+test_ind_dt_list <- purrr::map(.x=ind_names, function(each_ind){
+    ind_gt <- freedman_ground_truth[, c('region', each_ind)]
+    #print(head(ind_gt))
+
+    out <- purrr::map(.x=agg_ms, function(each_method){
+        ind_test_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{data_date}/{each_ind}_{each_method}_{TF}.csv.gz')
+        ind_test_dt <- data.table::fread(ind_test_file)
+        gt <- ind_gt[ind_gt$region %in% ind_test_dt$V1, ]
+        gt_dedup <- gt[!duplicated(gt[['region']]),]
+        new_dt <- merge(gt_dedup, ind_test_dt, by.x='region', by.y='V1')
+        colnames(new_dt) <- c('region', 'class', paste('f_', 1:(ncol(new_dt)-2), sep=''))
+        return(new_dt)
+    })
+    names(out) <- agg_ms
+
+    return(out)
+}, .progress=T)
+
+names(test_ind_dt_list) <- ind_names
+```
+
+#### - Need to check that these regions are present in the training sets too and filter those that aren't. 
+```{r}
+
+```
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+model_id <- 'cistrome'
+```
+
+```{r}
+aggByPostCenter_model <- glue('{model_dir}/{model_id}_{TF}_{each_method}_binary_{todays_date}.rds')
+aggByPostCenter_model <- readRDS(aggByPostCenter_model)
+```
+
+Read in the linear models
+```{r}
+# load all the models
+model_type <- 'linear'
+linear_models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{model_id}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(linear_models_list) <- agg_methods
+```
+
+### Predict on the individuals
+
+```{r}
+test_ind_beta_predictions <- lapply(agg_methods, function(each_method){
+    model <- linear_models_list[[each_method]]
+    whlm <- which(model$lambda == model[['lambda.1se']])
+    model_beta <- model$glmnet.fit$beta |> as.matrix()
+    bst_beta <- model_beta[, whlm]
+
+    #print(new_x[1:5, 1:5])
+
+    out <- lapply(test_ind_dt_list, function(each_ind){
+        new_x <- each_ind[[each_method]][, -c(1:2)] |> as.matrix()
+        prediction_estimates <- new_x %*% matrix(bst_beta)
+        return(prediction_estimates)
+    })
+
+    names(out) <- names(test_ind_dt_list)
+    out <- do.call('cbind', out)
+    colnames(out) <- names(test_ind_dt_list)
+    return(out)
+})
+
+#training_beta_predictions <- do.call('cbind', training_beta_predictions)
+names(test_ind_beta_predictions) <- agg_methods
+```
+
+```{r}
+ind_prediction_scores <- lapply(ind_names, function(each_ind){
+
+
+    out_a <- lapply(agg_methods, function(each_method){
+        test_ind_beta_predictions[[each_method]][, each_ind]
+    })
+
+    out_a <- do.call('cbind', out_a)
+    colnames(out_a) <- agg_methods
+
+    out_b <- cbind(test_ind_dt_list[[each_ind]][[agg_methods[1]]]$class, out_a) |> as.data.frame()
+    colnames(out_b)[1] <- c('class')
+
+    return(out_b)
+    
+    
+})
+
+names(ind_prediction_scores) <- ind_names
+```
+
+```{r}
+rm(list=c('test_ind_beta_predictions'))
+```
+
+### t tests
+
+```{r}
+t_test_regions <- lapply(ind_names, function(each_ind){
+    ind_prediction_score <- ind_prediction_scores[[each_ind]]
+    out <- lapply(agg_methods, function(each_method){
+        tdt <- ind_prediction_score[, each_method]
+
+        ones <- tdt[ind_prediction_score$class == 1]
+        zeros <- tdt[ind_prediction_score$class == 0]
+        # print(any(is.na(zeros))) ; print(length(zeros))
+        st <- t.test(ones, zeros, na.action=na.omit)
+        return(st)
+    })
+    names(out) <- agg_methods
+    return(out)
+})
+names(t_test_regions) <- ind_names
+```
+
+```{r}
+boxplots_regions <- lapply(ind_names, function(each_ind){
+    ind_prediction_score <- ind_prediction_scores[[each_ind]]
+    out <- lapply(agg_methods, function(each_method){
+        tdt <- ind_prediction_score[, c('class', each_method)]
+        bpt <- boxplot(tdt[, 'class'] ~ tdt[, each_method], xlab = "bound vs. unbound", 
+            ylab = "prediction score", main = paste(each_ind, each_method, sep = ' '))
+        return(bpt)
+    })
+    names(out) <- agg_methods
+    return(out)
+})
+names(boxplots_regions) <- ind_names
+```
+
+
+
+```{r}
+tdt <- cbind(test_dt_list$LuCaP_136$aggByPostCenter$class, test_ind_beta_predictions$aggByPostCenter) |> as.data.frame()
+colnames(tdt) <- c('class', 'score')
+tdt[1:5, ]
+```
+
+```{r}
+boxplot(score ~ class, data=tdt)
+```
+
+```{r}
+st <- t.test(tdt$score[tdt$class == 1], tdt$score[tdt$class == 0])
+```
+
+```{r}
+lgr <- glm(class ~ score, data = tdt, family = "binomial") |> summary()
+```
+
+
+
+
+
+
+```{r}
+freedman_metrics <- lapply(ind_names, function(each_ind){
+    out <- lapply(agg_ms, function(each_agg){
+        tdt <- test_dt_list[[each_ind]][[each_agg]]
+        X_test_set <- tdt[, -c(1:2)] |> as.matrix()
+        y_test_set <- tdt$class
+        jj <- assess.glmnet(models_list[[each_agg]], newx = X_test_set, newy = y_test_set) |> unlist()
+        return(jj['auc'])
+    })
+
+    names(out) <- agg_ms
+    out <- do.call('rbind', out)
+    return(out)
+})
+names(freedman_metrics) <- ind_names
+```
+
+```{r}
+fmetrics <- do.call('cbind', freedman_metrics)
+colnames(fmetrics) <- names(freedman_metrics)
+fmetrics
+```
+
+#### A heatplot
+```{r}
+res_df <- data.frame(fmetrics)
+res_df$agg_method <- rownames(res_df)
+res_for_plot <- reshape2::melt(res_df, measure.vars = c(ind_names))
+```
+```{r}
+colnames(res_for_plot) <- c("agg_method","individual", "AUC")
+res_for_plot$AUC <- as.numeric(res_for_plot$AUC)
+ggplot(res_for_plot, aes(x=individual, y=factor(agg_method), fill=AUC)) + 
+    geom_tile() +
+    theme_classic() +
+    theme(text = element_text(size = 15))  + 
+    labs(title=glue("AUC of Cistrome models on {length(ind_names)} individuals for {TF}"),
+        x='Individuals', y='aggregation method/model') +
+    scale_fill_gradient(low = "white", high = "red") +
+    geom_text(aes(label = round(AUC, 2)), color = "black", size = 4)
+```
+
+```{r}
+freedman_predictions <- lapply(ind_names, function(each_ind){
+    out <- lapply(agg_ms, function(each_agg){
+        tdt <- test_dt_list[[each_ind]][[each_agg]]
+        X_test_set <- tdt[, -c(1:2)] |> as.matrix()
+        y_test_set <- tdt$class
+        pp <- predict(models_list[[each_agg]],X_test_set, type='response') #, newy = y_test_set) |> unlist()
+        jj <- cbind(y_test_set, pp) 
+        colnames(jj) <- c('class', 'probabilities')
+        return(jj)
+    })
+
+    names(out) <- agg_ms
+    return(out)
+})
+names(freedman_predictions) <- ind_names
+```
+
+```{r}
+b <- freedman_predictions$LuCaP_136[[1]] |> as.data.frame()
+b$class <- factor(b$class)
+b$predicted_class <- ifelse(b$probabilities > 0.5, 1, 0)
+
+b$summary <- with(b, ifelse((class == 1 & predicted_class == 1), 'TP', 
+    ifelse((class == 1 & predicted_class == 0), 'FN', 
+        ifelse((class == 0 & predicted_class == 0), 'TN', 'FP'))))
+
+# boxplot(probabilities ~ class, data=b, col=c('aquamarin# boxplot(probabilities ~ class, data=b, col=c('aquamarine', 'darkorange'))
+#e', 'darkorange'))
+# mtext('Boxplot of distribution of probabilities', line=1, cex=1.5)
+
+# stripchart(probabilities ~ class, vertical = T, data = b, 
+#     method = "jitter", pch = 20, col = 'darkorange')
+#stripchart(probabilities ~ class, vertical = T, data = b[b$class==0, ], 
+    #method = "jitter", add = TRUE, pch = 20, col = 'aquamarine')
+
+# # Add data points
+# mylevels <- levels(b$class)
+# levelProportions <- summary(b$class)/nrow(b)
+# for(i in 1:length(mylevels)){
+ 
+#   thislevel <- mylevels[i]
+#   thisvalues <- b[b$class==thislevel, "probabilities"]
+   
+#   # take the x-axis indices and add a jitter, proportional to the N in each level
+#   myjitter <- jitter(rep(i, length(thisvalues)), amount=levelProportions[i]/2)
+#   points(myjitter, thisvalues, pch=20, col=rgb(0,0,0,.9)) 
+   
+# }
+```
+
+```{r}
+bcl1 <- b[b$class == 1, ]
+bcl0 <- b[b$class == 0, ]
+
+bcl1_true <- bcl1[bcl1$predicted_class == 1, ]
+bcl0_true <- bcl0[bcl0$class == 0, ]
+bcl1_false <- bcl1[bcl1$predicted_class == 0, ]
+bcl0_false <- bcl0[bcl0$class == 1, ]
+```
+
+```{r}
+sc_at_x <- c(1, 1.5)
+plt_xlim <- NULL
+
+stripchart(probabilities ~ class, data=bcl1_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=sc_at_x, ylim=c(0, 1))
+
+stripchart(probabilities ~ class, data=bcl0_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='aquamarine', ylim=c(0, 1), at=sc_at_x)
+
+stripchart(probabilities ~ class, data=bcl1_false, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='grey', ylim=c(0, 1), at=sc_at_x)
+
+stripchart(probabilities ~ class, data=bcl0_false, vertical=TRUE, pch=19, xaxt='n', method='jitter', add=T, col='grey', ylim=c(0, 1), at=sc_at_x)
+
+boxplot(probabilities ~ class, data=b, add=T, at = c(1.2, 1.7), boxwex=0.08, axes=F)
+axis(1, at=c(1.1, 1.6), labels = c(0, 1), line=2)
+```
+
+```{r}
+stripchart(probabilities ~ class, data=bcl1_true, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=sc_at_x, ylim=c(0, 1))
+```
+
+```{r}
+
+stripchart(b[b$summary=='TP', ]$probabilities, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='darkorange', frame.plot=F, at=1, ylim=c(0, 1))
+
+stripchart(b[b$summary=='FN', ]$probabilities, vertical=TRUE, pch=19, xaxt='n', method='jitter', col='grey', add = T, at=1, ylim=c(0, 1))
+```
+
+
+```{r}
+one_foxa1 <- data.table::fread(glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{data_date}/LuCaP_173_aggByCenter_{TF}.csv.gz'))
+```
+
+```{r}
+one_foxa1[1:5, 1:5]
+```
+
+
+```{r}
+linear_models_betas <- purrr::map(.x=agg_methods, function(each_method){
+    agg_rds <- glue('{model_dir}/{model_id}_{TF}_{each_method}_{model_type}_{run_date}.rds')
+    model <- readRDS(agg_rds)
+    whlm <- which(model$lambda == model[['lambda.1se']])
+    model_beta <- model$glmnet.fit$beta |> as.matrix()
+    bst_beta <- model_beta[, whlm]
+    return(bst_beta)
+}, .progress=T)
+
+names(linear_models_betas) <- agg_methods
+```
+
+```{r}
+
+individuals <- c('LuCaP_136', 'LuCaP_141')
+
+individuals_data <- parallel::mclapply(agg_methods, function(each_method){
+
+    out <- lapply(individuals, function(each_ind){
+        mat_file <- glue('{individual_data_dir}/{each_ind}_{each_method}_{TF}.csv.gz')
+        mat_dt <- data.table::fread(mat_file)
+
+        #print(dim(mat_dt))
+
+        ind_gt <- freedman_ground_truth[, c('region', each_ind)]
+        gt <- ind_gt[ind_gt$region %in% mat_dt$id, ] # match the available regions
+        gt_dedup <- gt[!duplicated(gt[['region']]),] # remove duplicates (there should be none anyway)
+        new_dt <- base::merge(gt_dedup, mat_dt, by.x='region', by.y='id') # merge by region
+        colnames(new_dt) <- c('region', 'class', paste('f_', 1:(ncol(new_dt)-2), sep=''))
+
+        # compute prediction scores
+        model_betas <- linear_models_betas[[each_method]] |> as.matrix()
+        new_x <- new_dt[, -c(1:2)] |> as.matrix()
+        prediction_scores <- new_x %*% model_betas # e.g. 40000 by 5313 %*% 5313 by 1 => 40000 by 1
+
+        return(prediction_scores)
+
+    })
+    out <- do.call('cbind', out) |> as.matrix()
+    colnames(out) <- individuals
+    return(out)
+
+}, mc.cores=7)
+
+names(individuals_data) <- agg_methods
+```
+
+```{r}
+individuals <- c('LuCaP_136', 'LuCaP_141')
+
+#individuals <- c('LuCaP_173')
+
+pscores_list <- parallel::mclapply(individuals, function(each_ind){
+
+    ind_gt <- freedman_ground_truth[, c('region', each_ind)]
+
+    out <- lapply(agg_methods, function(each_method){
+        mat_file <- glue('{individual_data_dir}/{each_ind}_{each_method}_{TF}.csv.gz')
+        mat_dt <- data.table::fread(mat_file)
+
+        gt <- ind_gt[ind_gt$region %in% mat_dt$id, ] # match the available regions
+        gt_dedup <- gt[!duplicated(gt[['region']]),] # remove duplicates (there should be none anyway)
+        new_dt <- base::merge(gt_dedup, mat_dt, by.x='region', by.y='id') # merge by region
+        colnames(new_dt) <- c('region', 'class', paste('f_', 1:(ncol(new_dt)-2), sep=''))
+
+        # compute prediction scores
+        model_betas <- linear_models_betas[[each_method]] |> as.matrix()
+        new_x <- new_dt[, -c(1:2)] |> as.matrix()
+        prediction_scores <- new_x %*% model_betas # e.g. 40000 by 5313 %*% 5313 by 1 => 40000 by 1
+
+        pdt <- cbind(new_dt[, c(1:2)], prediction_scores) |> as.data.frame()
+        colnames(pdt) <- c('region', 'class', each_method)
+        return(pdt)
+
+    })
+
+    # merge by region, and class => they should all be the same but this provides a sanity check
+    out <- out %>% purrr::reduce(dplyr::full_join, by = c('region', 'class'))
+    return(out)
+
+}, mc.cores=7)
+
+names(pscores_list) <- individuals
+```
+
+
+```{r}
+individuals_data
+```
+
+```{r}
+pscores_list <- lapply(individuals, function(each_ind){
+    out <- lapply(agg_methods, function(each_method){
+        return(individuals_data[[each_method]][, each_ind])
+    })
+
+    out <- do.call('cbind', out)
+    colnames(out) <- agg_methods
+    return(out)
+})
+names(pscores_list) <- individuals
+```
+
+
+
