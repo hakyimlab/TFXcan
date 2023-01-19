@@ -1,0 +1,704 @@
+---
+title: "Complete TFpred Pipeline - Using Kawakami data"
+author: "Temi"
+date: 'Thursday Jan 5 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+This script should be run interactively
+This script contains the entire TFPred pipeline or the idea of it. 
+- Collects the ChIP peaks
+- Overlaps the peaks with predicted motifs to define positive and negative sets
+- Uses ENFORMER to predict on these regions
+- Aggregates these predictions
+- Trains on these regions
+- Provides some metrics
+
+The TFPred pipeline works only on a reference set - this script does not predict on individual data (as yet)
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+
+## 
+- collect the sorted bed files for the TF
+- check that all files are available
+
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+data_dir <- glue('{imlab_dir}/data/kawakami-human/detailed_info')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
+```
+
+```{r}
+id <- 'kawakami'
+#TF <- 'FOXA1'
+TF <- 'GATA3'
+```
+
+```{r}
+peaks_dir <- glue('{project_dir}/files/peaks_files/{id}_{TF}')
+if(!dir.exists(peaks_dir)){
+    dir.create(peaks_dir, recursive=T)
+}
+
+homer_files_dir <- glue('{project_dir}/files/homer_files/{id}_{TF}')
+if(!dir.exists(homer_files_dir)){
+    dir.create(homer_files_dir, recursive=T)
+}
+
+regions_dir <- glue('{project_dir}/files/defined_regions/{id}_{TF}')
+if(!dir.exists(regions_dir)){
+    dir.create(regions_dir, recursive=T)
+}
+
+common_dir <- glue('{project_dir}/files/homer_files/common_files')
+if(!dir.exists(common_dir)){
+    dir.create(common_dir, recursive=T)
+}
+```
+
+
+Move/copy all ChIP-peak files for the TF to a folder
+```{r}
+
+if(length(list.files(peaks_dir, glue('^{TF}'))) == 0){
+    tf_files <- list.files(data_dir, glue('^{TF}'), full.names=T)
+    # copy the files from the data directory
+    file.copy(from=tf_files, to=peaks_dir, overwrite=T, copy.mode=T)
+} else {
+    print('Peak files exist.')
+}
+```
+
+This step shold be done everytime to be sure you are using the right cell line and all that
+```{r}
+tf_lower <- tolower(TF)
+potential_motif_files <- list.files(glue('{homer_dir}/data/knownTFs/motifs'), glue('^{tf_lower}'), full.names=T)
+
+#print(potential_motif_files)
+pmf <- 1:length(potential_motif_files)
+names(pmf) <- basename(potential_motif_files)
+
+if(length(pmf) > 1){
+    print(glue('[PROMPT] There seem to be more than one motif file for {TF} in the homer database\nYou need to choose one of them from 1:{length(pmf)}'))
+    print(pmf)
+    user_choice <- as.numeric(readline(prompt='Choose a file by the index: '))
+} else {
+    user_choice <- 1
+}
+
+print(glue('You chose: {names(pmf)[user_choice]}'))
+
+mfile <- getElement(strsplit(basename(potential_motif_files[user_choice]), '\\.'), 1)
+if(length(mfile) == 2){
+    TF <- toupper(mfile[1])
+    cell_line <- 'genericCellLine'
+} else if (length(mfile) == 3){
+    TF <- toupper(mfile[1])
+    cell_line <- mfile[2]
+}
+
+# using the first one
+file.copy(from=potential_motif_files[user_choice], to=homer_files_dir, overwrite=T, copy.mode=T)
+file.rename(from=glue('{homer_files_dir}/{basename(potential_motif_files[user_choice])}'), to=glue('{homer_files_dir}/{TF}_{cell_line}.motif'))
+
+```
+
+```{r}
+# check that the script exists
+scan_script <- glue("{project_dir}/scripts/utilities/scan_for_motifs.sh")
+scan_script ; file.exists(scan_script)
+```
+
+```{r}
+# motif file
+motif_file <- glue('{homer_files_dir}/{TF}_{cell_line}.motif')
+motif_file ; file.exists(motif_file)
+```
+
+```{r}
+genome <- 'hg19'
+output_basename <- glue('{homer_files_dir}/{TF}_motifs_genomewide')
+
+if(!file.exists(glue('{output_basename}.txt'))){
+    pbs_script <- glue('qsub -v homer_dir={homer_dir},motif_file={motif_file},genome={genome},output_basename={output_basename} {scan_script}')
+    # {homer_cmd} ${motif_file} ${genome} > ${output_file}
+    system(pbs_script)
+} else {
+    print(glue('{output_basename}.txt exists.'))
+}
+
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+## Defining positive and negative regions
+```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
+valid_chromosomes
+```
+
+#### Step 1: Use Homer to predict genome-wide motifs and select a threshold
+Here I select those with a score >= 6
+```{r}
+genome_wide_predicted_motifs <- data.table::fread(glue('{homer_files_dir}/{TF}_motifs_genomewide.txt'))
+dim(genome_wide_predicted_motifs) ; genome_wide_predicted_motifs[1:5, ]
+```
+
+```{r}
+rr <- range(genome_wide_predicted_motifs$V6)
+print(glue('[PROMPT] Choose a threshold between: Min: {rr[1]} and Max: {rr[2]}'))
+threshold <- readline(prompt='Choose a threshold: ') |> as.numeric()
+print(glue('You chose: {threshold}'))
+```
+
+```{r}
+predicted_motifs <- genome_wide_predicted_motifs[genome_wide_predicted_motifs$V6 >= threshold, ]
+dim(predicted_motifs) ; predicted_motifs[1:5, ]
+```
+
+```{r}
+# first reformat the predicted motifs
+tf_motifs <- predicted_motifs %>% dplyr::select(chr=V2, start=V3, end=V4, strand=V5, score=V6)
+tf_motifs_granges <- with(tf_motifs, GRanges(chr, IRanges(start,end), strand, score))
+tf_motifs_granges <- tf_motifs_granges[seqnames(tf_motifs_granges) %in% valid_chromosomes]
+```
+
+#### Step 2: The sorted peak files per individual/file
+
+```{r}
+peak_files_paths <- list.files(peaks_dir, full.names=T)
+peak_files_paths
+```
+
+```{r}
+# read in all the files
+peak_files_list <- purrr::map(.x=peak_files_paths, .f=data.table::fread, .progress=T)
+peak_files_list[[1]] |> head()
+```
+
+Some of these have duplicates because a peak can be close to two or more genes and that peak can appear twice or thereabouts in the peak file
+So, I can redo this to retain only unique peaks/rows
+```{r}
+# distinct(v1, v2, v3, .keep_all = T)
+
+pmi_dt_list <- purrr::map(.x=peak_files_paths, function(each_file){
+
+    dt <- data.table::fread(each_file) %>%
+        distinct(space, start, end, .keep_all=T) %>%
+        dplyr::select(chr=space, start=start, end=end) %>% # select the chr, start and end columns
+        with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+
+    dt <- dt[seqnames(dt) %in% valid_chromosomes]
+
+    overlaps <- GenomicRanges::findOverlaps(query=dt, subject=tf_motifs_granges, type='any')
+
+    positive_dt <- tf_motifs_granges[subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 1)
+
+    negative_dt <- tf_motifs_granges[-subjectHits(overlaps), ] %>% # because I only want the motifs
+        as.data.frame() %>%
+        dplyr::select(chr=seqnames, start, end) %>%
+        dplyr::mutate(class = 0)
+
+    return(rbind(positive_dt, negative_dt) |> as.data.frame())
+
+}, .progress=T)
+
+pmi_dt_list[[1]] |> head()
+```
+
+```{r}
+# modify the class names
+pmi_dt_list <- lapply(seq_along(pmi_dt_list), function(i){
+    colnames(pmi_dt_list[[i]])[4] <- paste('class_', i, sep='')
+    return(pmi_dt_list[[i]])
+})
+pmi_dt_list[[1]] |> head()
+```
+
+```{r}
+class_distribution <- sapply(pmi_dt_list, function(each_dt){
+    table(each_dt$class)
+})
+class_distribution
+```
+
+#### Step 3: merge all the files and add the binding counts and class
+```{r}
+dt_merged <- pmi_dt_list %>% purrr::reduce(full_join, by = c('chr', 'start', 'end')) 
+dt_merged$binding_counts <- rowSums(dt_merged[, -c(1:3)])
+dt_merged$binding_class <- ifelse(dt_merged$binding_counts > 0, 1, 0)
+dt_merged <- dt_merged %>%
+    dplyr::relocate(c('binding_class', 'binding_counts'), .after=end)
+
+# shuffle the data
+set.seed(2023)
+dt_merged <- dt_merged[sample(nrow(dt_merged)), ]
+
+dt_merged$chr <- as.character(dt_merged$chr)
+
+dt_merged[1:5, ]
+```
+
+#### Step 4: Save the files
+
+```{r}
+save_object <- list(binding_matrix=dt_merged, file_names=peak_files_paths)
+```
+
+```{r}
+todays_date <- '2023-01-06' #Sys.Date()
+save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+saveRDS(save_object, file=glue('{save_dir}/regions_information.RData'))
+```
+
+
+### Step 5: Read in the file
+
+```{r}
+todays_date <- '2023-01-06' #Sys.Date()
+save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
+binding_rdata <- readRDS(glue('{save_dir}/regions_information.RData'))
+```
+
+```{r}
+kawakami_dt <- binding_rdata$binding_matrix
+```
+
+```{r}
+rg <- range(kawakami_dt$binding_counts)
+print(glue('[PROMPT] Choose a positive set threshold between: Min: {rg[1]} and Max: {rg[2]}'))
+positive_set_threshold <- readline(prompt='Choose a positive set threshold: ') |> as.numeric()
+print(glue('You chose: {positive_set_threshold}'))
+```
+
+```{r}
+# choose peaks with binding_counts > 11
+kawakami_dt_pos <- kawakami_dt[kawakami_dt$binding_counts > positive_set_threshold, ][, 1:5]
+kawakami_dt_pos |> head() ; dim(kawakami_dt_pos)
+```
+
+```{r}
+num_negs <- 1
+```
+
+
+```{r}
+set.seed(2023)
+kawakami_dt_neg <- dplyr::slice_sample(kawakami_dt[kawakami_dt$binding_counts == 0, ], n=nrow(kawakami_dt_pos) * num_negs)[, 1:5]
+kawakami_dt_neg |> head() ; dim(kawakami_dt_neg)
+```
+
+```{r}
+kawakami_dr <- rbind(kawakami_dt_pos, kawakami_dt_neg) %>%
+    tidyr::unite('region', c(chr, start, end), remove=T)
+
+set.seed(2023)
+kawakami_dr <- kawakami_dr[sample(nrow(kawakami_dr)), ]
+
+kawakami_dr[1:5, ]
+```
+
+```{r}
+dataset <- 'kawakami'
+todays_date <- todays_date #Sys.Date()
+
+save_dir <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{todays_date}')
+if(!dir.exists(save_dir)){
+    dir.create(save_dir, recursive=T)
+}
+
+if(!dir.exists(glue('{save_dir}/predictors'))){
+    dir.create(glue('{save_dir}/predictors'))
+}
+
+if(!dir.exists(glue('{save_dir}/ground_truth'))){
+    dir.create(glue('{save_dir}/ground_truth'))
+}
+```
+
+```{r}
+#k_set <- with(kawakami_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
+
+write.table(kawakami_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(kawakami_dr)}.txt'), col.names=F, quote=F, row.names=F)
+write.table(kawakami_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(kawakami_dr)}.txt'), col.names=F, quote=F, row.names=F)
+```
+
+
+```{r}
+predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(kawakami_dr)}.txt')
+predictor_file
+```
+
+
+## Predict on these regions with ENFORMER
+### Create the enformer_parameters.json file
+```{r}
+metadata_dir <- glue('{project_dir}/metadata')
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
+```
+
+```{r}
+enformer_parameters_json <- list()
+
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
+enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['interval_list_file']] <- predictor_file
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['dataset_type']] <- "reference"
+enformer_parameters_json[['prediction_data_name']] <- id
+enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['date']] <- '2023-01-06'
+enformer_parameters_json[['vcf_file']] <- NA
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['log_dir']] <- "cobalt_log"
+enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['use_parsl']] <- T
+enformer_parameters_json[['predict_on_n_regions']] <- -1
+enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_kawakami_{TF}"), "num_of_full_nodes"=10, "walltime"="02:00:00", "min_num_blocks"=0, "max_num_blocks"=1, "queue"="preemptable")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/enformer_parameters_{TF}.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/enformer_parameters_{TF}.json')
+```
+
+
+# 
+```{r eval=F}
+# check that the script exists
+# predict_pbs_script <- glue("{project_dir}/scripts/enformer_predict.sh")
+# predict_pbs_script ; file.exists(predict_pbs_script)
+```
+
+```{r eval=F}
+# predict_python_script <- glue("{project_dir}/scripts/enformer_predict.py")
+# predict_python_script ; file.exists(predict_python_script)
+```
+
+```{r eval=F}
+# pbs_script <- glue('qsub -v enformer_predict_py={predict_python_script},param_file={param_file} {predict_pbs_script}')
+# # {homer_cmd} ${motif_file} ${genome} > ${output_file}
+# system(pbs_script)
+```
+
+```{r eval=F}
+#system('qstat -u temi')
+```
+
+#### Copy this command below and run it in another shell (you many need to modify the name of the conda environment and all that )
+
+I can write this into a shell script and call it with `system()`. The problem is that I am currently within a shell (using R) and it won't initialize my conda environment in that way. Pretty sure there is a way around it - but it may be tricky
+```{r}
+# prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+```{r}
+# write(prediction_cmd, file=glue('{project_dir}/prediction_cmd.sh'))
+# cmd <- glue('bash {project_dir}/prediction_cmd.sh &')
+# cmd
+```
+
+## Collect/aggregate the predictions
+
+This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
+The user supplies what aggregation option.
+
+There are currently 7 valid options for aggregations:
+- aggByCenter:
+- aggByMean:
+- aggByUpstream:
+- aggByDownstream:
+- aggByUpstreamDownstream:
+- aggByPreCenter
+- aggByPostCenter
+
+Check that the appropriate scripts exist
+```{r}
+# check that the script exists
+aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/collect_kawakami_pbs.sh")
+aggregation_pbs_script ; file.exists(aggregation_pbs_script)
+```
+
+```{r}
+aggregation_python_script <- glue("{project_dir}/scripts/utilities/collect_kawakami.py")
+aggregation_python_script ; file.exists(aggregation_python_script)
+```
+
+```{r}
+aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{TF}.json")
+aggregation_config ; file.exists(aggregation_config)
+```
+
+Aggregate the predictions
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods
+```
+
+
+```{r}
+for(am in agg_methods){
+
+    pbs_script <- glue('qsub -v collect_py={aggregation_python_script},aggregation_config={aggregation_config},agg_type={am} {aggregation_pbs_script}')
+    system(pbs_script)
+
+    # wait a little before submitting the next one
+    date_time <- Sys.time()
+    while((as.numeric(Sys.time()) - as.numeric(date_time)) < 2){}
+}
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+## Note: Please wait a while for this job to be finished.
+
+### Optional
+Remove/clean up all the aggregated batches
+
+```{r}
+for(am in agg_methods){
+    files_to_delete <- Sys.glob(glue('{project_dir}/prediction_folder/aggregated_predictions/{id}_{TF}_{todays_date}/{id}_{am}_{TF}_batch_*.csv.gz'))
+
+    file.remove(files_to_delete)
+}
+```
+
+
+## read in the aggregated predictions
+```{r}
+# read in some directives
+jfile <- jsonlite::fromJSON(glue('{project_dir}/metadata/aggregation_config_{TF}.json'))
+
+data_date <- jfile$run_date
+TF <- jfile$transcription_factor
+id <- jfile$each_id
+```
+
+
+```{r}
+# agg_methods <- c(agg_center, agg_precenter, agg_postcenter)
+# agg_methods
+```
+
+```{r}
+ground_truth_path <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/{basename(predictor_file)}')
+ground_truth <- data.table::fread(ground_truth_path)
+head(ground_truth)
+```
+
+
+```{r}
+find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
+  n_occur <- data.frame(table(dt[[col]]))
+
+  if(return_dups == TRUE){
+    return(dt[dt[[col]] %in% n_occur$Var1[n_occur$Freq > 1],])
+  } else {
+    return(n_occur[n_occur$Freq > 1,])
+  }
+}
+
+#find_duplicates_in_dataframe(gt, col='V1') # there should be no duplicates
+```
+
+```{r}
+agg_transform_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    kawakami_agg_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{id}_{TF}_{data_date}/{id}_{each_method}_{TF}.csv.gz')
+    kawakami_center_dt <- data.table::fread(kawakami_agg_file)
+    gt <- ground_truth[ground_truth$V1 %in% kawakami_center_dt$V1, ]
+    gt_dedup <- gt[!duplicated(gt[['V1']]),]
+    new_dt <- merge(gt_dedup, kawakami_center_dt, by.x='V1', by.y='V1')
+    colnames(new_dt) <- c('region', 'class', 'binding_counts', paste('f_', 1:(ncol(new_dt)-3), sep=''))
+
+    return(new_dt)
+
+}, .progress=T)
+
+names(agg_transform_list) <- agg_methods
+
+# look at one of them
+agg_transform_list[[1]][1:5, 1:7]
+```
+
+Split into 80-20 (for now, no splitting) and save
+
+```{r}
+model_data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
+if(!dir.exists(model_data_dir)){
+    dir.create(model_data_dir, recursive=T)
+} else {
+    print('Model data directory exists.')
+}
+```
+
+```{r}
+set.seed(2023)
+purrr::map(.x=names(agg_transform_list), function(each_method){
+    each_dt <- agg_transform_list[[each_method]]
+    tr_size <- ceiling(nrow(each_dt) * 1)
+    tr_indices <- sample(1:nrow(each_dt), tr_size)
+
+    train <- each_dt[tr_indices, ]
+    test <- each_dt[-tr_indices, ]
+
+    data.table::fwrite(x=train, file=glue('{model_data_dir}/train_{each_method}.csv'), quote=F, row.names=F)
+    cmd <- glue("pigz -kf {model_data_dir}/train_{each_method}.csv")
+    system(cmd)
+
+    # just in case there is a test data
+    if(nrow(test) > 0){
+        data.table::fwrite(x=test, file=glue('{model_data_dir}/test_{each_method}.csv'), quote=F, row.names=F)
+        cmd <- glue("pigz -kf {model_data_dir}/test_{each_method}.csv")
+        system(cmd)
+    }
+
+    print(glue("[INFO] {each_method}'s train (and test, if applicable) data have been saved."))
+})
+```
+
+Read it back in to ensure that the data was correctly saved and all that
+```{r}
+temp_dt <- data.table::fread(glue('{model_data_dir}/train_aggByPreCenter.csv.gz'))
+temp_dt[1:5, 1:5] ; temp_dt |> dim() ; temp_dt$class |> table() 
+```
+Good!
+
+
+## Training/Modelling: elastic net
+I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+if(!dir.exists(model_dir)){
+    dir.create(model_dir, recursive=T)
+} else {
+    print('Model directory exists.')
+}
+```
+
+Use the `agg_methods`
+```{r}
+#; file.exists(pbs_script)
+enet_rscript <- glue('{project_dir}/scripts/utilities/train_enet_model.R')
+if(file.exists(enet_rscript)){print('enet train R script exists.')}
+```
+
+```{r}
+#; file.exists(pbs_script)
+enet_pbs_script <- glue('{project_dir}/scripts/utilities/train_enet_model_pbs.sh')
+if(file.exists(enet_pbs_script)){print('enet train pbs script exists.')}
+```
+
+```{r}
+lapply(agg_methods, function(each_method){
+
+    training_data <- glue("{model_data_dir}/train_{each_method}.csv.gz")
+    if(file.exists(training_data)){
+        print(glue('[INFO] Training data exists for {each_method}'))# |> print()
+    } else {
+        print(glue('[ERROR] Training data does not exist for {each_method}'))# |> print()
+    }
+
+    mtinfo <- each_method
+
+    pbs_script <- glue('qsub -v data_file={training_data},training_script={enet_rscript},output_dir={model_dir},id_data={id},TF={TF},metainfo={mtinfo},training_date={todays_date} {enet_pbs_script}')
+
+    system(pbs_script)
+
+})
+```
+
+```{r}
+system("qstat -u temi")
+```
+
+## Read in the models and explore and all that 
+
+
+```{r}
+enformer_annotations <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/metadata/enformer_tracks_annotated-resaved.txt')
+enformer_annotations$feature_names <- paste('f_', 1:5313, sep='')
+enformer_annotations[1:5, ]
+```
+
+
+```{r}
+models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{id}_{TF}_{each_method}_binary_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(models_list) <- agg_methods
+
+# look at one of them
+```
+
+```{r}
+print(names(models_list))
+```
+
+```{r}
+agg_rds <- glue('{model_dir}/{id}_{TF}_{agg_methods[1]}_binary_{todays_date}.rds')
+model_rds <- readRDS(agg_rds)
+```
+
+
+
+
+
+
