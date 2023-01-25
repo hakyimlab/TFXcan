@@ -21,14 +21,14 @@ library(jsonlite)
 ```{r}
 imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
 data_dir <- glue('{imlab_dir}/data/freedman_data/peaks_liftover')
-project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
 homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
 ```
 
 ```{r}
 dataset <- 'freedman'
 TF <- 'FOXA1'
-todays_date <- data_date <- '2023-01-11' #Sys.Date()
+todays_date <- data_date <- run_date <- '2023-01-11' #Sys.Date()
 ```
 
 ```{r}
@@ -276,6 +276,42 @@ if(!dir.exists(metadata_dir)){
 }
 ```
 
+
+```{r}
+valid_chromosomes
+```
+
+```{r}
+pat <- paste0('*.', valid_chromosomes, '.*vcf.gz$', collapse='|') # paste0('^', TF_info$DCid, collapse='_*|')
+vcfs_dir <- glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only')
+grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+```
+
+```{r}
+vcf_files <- lapply(valid_chromosomes, function(chr){
+    pat <- paste0('*.\\b', chr, '\\b.*vcf.gz$', collapse='|')
+    #print(pat)
+    grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+})
+names(vcf_files) <- valid_chromosomes
+vcf_files
+```
+
+```{r}
+vcf_files <- list(folder=glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only'), files=vcf_files)
+vcf_files
+```
+
+
+```{r}
+list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
+```
+
+```{r}
+predictor_file <- Sys.glob(glue('{save_dir}/predictors/{dataset}_{TF}_*.txt'))
+predictor_file
+```
+
 For now, I will do 4 individuals
 ```{r}
 enformer_parameters_json <- list()
@@ -289,7 +325,11 @@ enformer_parameters_json[['TF']] <- TF
 enformer_parameters_json[['date']] <- data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
 
-enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+enformer_parameters_json[['vcf_split']] <- TRUE
+enformer_parameters_json[['vcf_files']] <- vcf_files
+
+#enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+
 enformer_parameters_json[['sub_dir']] <- TRUE
 enformer_parameters_json[['use_parsl']] <- T
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
@@ -416,39 +456,55 @@ Remove/clean up all the aggregated batches
 # }
 ```
 
-### Step 5: Testing
+### Step 5: Testing models on these individual data
 
 #### Stand alone script to collect prediction scores (TFScores)
 
 ```{r}
 model_dir <- glue('{project_dir}/models')
 model_id <- 'cistrome'
-individual_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
-model_type <- 'linear'
+model_types <- c('linear', 'logistic')
+predict_on <- glue('{project_dir}/metadata/individuals.txt')
+individuals_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
+
 run_date <- todays_date
-pscore_dir <- glue('{project_dir}/prediction_scores')
-if(!dir.exists(pscore_dir)){
-    dir.create(pscore_dir, recursive=T)
+output_dir <- glue('{project_dir}/model_evaluation')
+if(!dir.exists(output_dir)){
+    dir.create(output_dir, recursive=T)
 } else {
-    print('Prediction scores folder exists')
+    print('Model evaluation directory exists.')
 }
 
-gt_dir <- glue('{project_dir}/motif_intervals/freedman/intervals_{todays_date}/ground_truth')
-gt_file <- Sys.glob(glue('{gt_dir}/{dataset}_{TF}_*.txt'))
+individuals_ground_truth_file <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{run_date}/ground_truth/{dataset}_{TF}_*.txt')
+gt_file <- Sys.glob(glue('{individuals_ground_truth_file}'))
 ```
 
 ```{r}
-pscore_R_script <- glue('{project_dir}/scripts/utilities/enet_models_predict.R')
-pscore_pbs_script <- glue('{project_dir}/scripts/utilities/enet_models_predict_pbs.sh')
+#; file.exists(pbs_script)
+evaluate_rscript <- glue('{project_dir}/scripts/utilities/enet_evaluate_individuals.R')
+if(file.exists(evaluate_rscript)){print('enet evaluate R script exists.')}
+```
+```{r}
+#; file.exists(pbs_script)
+evaluate_pbs_script <- glue('{project_dir}/scripts/utilities/enet_evaluate_individuals_pbs.sh')
+if(file.exists(evaluate_pbs_script)){print('enet evaluate pbs script exists.')}
 ```
 
 ```{r}
-pbs_script <- glue('qsub -v pscore_script={pscore_R_script},model_dir={model_dir},model_id={model_id},individual_data_dir={individual_data_dir},TF={TF},model_type={model_type},run_date={run_date},output_dir={pscore_dir},ground_truth_file={gt_file} {pscore_pbs_script}')
-print(pbs_script)
+# go through each model_types and predict_ons
+cmds <- c()
+for(model_type in model_types){
+    pbs_script <- glue('qsub -v evaluate_rscript={evaluate_rscript},model_dir={model_dir},model_id={model_id},model_type={model_type},predict_on={predict_on},individuals_data_dir={individuals_data_dir},individuals_ground_truth_file={gt_file},TF={TF},run_date={todays_date},output_dir={output_dir} {evaluate_pbs_script}')
+
+    cmds <- append(pbs_script, cmds)
+}
+print(cmds)
+
 ```
 
 ```{r}
-system(pbs_script)
+for(cmd in cmds){system(cmd)}
+#system(pbs_script)
 ```
 
 ```{r}
@@ -456,73 +512,353 @@ system('qstat -u temi')
 ```
 
 
+# Evaluating the models on Freedman individuals
 ```{r}
 library(ggthemes)
 library(ggsignif)
+library(ROCR)
 ```
 
 ```{r}
 #ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
-individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt', header=F)
+individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/individuals.txt', header=F)
 ind_names <- individuals$V1#[-1]#[1:5
 ind_names
 ```
 
+Read in the evaluations of the models
 ```{r}
-pscores_list <- readRDS(glue('{pscore_dir}/freedman_{TF}_prediction_scores_{run_date}.rds'))
+model_evaluation_dir <- glue('{project_dir}/model_evaluation')
+```
+
+```{r}
+model_type <- 'logistic'
+individual_logistic_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{model_type}_evaluation_{run_date}.rds'))
+
+model_type <- 'linear'
+individual_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{model_type}_evaluation_{run_date}.rds'))
+```
+
+```{r}
+# using aggByPreCenter
+# predicted <- lapply(ind_names, function(each_ind){
+#     individual_linear_eval[[each_ind]][['aggByPreCenter']][, c('region', 'prediction_link')]
+# })
+
+# predicted <- predicted %>% purrr::reduce(left_join, by=c('region'))
+# colnames(predicted)[2:ncol(predicted)] <- ind_names
+
+# observed <- lapply(ind_names, function(each_ind){
+#     individual_linear_eval[[each_ind]][['aggByPreCenter']][, c('region', 'class')]
+# })
+# observed <- observed %>% purrr::reduce(left_join, by=c('region'))
+# colnames(observed)[2:ncol(observed)] <- ind_names
+
+# permutation_matrix <- list(predicted=predicted, observed=observed)
+# saveRDS(permutation_matrix, glue('{project_dir}/misc/freedman_{TF}_predicted_vs_observed_matrix_{Sys.Date()}.rds'))
 ```
 
 
-#### t-test across re
+#### AUC plots per individual
 ```{r}
-pscores_ttest_regions <- lapply(ind_names, function(each_ind){
-    ind_prediction_score <- pscores_list[[each_ind]]
-    out <- lapply(agg_methods, function(each_method){
-        tdt <- ind_prediction_score[, each_method]
+# collect the prediction scores per individual (on the linear evaluations)
+predicted_probabilities <- lapply(ind_names, function(each_ind){
 
-        ones <- tdt[ind_prediction_score$class == 1]
-        zeros <- tdt[ind_prediction_score$class == 0]
-        # print(any(is.na(zeros))) ; print(length(zeros))
-        st <- t.test(ones, zeros, na.action=na.omit)
-        return(st$p.value)
-    })
-    names(out) <- agg_methods
+    out <- lapply(agg_methods, function(each_method){
+        individual_logistic_eval[[each_ind]][[each_method]][, c('region', 'class', 'prediction_response')]
+    }) %>% purrr::reduce(left_join, by=c('region','class'))
+    colnames(out) <- c('region', 'class', agg_methods)
     return(out)
 })
-names(pscores_ttest_regions) <- ind_names
+
+names(predicted_probabilities) <- ind_names
+predicted_probabilities$LuCaP_173[1:5, ]
 ```
 
 ```{r}
-a <- pscores_list$LuCaP_173[, c('class', 'aggByPreCenter')]
-ones <- a[a$class == 1, ]$aggByPreCenter
-zeros <- a[a$class == 0, ]$aggByPreCenter
-t.test(ones, zeros)$p.value
-```
-
-
-```{r}
-all_t_test <- do.call('cbind',
-
-    lapply(pscores_ttest_regions, function(each_elem){
-        do.call('rbind', each_elem)
-    })
-
-) |> as.data.frame()
-colnames(all_t_test) <- ind_names
-all_t_test
-```
-
-```{r}
-# combine all the predicted values
-out <- lapply(ind_names, function(each_ind){
-    temp <- pscores_list[[each_ind]] |> as.data.frame()
-    temp$individual <- each_ind
-
-    return(temp)
-    
+# for logistic regression
+individual_aucs <- lapply(ind_names, function(each_ind){
+    dt <- predicted_probabilities[[each_ind]]
+    out <- lapply(agg_methods, function(each_agg){
+        pred <- ROCR::prediction(dt[[each_agg]], dt$class)
+        #print(glue('{each_ind}-{each_agg}'))
+        perf <- ROCR::performance(pred, "auc")
+        return(perf@y.values[[1]])
+    }) %>% do.call('cbind', .)
+    colnames(out) <- agg_methods
+    return(out)
 })
 
-all_pscores <- do.call(dplyr::bind_rows, out)
+individual_aucs <- do.call('rbind', individual_aucs) |> t() |> as.data.frame()
+colnames(individual_aucs) <- ind_names
+individual_aucs
+```
+
+#### I can predict on a random set and include the AUC too
+
+#### REad in the random set and match the binding counts by region
+
+```{r}
+model_dir <- glue('{project_dir}/models')
+model_type <- 'logistic'
+model_dataset <- 'cistrome'
+
+# load all the models
+logistic_models_list <- purrr::map(.x=agg_methods, function(each_method){
+
+    agg_rds <- glue('{model_dir}/{model_dataset}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
+    model_rds <- readRDS(agg_rds)
+    return(model_rds)
+
+}, .progress=T)
+
+names(logistic_models_list) <- agg_methods
+```
+
+```{r}
+dataset_type <- 'cistrome'
+cistrome_gt <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset_type}/intervals_{todays_date}/ground_truth/{dataset_type}_{TF}_*.txt')) |> data.table::fread()
+colnames(cistrome_gt) <- c('region', 'class', 'binding_counts')
+```
+
+```{r}
+random_dataset <- 'random'
+dataset_type <- 'random'
+
+random_gt <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset_type}/intervals_{todays_date}/ground_truth/{dataset_type}_{TF}_*.txt')) |> data.table::fread()
+colnames(random_gt) <- c('region', 'class', 'binding_counts')
+random_gt <- random_gt[, c('region', 'class')]
+random_gt <- base::merge(random_gt, cistrome_gt[, c('region', 'binding_counts')], by='region')
+random_gt$binding_strength <- with(random_gt, ((binding_counts - min(binding_counts))/(max(binding_counts) - min(binding_counts))))
+head(random_gt, 5) ; random_gt |> dim()
+```
+
+```{r}
+random_set <- purrr::map(.x=agg_methods, function(each_method){
+
+    random_agg_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset_type}_{TF}_{data_date}/{dataset_type}_{each_method}_{TF}.csv.gz')
+    random_dt <- data.table::fread(random_agg_file)
+
+    # merge
+    new_dt <- base::merge(random_gt, random_dt, by.x='region', by.y='V1')
+    colnames(new_dt) <- c('region', 'class', 'binding_counts', 'binding_strength', paste('f_', 1:(ncol(new_dt)-4), sep=''))
+
+    return(new_dt)
+
+}, .progress=T)
+
+names(random_set) <- agg_methods
+
+```
+
+#### Predict on the random set and get AUC
+
+```{r}
+random_AUC <- lapply(agg_methods, function(each_method){
+    newx <- random_set[[each_method]][, -c(1:4)] |> as.matrix()
+    prediction_random <- predict(logistic_models_list[[each_method]], newx, s='lambda.1se', type='response')
+    pred <- ROCR::prediction(prediction_random, random_set[[each_method]][, 'class'])
+    perf <- ROCR::performance(pred, "auc")
+    return(perf@y.values[[1]])
+}) %>% do.call('rbind', .)
+
+rownames(random_AUC) <- agg_methods
+colnames(random_AUC) <- 'random'
+random_AUC
+```
+
+```{r}
+individual_aucs <- individual_aucs %>% tibble::rownames_to_column('agg_method')
+random_AUC <- random_AUC %>% as.data.frame() %>% tibble::rownames_to_column('agg_method')
+res_df <- dplyr::left_join(individual_aucs, random_AUC, by=c('agg_method'))
+res_df
+```
+
+
+```{r}
+#data_types <- c('train', 'test')
+# res_df <- as.data.frame(individual_aucs)
+# res_df <- res_df %>% tibble::rownames_to_column('agg_method')
+#res_df <- res_df %>% arrange(desc(train))
+#res_df$agg_method <- rownames(res_df)
+res_for_plot <- reshape2::melt(res_df, measure.vars = c('random', ind_names))
+```
+```{r}
+colnames(res_for_plot) <- c("agg_method", "individual", "AUC")
+res_for_plot$AUC <- as.numeric(res_for_plot$AUC) %>% round(3)
+
+top_aucs <- res_for_plot %>% group_by(individual) %>% slice_max(order_by = AUC, with_ties = TRUE)
+
+auc_merged <- merge(res_for_plot, top_aucs)
+
+p <- ggplot(res_for_plot, aes(x=individual, y=factor(agg_method), fill=AUC)) + 
+    geom_tile() +
+    theme_classic() +
+    theme(text = element_text(size = 15), 
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))  + 
+    labs(title=glue("AUC of {TF} Cistrome models"),
+        x='individual', y='aggregation method/model', subtitle='Black borders represent highest AUCs across individuals') +
+    scale_fill_gradientn(colours=c("white", "orange", "red"), limits = c(0.4, 1)) +
+    geom_text(aes(label = round(AUC, 3)), color = "black", size = 4) 
+
+p + geom_tile(data=auc_merged, aes(x=individual, y=factor(agg_method)), fill="transparent", colour="black", size=1)
+```
+
+
+
+
+#### t-test across individuals (here I use the scores from the linear models)
+
+```{r}
+# collect the prediction probabilities per individual (on the linear evaluations)
+pscores_list <- lapply(ind_names, function(each_ind){
+
+    dt <- individual_linear_eval[[each_ind]] %>%
+        purrr::reduce(left_join, by=c('region','class'))
+    colnames(dt) <- c('region', 'class', names(individual_linear_eval[[each_ind]]))
+
+    return(dt)
+})
+
+names(pscores_list) <- ind_names
+```
+
+Create a list of list(aggmethod(observed, predicted))
+```{r}
+pscores_list <- lapply(agg_methods, function(each_method){
+
+    predicted <- lapply(ind_names, function(each_ind){
+        individual_linear_eval[[each_ind]][[each_method]][, c('region', 'prediction_link')]
+    })
+
+    predicted <- predicted %>% purrr::reduce(left_join, by='region')
+    colnames(predicted)[2:ncol(predicted)] <- ind_names
+
+    observed <- lapply(ind_names, function(each_ind){
+        individual_linear_eval[[each_ind]][[each_method]][, c('region', 'class')]
+    })
+
+    observed <- observed %>% purrr::reduce(left_join, by='region')
+    colnames(observed)[2:ncol(observed)] <- ind_names
+
+    return(list(observed = as.data.frame(observed), predicted = as.data.frame(predicted)))
+})
+
+names(pscores_list) <- agg_methods
+```
+
+```{r}
+ttest_pvalues <- lapply(agg_methods, function(each_agg){
+
+    tempo <- pscores_list[[each_agg]]
+
+    obs <- tempo$observed %>% select(-region) %>% as.matrix()
+    rownames(obs) <- tempo$observed$region
+
+    pred <- tempo$predicted %>% select(-region) %>% as.matrix()
+    rownames(pred) <- tempo$predicted$region
+
+    nbou <- rowSums(obs)
+    ind <- nbou>3 & nbou < 14
+    obs <- obs[ind,]
+    pred <- pred[ind,]
+
+    pvec = rep(NA,nrow(obs))
+    tvec = rep(NA,nrow(obs))
+
+    for(cc in 1:nrow(obs) ) {
+        res = t.test(pred[cc, obs[cc,]==1], pred[cc,obs[cc, ]==0])
+        pvec[cc] = res$p.value
+        tvec[cc] = res$statistic
+    }
+
+    return(list(pvalues = pvec, tstatisic=tvec))
+
+})
+
+names(ttest_pvalues) <- agg_methods
+
+```
+
+```{r}
+ttest_pvalues$aggByPreCenter$pvalues |> hist()
+```
+
+```{r}
+use_method <- 'aggByPreCenter'
+dt_observed <- reshape2::melt(pscores_list[[use_method]]$observed, measure.vars = c(ind_names))
+dt_predicted <- reshape2::melt(pscores_list[[use_method]]$predicted, measure.vars = c(ind_names))
+
+dt <- merge(dt_observed, dt_predicted, by=c('region', 'variable'))
+colnames(dt) <- c('region', 'individual', 'observed', 'predicted')
+```
+
+
+```{r}
+t_test_result <- t.test(dt$predicted ~ dt$observed)
+pv <- t_test_result$p.value
+est <- t_test_result$estimate
+conf_int <- round(t_test_result$conf.int, 3)
+report_label <- glue('T test ({use_method} model), p < {ifelse(pv > 0, pv, "2.2e-16")}, \n95% conf. int.: {conf_int[1]} to {conf_int[2]}')
+```
+
+
+```{r}
+boxplot(dt$predicted ~ dt$observed, frame.plot=F, col='palegreen1', ylab='predicted TFPred Scores', xlab='observed')
+points(est,col="red",pch=18, cex=2)
+mtext(report_label, adj = 0, line=1, cex=1.5)
+```
+
+```{r}
+
+#logreg_test <- glm(dt$observed ~ dt$predicted, family='binomial') |> summary()
+
+# # run t-test across all regions for each individual and aggregation method
+# pscores_ttest_regions <- lapply(ind_names, function(each_ind){
+#     ind_prediction_score <- pscores_list[[each_ind]]
+#     out <- lapply(agg_methods, function(each_method){
+#         tdt <- ind_prediction_score[, c('region', 'class', each_method)]
+#         ones <- tdt[[each_method]][tdt$class == 1]
+#         zeros <- tdt[[each_method]][tdt$class == 0]
+#         st <- t.test(ones, zeros, na.action=na.omit)
+#         return(st$p.value)
+#     })
+#     names(out) <- agg_methods
+#     return(out)
+# })
+# names(pscores_ttest_regions) <- ind_names
+```
+
+```{r}
+# a <- pscores_list$LuCaP_173[, c('class', 'aggByPreCenter')]
+# ones <- a$aggByPreCenter[a$class == 1]
+# zeros <- a$aggByPreCenter[a$class == 0]
+# t.test(ones, zeros)$p.value
+```
+
+```{r}
+# all_t_test <- do.call('cbind',
+
+#     lapply(pscores_ttest_regions, function(each_elem){
+#         do.call('rbind', each_elem)
+#     })
+
+# ) |> as.data.frame()
+# colnames(all_t_test) <- ind_names
+# all_t_test
+```
+
+```{r}
+# # combine all the predicted values
+# out <- lapply(ind_names, function(each_ind){
+#     temp <- pscores_list[[each_ind]] |> as.data.frame()
+#     temp$individual <- each_ind
+
+#     return(temp)
+    
+# })
+
+# all_pscores <- do.call(dplyr::bind_rows, out)
 ```
 
 ```{r}
@@ -530,180 +866,73 @@ all_pscores <- do.call(dplyr::bind_rows, out)
 # mtext('Predicted scores across all regions across all individuals', side=3, line=2, cex=1.5, adj=0)
 ```
 
-
-
+Here I plot the distribution of scores across all aggregation methods
+overall, each method seems to capture the same direction across all individuals and regions
 ```{r}
-
 purrr::map(.x=agg_methods, function(each_agg){
 
-    bpt <- all_pscores %>%
-        dplyr::mutate(class= as.factor(class)) %>%
-        ggplot(.) + aes(x=class, y=.data[[each_agg]], fill=class) + 
+    dt_observed <- reshape2::melt(pscores_list[[each_agg]]$observed, measure.vars = c(ind_names))
+    dt_predicted <- reshape2::melt(pscores_list[[each_agg]]$predicted, measure.vars = c(ind_names))
+
+    dt <- merge(dt_observed, dt_predicted, by=c('region', 'variable'))
+    colnames(dt) <- c('region', 'individual', 'observed', 'predicted')
+
+    bpt <- dt %>%
+        dplyr::mutate(observed= as.factor(observed)) %>%
+        ggplot(.) + aes(x=observed, y=predicted, fill=observed) + 
         geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
         theme(axis.title=element_text(size=12),
             plot.title=element_text(size=15),
             axis.text=element_text(size=12), legend.position = "none")
 
-    
-    dt <- all_pscores %>%
-        dplyr::group_by(class) %>%
-        dplyr::summarise(group_mean = mean(.data[[each_agg]]))
+    dst <- dt %>%
+        dplyr::group_by(observed) %>%
+        dplyr::summarise(group_mean = mean(predicted))
 
-    
-    dpt <- all_pscores %>%
-        dplyr::mutate(class= as.factor(class)) %>%
-        ggplot(., aes(x=.data[[each_agg]], fill=class)) + 
+    dpt <- dt %>%
+        dplyr::mutate(observed= as.factor(observed)) %>%
+        ggplot(., aes(x=predicted, fill=observed)) + 
         geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
-        geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
+        geom_vline(data = dst, aes(xintercept = group_mean), color='black',linetype="dashed") +
         theme(axis.title=element_text(size=12),
             plot.title=element_text(size=15),
             axis.text=element_text(size=12))
 
-    
     dpt + annotation_custom(
         ggplotGrob(bpt), 
         xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
     )
 
 })
-
-
-
-```
-
-```{r}
-bpt <- all_pscores %>%
-        dplyr::mutate(class= as.factor(class)) %>%
-        ggplot(.) + aes(x=class, y=.data[[each_agg]], fill=class) + 
-        geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
-        theme(axis.title=element_text(size=12),
-            plot.title=element_text(size=15),
-            axis.text=element_text(size=12), legend.position = "none")
-
-    
-    dt <- all_pscores %>%
-        dplyr::group_by(class) %>%
-        dplyr::summarise(group_mean = mean(.data[[each_agg]]))
-
-    
-    dpt <- all_pscores %>%
-        dplyr::mutate(class= as.factor(class)) %>%
-        ggplot(., aes(x=.data[[each_agg]], fill=class)) + 
-        geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
-        geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
-        theme(axis.title=element_text(size=12),
-            plot.title=element_text(size=15),
-            axis.text=element_text(size=12))
-
-    
-    dpt + annotation_custom(
-        ggplotGrob(bpt), 
-        xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
-    )
-```
-
-
-```{r}
-bpt <- all_pscores %>%
-    dplyr::mutate(class= as.factor(class)) %>%
-    ggplot(.) + aes(x=class, y=aggByCenter, fill=class) + 
-    geom_boxplot() + theme_tufte() + geom_rangeframe() + labs(title='', y='predicted scores') +
-    theme(axis.title=element_text(size=12),
-        plot.title=element_text(size=15),
-        axis.text=element_text(size=12), legend.position = "none")
-```
-
-```{r}
-dt <- all_pscores %>%
-    dplyr::group_by(class) %>%
-    dplyr::summarise(group_mean = mean(aggByPostCenter))
-```
-
-```{r}
-
-dpt <- all_pscores %>%
-    dplyr::mutate(class= as.factor(class)) %>%
-    ggplot(., aes(x=aggByCenter, fill=class)) + 
-    geom_density(alpha = 0.8) + theme_tufte() + geom_rangeframe() + labs(title='Predicted scores across all regions and individuals', y='density') + 
-    geom_vline(data = dt, aes(xintercept = group_mean), color='black',linetype="dashed") +
-    theme(axis.title=element_text(size=12),
-        plot.title=element_text(size=15),
-        axis.text=element_text(size=12))
-```
-
-```{r}
-dpt + 
-  annotation_custom(
-    ggplotGrob(bpt), 
-    xmin = 0.5, xmax = 1.5, ymin = 1.5, ymax = 3
-  )
 ```
 
 
 
+Here I take one aggregation method and grouped by individuals to plot the distribution of scores
+#### same plot as above but grouped by individual and for one aggregation model
 ```{r}
-temp_dt <- all_pscores[, c('class', 'aggByCenter', 'individual')] 
-temp_dt$individual <- as.factor(temp_dt$individual)
-temp_dt[1:5, ]
+use_method <- 'aggByPreCenter'
+
+dt_observed <- reshape2::melt(pscores_list[[use_method]]$observed, measure.vars = c(ind_names))
+dt_predicted <- reshape2::melt(pscores_list[[use_method]]$predicted, measure.vars = c(ind_names))
+
+dt <- merge(dt_observed, dt_predicted, by=c('region', 'variable'))
+colnames(dt) <- c('region', 'individual', 'observed', 'predicted')
+
+dt[1:5, ]
 ```
 
 ```{r}
-glm(class ~ 0 + aggByCenter + individual, data=temp_dt, family=binomial) |> summary()
-```
 
-```{r}
-pscores_differences_regions <- lapply(ind_names, function(each_ind){
-    ind_prediction_score <- pscores_list[[each_ind]]
-    out <- lapply(agg_methods, function(each_method){
-        tdt <- ind_prediction_score[, each_method]
+individual_ttest <- dt %>% split(f=.$individual) %>% map(function(x){
+    t.test(predicted ~ observed, data = x)$p.value
+}) |> unlist()
 
-        ones <- mean(tdt[ind_prediction_score$class == 1], na.rm=T)
-        zeros <- mean(tdt[ind_prediction_score$class == 0], na.rm=T)
-        # print(any(is.na(zeros))) ; print(length(zeros))
-        st <- ones - zeros
-        return(st)
-    })
-    names(out) <- agg_methods
-    return(out)
-})
-names(pscores_differences_regions) <- ind_names
-```
-
-
-```{r}
-mean_differences <- do.call('cbind',
-
-    lapply(pscores_differences_regions, function(each_elem){
-        do.call('rbind', each_elem)
-    })
-
-) |> as.data.frame()
-colnames(mean_differences) <- ind_names
-mean_differences
-```
-
-
-
-
-
-#### same plot but grouped by individual
-```{r}
-temp <- all_pscores[, c('class', agg_methods[7], 'individual')]
-temp <- temp %>% 
-    mutate(class = as.character(class) |> as.factor(), individual=as.factor(individual))
-
-summary(temp)
-```
-
-```{r}
-plt_levels <- temp$individual |> levels()
-plt_levels
-```
-
-```{r}
-ttest_pvalues <- formatC(all_t_test[agg_methods[7], ] |> unlist(), format = "e", digits = 2)
+plt_levels <- dt$individual |> levels()
+ttest_pvalues <- formatC(individual_ttest, format = "e", digits = 2)
 ttest_pvalues <- ttest_pvalues[plt_levels]
 ttest_pvalues
+
 ```
 
 ```{r}
@@ -727,20 +956,19 @@ xmaxs
 ```
 
 ```{r}
-ytip <- max(temp[[agg_methods[7]]]) + 0.07
+ytip <- max(dt$predicted) + 0.07
 
 #  geom_boxplot(aes(group=class), width=0.1)
-temp %>%
-    ggplot(.) + aes(x=.data[['individual']], y=.data[[agg_methods[7]]]) + 
-    geom_violin(aes(fill=.data[['class']])) + 
-    geom_boxplot(aes(fill=.data[['class']]), position=position_dodge(0.9), width=0.2) +
+dt %>% mutate(observed=as.factor(observed)) %>%
+    ggplot(.) + aes(x=.data[['individual']], y=.data[['predicted']]) + 
+    geom_violin(aes(fill=.data[['observed']])) + 
+    geom_boxplot(aes(fill=.data[['observed']]), position=position_dodge(0.9), width=0.2) +
     geom_signif(annotation = ttest_pvalues, tip_length = 0.02, y_position = ytip, xmin = xmins, xmax = xmaxs) + theme_minimal() + ggthemes::geom_rangeframe() +
-    labs(title=agg_methods[7], y='TFPred score')
+    labs(title=use_method, y='TFPred score')
 
 ```
 
-### Exploring TFPredScores or predicted scores
-# across individuals
+#### Looking across individuals, i.e. in the orthogonal direction
 
 ```{r}
 pscores_list$LuCaP_167[1:5, ]
@@ -761,22 +989,84 @@ freedman_ground_truth[1:5, 1:5]; freedman_ground_truth |> dim()
 ```
 
 ```{r}
-fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list$LuCaP_167$region, c('region', 'class', 'binding_counts', ind_names)]
+# need to use one individual to get the regions
+fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list[[ind_names[1]]]$region, c('region', 'class', 'binding_counts', ind_names)]
 fgt[1:5, ] ; dim(fgt)
 ```
 
-Filter out the regions that are all 0 or 1 (since there will be not variability when doing the tests)
 
+Create a list of list(aggmethod(observed, predicted))
+```{r}
+pscores_list <- lapply(agg_methods, function(each_method){
+
+    predicted <- lapply(ind_names, function(each_ind){
+        individual_linear_eval[[each_ind]][[each_method]][, c('region', 'prediction_link')]
+    })
+
+    predicted <- predicted %>% purrr::reduce(left_join, by='region')
+    colnames(predicted)[2:ncol(predicted)] <- ind_names
+
+    observed <- lapply(ind_names, function(each_ind){
+        individual_linear_eval[[each_ind]][[each_method]][, c('region', 'class')]
+    })
+
+    observed <- observed %>% purrr::reduce(left_join, by='region')
+    colnames(observed)[2:ncol(observed)] <- ind_names
+
+    return(list(observed = as.data.frame(observed), predicted = as.data.frame(predicted)))
+})
+
+names(pscores_list) <- agg_methods
+```
+
+```{r}
+tempo <- pscores_list$aggByPreCenter
+
+obs <- tempo$observed %>% select(-region) %>% as.matrix()
+rownames(obs) <- tempo$observed$region
+
+pred <- tempo$predicted %>% select(-region) %>% as.matrix()
+rownames(pred) <- tempo$predicted$region
+
+identical(rownames(obs), rownames(pred))
+
+nbou <- apply(obs,1,sum)
+ind <- nbou>3 & nbou < 14
+obs <- obs[ind,]
+pred <- pred[ind,]
+identical(rownames(obs), rownames(pred))
+
+pvec = rep(NA,nrow(obs))
+tvec = rep(NA,nrow(obs))
+
+for(cc in 1:nrow(obs) ) {
+    res = t.test(pred[cc, obs[cc,]==1], pred[cc,obs[cc, ]==0])
+    pvec[cc] = res$p.value
+    tvec[cc] = res$statistic
+}
+
+hist(pvec)
+
+```
+
+
+Filter out the regions that are all 0 or 1 (since there will be no variability when doing the tests), and regions that are not bound or bound in less than 4 individuals
 
 ```{r}
 fgt$filter <- fgt[, ind_names] |> rowSums() |> unname()
 varying_classes <- fgt[!fgt$filter %in% c(0,1,2,3,17,16,15,14), ]
+
+# nbounds <- fgt[, ind_names] |> rowSums() |> unname()
+# bool_bounds <- nbounds > 3 | nbounds < 14
+# varying_classes <- fgt[!fgt$filter %in% c(0,1,2,3,17,16,15,14), ]
+
 #varying_classes <- varying_classes[, colnames(varying_classes) != 'filter']
 varying_classes |> dim()
 ```
 
 
 ```{r}
+# Create one pscores dataframe for all individuals and regions
 pscores_dt <- lapply(ind_names, function(each_ind){
     one_ind <- pscores_list[[each_ind]]
     one_ind$individual <- each_ind
@@ -789,6 +1079,7 @@ dim(pscores_dt) ; pscores_dt[1:5, ]
 
 
 ```{r}
+# qqplot function
 qqplot_extended <- function(pvector, main=NULL, ...) {
     obs = -log10(sort(pvector,decreasing=F))
     exp = -log10(1:length(obs)/length(obs) )
@@ -801,48 +1092,35 @@ qqplot_extended <- function(pvector, main=NULL, ...) {
 }
 ```
 
+Calculate p-values with a t-test using one aggregation model
 ```{r}
-pscores_pvalues_logreg <- purrr::map(.x=varying_classes$region, function(each_region){
+# pscores_pvalues_logreg <- purrr::map(.x=varying_classes$region, function(each_region){
     
-    pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
-    tgt <- glm(class ~ aggByPreCenter, data=pscores_ind_region, family=binomial, control=glm.control(maxit=150)) |> summary()
-    return(tgt$coefficients[2,4] |> unlist() |> unname())
-
-}, .progress=T)
-```
-
-```{r}
-pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_logreg)) |> as.data.frame()
-pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
-pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
-pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
-pvalues_regions[1:5, ]
-```
-
-```{r}
-qqplot_extended(pvalues_regions$V2, frame.plot=F)
-mtext('qqplot of p-values (logistic regression)', at=0.5, line=1, cex=1.5)
-```
-
-```{r}
-# pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
 #     pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
-#     #return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
-#     return(wilcox.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+#     tgt <- glm(class ~ aggByPreCenter, data=pscores_ind_region, family=binomial, control=glm.control(maxit=150)) |> summary()
+#     return(tgt$coefficients[2,4] |> unlist() |> unname())
 
 # }, .progress=T)
+
+# pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_logreg)) |> as.data.frame()
+# pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
+# pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
+# pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
+# pvalues_regions[1:5, ]
+
+# qqplot_extended(pvalues_regions$V2, frame.plot=F)
+# mtext('qqplot of p-values (logistic regression)', at=0.5, line=1, cex=1.5)
 ```
+
 
 ```{r}
 pscores_pvalues_ttest <- purrr::map(.x=varying_classes$region, function(each_region){
     pscores_ind_region <- pscores_dt[(pscores_dt$region == each_region) & (pscores_dt$individual %in% ind_names), ]
-    return(t.test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
+    return(t.test(pscores_ind_region[[use_method]] ~ pscores_ind_region$class)$p.value)
     #return(coin::wilcox_test(pscores_ind_region$aggByCenter, pscores_ind_region$class)$p.value)
 
 }, .progress=T)
-```
 
-```{r}
 pvalues_regions <- cbind(varying_classes$region, unlist(pscores_pvalues_ttest)) |> as.data.frame()
 pvalues_regions[, 2] <- as.numeric(pvalues_regions[, 2])
 pvalues_regions <- pvalues_regions[!is.na(pvalues_regions[, 2]), ]
@@ -850,41 +1128,68 @@ pvalues_regions <- pvalues_regions[order(pvalues_regions[, 2], decreasing=F), ]
 pvalues_regions[1:5, ]
 ```
 
+
 ```{r}
 qqplot_extended(pvalues_regions$V2, frame.plot=F)
-mtext('qqplot of p-values (t-test)', at=0.5, line=1, cex=1.5)
+mtext(glue('qqplot of p-values (t-test, {use_method} model)'), adj=0.0, line=1, cex=1.0)
 ```
 
 ```{r}
-hist(pvalues_regions$V2, freq=T, xlab='p-value', main=NULL, breaks = seq(min(pvalues_regions$V2), max(pvalues_regions$V2), length.out = 70))
-mtext('Histogram of p-values', cex=1.5, at=0.2)
-```
+# hist(pvalues_regions$V2, freq=T, xlab='p-value', main=NULL, breaks = seq(min(pvalues_regions$V2), max(pvalues_regions$V2), length.out = 70))
+# mtext(glue('Histogram of p-values (t-test, {use_method} model)'), cex=1.0, adj=0)
+hist(pvalues_regions$V2)
 
-
-```{r}
-adj_pvalues <- p.adjust(pvalues_regions$V2, method = 'bonferroni' )
-```
-
-```{r}
-qqplot_extended(adj_pvalues, frame=F)
 ```
 
 
 Mean differences
 
+
+#### Mean differences and distribution of mean differences
+
+```{r}
+pscores_differences_regions <- lapply(ind_names, function(each_ind){
+    ind_prediction_score <- pscores_list[[each_ind]]
+    out <- lapply(agg_methods, function(each_method){
+        tdt <- ind_prediction_score[, each_method]
+
+        ones <- mean(tdt[ind_prediction_score$class == 1], na.rm=T)
+        zeros <- mean(tdt[ind_prediction_score$class == 0], na.rm=T)
+        # print(any(is.na(zeros))) ; print(length(zeros))
+        st <- ones - zeros
+        return(st)
+    })
+    names(out) <- agg_methods
+    return(out)
+})
+names(pscores_differences_regions) <- ind_names
+```
+
+```{r}
+mean_differences <- do.call('cbind',
+
+    lapply(pscores_differences_regions, function(each_elem){
+        do.call('rbind', each_elem)
+    })
+
+) |> as.data.frame()
+colnames(mean_differences) <- ind_names
+mean_differences
+```
+
 ```{r}
 m0 <- pscores_dt %>% 
-    dplyr::select(region, class, aggByPreCenter, individual) %>%
+    dplyr::select(region, class, any_of(use_method), individual) %>%
     dplyr::filter(class == 0) %>%
     dplyr::group_by(region) %>% 
-    dplyr::summarise(mean_0 = mean(aggByPreCenter)) %>%
+    dplyr::summarise(mean_0 = mean(.data[[use_method]])) %>%
     dplyr::select(region, mean_0)
 
 m1 <- pscores_dt %>% 
-    dplyr::select(region, class, aggByPreCenter, individual) %>%
+    dplyr::select(region, class, any_of(use_method), individual) %>%
     dplyr::filter(class == 1) %>%
     dplyr::group_by(region) %>% 
-    dplyr::summarise(mean_1 = mean(aggByPreCenter)) %>%
+    dplyr::summarise(mean_1 = mean(.data[[use_method]])) %>%
     dplyr::select(region, mean_1)
 ```
 
@@ -896,7 +1201,7 @@ merged[1:5, ]
 ```{r}
 mean_diffs <- with(merged, (mean_0 - mean_1))
 hist(mean_diffs, freq=T, xlab='mean differences', main=NULL, breaks = seq(min(mean_diffs), max(mean_diffs), length.out = 50))
-mtext('Histogram of mean differences', cex=1.5, adj=0)
+mtext(glue('Histogram of mean differences of TFPred Scores \nacross individuals ({use_method} model)'), cex=1.0, adj=0)
 ```
 
 ```{r}
@@ -916,11 +1221,11 @@ pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscore
 
 pscores_top_regions %>%
     dplyr::mutate(class = as.factor(class), region=as.factor(region)) %>%
-    ggplot(.) + aes(x=class, y=aggByCenter, group=class) + 
+    ggplot(.) + aes(x=class, y=.data[[use_method]], group=class) + 
     geom_boxplot() + 
     geom_jitter(col='red') + 
     facet_wrap(~region, scales='free') + theme_bw() +
-    labs(title='Boxplot of top 9 regions (ranked by p-values)', y='prediction scores') +
+    labs(title='Boxplot of top 9 regions (ranked by p-values)', y='prediction scores', subtitle = glue('{use_method} model')) +
     theme(plot.title=element_text(size=20), 
         axis.title=element_text(size=18))
 ```
@@ -928,14 +1233,13 @@ pscores_top_regions %>%
 ```{r}
 pscores_top_regions %>%
     dplyr::mutate(class = as.factor(class), region=as.factor(region)) %>%
-    ggplot(.) + aes(x=aggByCenter, fill=class) + 
+    ggplot(.) + aes(x=.data[[use_method]], fill=class) + 
     geom_density() + 
     facet_wrap(~region, scales='free') + theme_bw() +
-    labs(title='Density plot of top 9 regions (ranked by p-values)', y='density') +
+    labs(title='Density plot of top 9 regions (ranked by p-values)', y='density', subtitle = glue('{use_method} model')) +
     theme(plot.title=element_text(size=20), 
         axis.title=element_text(size=18))
 ```
-
 
 
 Correlation between number of bindings and pvalues?
@@ -964,13 +1268,14 @@ prb_counts[1:5, ]
 ```{r}
 pt <- prb_counts %>%
     dplyr::group_by(nbinds) %>%
-    dplyr::summarise(counts = sum(pvalue <= 0.001)) %>% t()
+    dplyr::summarise(counts = sum(pvalue <= 0.01)) %>% t()
 
 colnames(pt) <- pt[1, ]
 pt <- pt[-1, ]
 
 bp <- barplot(pt, width=0.5, names.arg=colnames(pt), xlab='Binding count/strength', ylab='number of regions bound', ylim=c(0, max(pt) + 10))
-mtext('Number of regions with pvalues <= 0.001 \nper binding count group', cex=1.5, adj=0.25, line=0)
+mtext('Number of regions with pvalues <= 0.001 \nper binding count group', cex=1.5, adj=0, line=0)
+mtext(glue('{use_method} model'), side=3, line=-1.5, adj=0, cex=1)
 text(bp, y = pt + 5, labels=pt)
 
 # pt %>%
@@ -979,7 +1284,7 @@ text(bp, y = pt + 5, labels=pt)
 #     scale_x_discrete("binding counts across individual", breaks = 1:9,labels=as.character(pt$nbinds))
 ```
 
-
+<!-- 
 
 ```{r}
 pscores_try_one <- pscores_dt[(pscores_dt$region == test_chr) & (pscores_dt$individual %in% ind_names), ]
@@ -1450,4 +1755,4 @@ names(pscores_list) <- individuals
 ```
 
 
-
+ -->

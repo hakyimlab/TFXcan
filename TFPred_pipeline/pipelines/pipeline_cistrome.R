@@ -1,30 +1,4 @@
----
-title: "Complete TFPred Pipeline - Using Cistrome data"
-author: "Temi"
-date: 'Sat Jan 7 2023'
-format: 
-  pdf: 
-    toc: true
-    number-sections: true
-    code-line-numbers: true
----
-
-# Introduction and usage
-
-This script should be run interactively
-This script contains the entire TFPred pipeline or the idea of it. 
-- Collects the ChIP peaks
-- Overlaps the peaks with predicted motifs to define positive and negative sets
-- Uses ENFORMER to predict on these regions
-- Aggregates these predictions
-- Trains on these regions
-- Provides some metrics
-
-The TFPred pipeline works only on a reference set - this script does not predict on individual data (as yet)
-
-Load libraries
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 library(glue)
 library(rjson)
 library(data.table)
@@ -33,14 +7,9 @@ library(parallel)
 library(tidyverse)
 library(jsonlite)
 library(modules)
-```
 
-## Step 1: Set up
 
-- collect the sorted bed files for the TF
-- check that all files are available
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
 data_dir <- glue('{imlab_dir}/data/cistrome/raw')
 project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
@@ -52,25 +21,24 @@ run_utils <- glue('{project_dir}/run_utils')
 if(!dir.exists(run_utils)){
     dir.create(run_utils, recursive=T)
 }
-```
-
-## import the modules
-```{r}
-# pipeline_module <- modules::use(glue('{src_dir}/TFPred_modules.R'))
-# pipeline_module$create_script_for_scanning_genomewide_motifs(project_dir, dataset, TF, run_date)
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
+pipeline_module <- modules::use(glue('{src_dir}/TFPred_modules.R'))
+
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
+pipeline_module$create_script_for_scanning_genomewide_motifs(project_dir, dataset, TF, run_date) 
+
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 dataset <- 'cistrome' # change this variable name 
-TF <- 'AR' #FOXA1' #HOXB13' #'PPARG' #PR
-todays_date <- data_date <- run_date <- Sys.Date() #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
+TF <- 'FOXA1' #FOXA1' #HOXB13' #'PPARG' #PR
+todays_date <- data_date <- run_date <- '2023-01-11'#Sys.Date() #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
-```
 
 
-Save pipeline parameters
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 peaks_dir <- glue('{project_dir}/files/peaks_files/{dataset}_{TF}')
 if(!dir.exists(peaks_dir)){
     dir.create(peaks_dir, recursive=T)
@@ -90,25 +58,14 @@ common_dir <- glue('{project_dir}/files/homer_files/common_files')
 if(!dir.exists(common_dir)){
     dir.create(common_dir, recursive=T)
 }
-```
 
 
-Here, I use the Cistrome metadata file to determine if the transcription factor exists, and to choose which cell line to use.
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 TF_table <- data.table::fread(glue('{data_dir}/human_factor_full_QC.txt'))
 TF_table[1:5, ]
-```
-
-```{r}
-TF_table %>% dplyr::filter(Factor == TF) %>% dplyr::group_by(Cell_line) %>% summarise(n_files=n()) %>% arrange(desc(n_files))
-
-# TF_table %>% dplyr::filter(Factor == TF) %>% dplyr::group_by(Tissue_type) %>% summarise(n_files=n()) %>% arrange(desc(n_files))
-# TF_table %>% dplyr::filter(Factor == TF) %>% dplyr::group_by(Cell_type) %>% summarise(n_files=n()) %>% arrange(desc(n_files))
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 
 if(TF %in% TF_table$Factor){
     TF_data <- base::subset(x=TF_table, subset=Factor == TF)
@@ -137,10 +94,9 @@ if(TF %in% TF_table$Factor){
 } else {
     stop(glue('[ERROR] {TF} not found.'))
 }
-```
 
-Move the peak files to a folder
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 TF_files <- list.files(glue('{data_dir}/human_factor'), pattern=paste0('^', TF_info$DCid, collapse='_*|'), full.names=T)
 
 # using the first one
@@ -153,11 +109,9 @@ file.copy(from=TF_files, to=peaks_dir, overwrite=T, copy.mode=T)
 # } else {
 #     print('Peak files exist.')
 # }
-```
 
-#### Check that the motif file exists
-Move/copy all ChIP-peak files for the TF to a folder
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tf_lower <- tolower(TF)
 potential_motif_files <- list.files(glue('{homer_dir}/data/knownTFs/motifs'), glue('^{tf_lower}'), full.names=T)
 
@@ -187,28 +141,26 @@ if(length(mfile) == 2){
 # using the first one
 file.copy(from=potential_motif_files[user_choice], to=homer_files_dir, overwrite=T, copy.mode=T)
 file.rename(from=glue('{homer_files_dir}/{basename(potential_motif_files[user_choice])}'), to=glue('{homer_files_dir}/{TF}_{cell_line}.motif'))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 one_peak_file <- data.table::fread(TF_files[1])
 one_peak_file[1:5, ]
-```
 
-#### Check that the predicted motif file exist
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # check that the script exists
 scan_script <- glue("{project_dir}/scripts/utilities/scan_for_motifs.sh")
 scan_script ; file.exists(scan_script)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # motif file
 motif_file <- glue('{homer_files_dir}/{TF}_{cell_line}.motif')
 motif_file ; file.exists(motif_file)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 genome <- 'hg38'
 output_basename <- glue('{common_dir}/{TF}_motifs_genomewide')
 
@@ -221,27 +173,23 @@ if(!file.exists(glue('{output_basename}.txt'))){
     print(glue('{basename(output_basename)}.txt exists.'))
 }
 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system('qstat -u temi')
-```
 
 
-## Step 2: Define positive and negative regions
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
 valid_chromosomes
-```
 
-#### - Use Homer to predict genome-wide motifs and select a threshold
-Here I select those with a score >= 6
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 genome_wide_predicted_motifs <- data.table::fread(glue('{common_dir}/{TF}_motifs_genomewide.txt'))
 dim(genome_wide_predicted_motifs) ; genome_wide_predicted_motifs[1:5, ]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 rr <- range(genome_wide_predicted_motifs$V6)
 print(glue('[PROMPT] Choose a threshold between: Min: {rr[1]} and Max: {rr[2]}'))
 threshold <- readline(prompt='Choose a threshold: ') |> as.numeric()
@@ -250,46 +198,41 @@ print(glue('You chose: {threshold}'))
 # use the threshold
 predicted_motifs <- genome_wide_predicted_motifs[genome_wide_predicted_motifs$V6 >= threshold, ]
 dim(predicted_motifs) ; predicted_motifs[1:5, ]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # first reformat the predicted motifs
 tf_motifs <- predicted_motifs %>% dplyr::select(chr=V2, start=V3, end=V4, strand=V5, score=V6)
 tf_motifs_granges <- with(tf_motifs, GRanges(chr, IRanges(start,end), strand, score))
 tf_motifs_granges <- tf_motifs_granges[seqnames(tf_motifs_granges) %in% valid_chromosomes]
 tf_motifs_granges
-```
 
-#### - The sorted peak files per individual/file
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 peak_files_paths <- list.files(peaks_dir, full.names=T)
 peak_files_paths <- peak_files_paths[file.info(peak_files_paths)$size != 0] # A quick way to make sure that the files are complete
 peak_files_paths
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # read in all the files
 peak_files_list <- purrr::map(.x=peak_files_paths, .f=data.table::fread, .progress=T)
 peak_files_list[[1]] |> head()
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #ty <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/files/peaks_files/cistrome_PR/88449_sort_peaks.narrowPeak.bed')
 #file.info('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/files/peaks_files/cistrome_PR/35581_sort_peaks.narrowPeak.bed')$size
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # pmi_dt_list <- purrr::map(.x=peak_files_paths, function(each_file){
 #     dt <- data.table::fread(each_file, nrows=3)
 #     colnames(dt)
 # })
-```
 
 
-Some of these have duplicates because a peak can be close to two or more genes and that peak can appear twice or thereabouts in the peak file
-So, I can redo this to retain only unique peaks/rows
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # distinct(v1, v2, v3, .keep_all = T)
 pmi_dt_list <- purrr::map(.x=peak_files_paths, function(each_file){
     dt <- data.table::fread(each_file) %>%
@@ -316,26 +259,25 @@ pmi_dt_list <- purrr::map(.x=peak_files_paths, function(each_file){
 }, .progress=T)
 
 pmi_dt_list[[1]] |> head()
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # modify the class names
 pmi_dt_list <- lapply(seq_along(pmi_dt_list), function(i){
     colnames(pmi_dt_list[[i]])[4] <- paste('class_', i, sep='')
     return(pmi_dt_list[[i]])
 })
-pmi_dt_list[[3]] |> head()
-```
+pmi_dt_list[[1]] |> head()
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 class_distribution <- sapply(pmi_dt_list, function(each_dt){
-    table(each_dt[, 4])
+    table(each_dt$class)
 })
 class_distribution
-```
 
-#### - merge all the files and add the binding counts and class
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 dt_merged <- pmi_dt_list %>% purrr::reduce(full_join, by = c('chr', 'start', 'end')) 
 dt_merged$binding_counts <- rowSums(dt_merged[, -c(1:3)], na.rm=T)
 dt_merged$binding_class <- ifelse(dt_merged$binding_counts > 0, 1, 0)
@@ -347,14 +289,13 @@ set.seed(2023)
 dt_merged <- dt_merged[sample(nrow(dt_merged)), ]
 dt_merged$chr <- as.character(dt_merged$chr)
 dt_merged[1:5, ]
-```
 
-#### - Save the files
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 save_object <- list(binding_matrix=dt_merged, file_names=peak_files_paths)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #todays_date <- '2023-01-06' #Sys.Date()
 save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
 if(!dir.exists(save_dir)){
@@ -362,45 +303,42 @@ if(!dir.exists(save_dir)){
 }
 
 saveRDS(save_object, file=glue('{save_dir}/regions_information.RData'))
-```
 
 
-#### - Read in the files
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #todays_date <- '2023-01-06' #Sys.Date()
 save_dir <- glue('{regions_dir}/regions_data_{todays_date}')
 binding_rdata <- readRDS(glue('{save_dir}/regions_information.RData'))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 cistrome_dt <- binding_rdata$binding_matrix
-dim(cistrome_dt)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 rg <- range(cistrome_dt$binding_counts)
 print(glue('[PROMPT] Choose a positive set threshold between: Min: {rg[1]} and Max: {rg[2]}'))
 positive_set_threshold <- readline(prompt='Choose a positive set threshold: ') |> as.numeric()
 print(glue('You chose: {positive_set_threshold}'))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # choose peaks with binding_counts > 11
 cistrome_dt_pos <- cistrome_dt[cistrome_dt$binding_counts > positive_set_threshold, ][, 1:5]
 cistrome_dt_pos |> head() ; dim(cistrome_dt_pos)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 num_negs <- 1
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 set.seed(2023)
 cistrome_dt_neg <- dplyr::slice_sample(cistrome_dt[cistrome_dt$binding_counts == 0, ], n=nrow(cistrome_dt_pos) * num_negs)[, 1:5]
 cistrome_dt_neg |> head() ; dim(cistrome_dt_neg)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 cistrome_dr <- rbind(cistrome_dt_pos, cistrome_dt_neg) %>%
     tidyr::unite('region', c(chr, start, end), remove=T)
 
@@ -408,18 +346,17 @@ set.seed(2023)
 cistrome_dr <- cistrome_dr[sample(nrow(cistrome_dr)), ]
 
 cistrome_dr[1:5, ]
-```
-
-```{r}
-#find_duplicates_in_dataframe(cistrome_dr, 'region')
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
+find_duplicates_in_dataframe(cistrome_dr, 'region')
+
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 cistrome_dr$region |> unique() |> length() == nrow(cistrome_dr)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 dataset <- 'cistrome'
 todays_date <- todays_date #Sys.Date()
 
@@ -435,56 +372,30 @@ if(!dir.exists(glue('{save_dir}/predictors'))){
 if(!dir.exists(glue('{save_dir}/ground_truth'))){
     dir.create(glue('{save_dir}/ground_truth'))
 }
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #k_set <- with(cistrome_dr, cbind(paste(chr, start, end, sep='_'), class, binding_counts))
 
 write.table(cistrome_dr[, 1], glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(cistrome_dr)}.txt'), col.names=F, quote=F, row.names=F)
 write.table(cistrome_dr, glue('{save_dir}/ground_truth/{dataset}_{TF}_{nrow(cistrome_dr)}.txt'), col.names=F, quote=F, row.names=F)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(cistrome_dr)}.txt')
 predictor_file
-```
 
 
-## Step 3: Predict on these regions with ENFORMER
-### Create the enformer_parameters.json file
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 metadata_dir <- glue('{project_dir}/metadata')
 if(!dir.exists(metadata_dir)){
     dir.create(metadata_dir, recursive=T)
 } else {
     print('Metadata folder exists')
 }
-```
 
-```{r}
-valid_chromosomes
-```
 
-```{r}
-pat <- paste0('*.', valid_chromosomes, '.*vcf.gz$', collapse='|') # paste0('^', TF_info$DCid, collapse='_*|')
-vcfs_dir <- glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only')
-grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
-```
-
-```{r}
-vcf_files <- lapply(valid_chromosomes, function(chr){
-    pat <- paste0('*.\\b', chr, '\\b.*vcf.gz$', collapse='|')
-    #print(pat)
-    grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
-})
-names(vcf_files) <- valid_chromosomes
-```
-
-```{r}
-list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
-```
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 enformer_parameters_json <- list()
 
 # you may change these as appropriate
@@ -494,8 +405,6 @@ enformer_parameters_json[['TF']] <- TF
 enformer_parameters_json[['date']] <- todays_date
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
-
-
 
 # no need to change these
 enformer_parameters_json[['sub_dir']] <- TRUE
@@ -520,73 +429,48 @@ write(
 
 # 
 param_file <- glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
-```
 
 
-#### Copy this command below and run it in another shell (you many need to modify the name of the conda environment and all that )
-
-I can write this into a shell script and call it with `system()`. The problem is that I am currently within a shell (using R) and it won't initialize my conda environment in that way. Pretty sure there is a way around it - but it may be tricky
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
 prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
 prediction_cmd
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system('qstat -u temi')
-```
 
 
-## Step 4: Collect/aggregate the predictions
-
-This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
-The user supplies what aggregation option.
-
-There are currently 7 valid options for aggregations:
-- aggByCenter:
-- aggByMean:
-- aggByUpstream:
-- aggByDownstream:
-- aggByUpstreamDownstream:
-- aggByPreCenter
-- aggByPostCenter
-
-Check that the appropriate scripts exist
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # check that the script exists
 aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions_pbs.sh")
 aggregation_pbs_script ; file.exists(aggregation_pbs_script)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 aggregation_python_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions.py")
 aggregation_python_script ; file.exists(aggregation_python_script)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
 aggregation_config ; file.exists(aggregation_config)
-```
 
-Aggregate the predictions
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
-agg_meancenter <- 'aggByMeanCenter'
 agg_mean <- 'aggByMean'
 agg_upstream <- 'aggByUpstream'
 agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
-agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
 agg_methods
-```
 
 
-When submitting multiple jobs, it is necessary to space them a little so they don't interfere (this has happened many times)
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # for(am in agg_methods){
 
 #     pbs_script <- glue('qsub -v collect_py={aggregation_python_script},aggregation_config={aggregation_config},agg_type={am} {aggregation_pbs_script}')
@@ -599,44 +483,37 @@ When submitting multiple jobs, it is necessary to space them a little so they do
 
 pbs_script <- glue('qsub -v aggregate_py={aggregation_python_script},aggregation_config={aggregation_config} {aggregation_pbs_script}')
 print(pbs_script)
-```
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system(pbs_script)
-```
-```{r}
+
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system('qstat -u temi')
-```
 
-### Note: Please wait a while for this job to be finished.
 
-### Optional
-Remove/clean up all the aggregated batches
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # for(am in agg_methods){
 #     files_to_delete <- Sys.glob(glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}/{dataset}_{am}_{TF}_batch_*.csv.gz'))
 
 #     file.remove(files_to_delete)
 # }
-```
 
 
-## Step 5: Creating training and/or test sets
-#### - read in the aggregated predictions
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # read in some directives
 jfile <- jsonlite::fromJSON(glue('{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json'))
 data_date <- jfile$run_date
 TF <- jfile$transcription_factor
 #dataset <- jfile$each_id
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 predictor_file <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/{dataset}_{TF}_*.txt'))
 predictor_file
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 ground_truth_path <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{data_date}/ground_truth/{basename(predictor_file)}')
 ground_truth <- data.table::fread(ground_truth_path)
 
@@ -647,10 +524,9 @@ ground_truth$norm_bc <- nbc
 
 #ground_truth <- data.table::fread(predictor_file)
 head(ground_truth)
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
   n_occur <- data.frame(table(dt[[col]]))
 
@@ -662,9 +538,9 @@ find_duplicates_in_dataframe <- function(dt, col, return_dups=TRUE){
 }
 
 #find_duplicates_in_dataframe(gt, col='V1') # there should be no duplicates
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_transform_list <- purrr::map(.x=agg_methods, function(each_method){
 
     cistrome_agg_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{data_date}/{dataset}_{each_method}_{TF}.csv.gz')
@@ -682,23 +558,22 @@ names(agg_transform_list) <- agg_methods
 
 # look at one of them
 agg_transform_list[[1]][1:5, 1:7]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 sapply(agg_transform_list, dim) # should all be the same
-```
 
-Split into 80-20 (for now, no splitting) and save
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
 if(!dir.exists(model_data_dir)){
     dir.create(model_data_dir, recursive=T)
 } else {
     print('Model data directory exists.')
 }
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 set.seed(2023)
 purrr::map(.x=names(agg_transform_list), function(each_method){
     each_dt <- agg_transform_list[[each_method]]
@@ -721,30 +596,23 @@ purrr::map(.x=names(agg_transform_list), function(each_method){
 
     print(glue("[INFO] {each_method}'s train (and test, if applicable) data have been saved."))
 })
-```
 
-Read it back in to ensure that the data was correctly saved and all that
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 temp_dt <- data.table::fread(glue('{model_data_dir}/train_aggByPreCenter.csv.gz'))
 temp_dt[1:5, 1:5] ; temp_dt |> dim() ; temp_dt$class |> table() 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 temp_dt <- data.table::fread(glue('{model_data_dir}/test_aggByPreCenter.csv.gz'))
 temp_dt[1:5, 1:5] ; temp_dt |> dim() ; temp_dt$class |> table()
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 rm(list = c('temp_dt', 'agg_transform_list'))
-```
-
-Good!
 
 
-## Step 6: Training/Modelling: elastic net
-I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
 
 model_dir <- glue('{project_dir}/models')
@@ -753,22 +621,65 @@ if(!dir.exists(model_dir)){
 } else {
     print('Model directory exists.')
 }
-```
 
-Use the `agg_methods`
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #; file.exists(pbs_script)
 enet_rscript <- glue('{project_dir}/scripts/utilities/train_enet_model.R')
 if(file.exists(enet_rscript)){print('enet train R script exists.')}
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #; file.exists(pbs_script)
 enet_pbs_script <- glue('{project_dir}/scripts/utilities/train_enet_model_pbs.sh')
 if(file.exists(enet_pbs_script)){print('enet train pbs script exists.')}
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
+text_to_write <- glue('#!/bin/bash
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:59:00,filesystems=home:grand
+#PBS -A covid-ct
+#PBS -q preemptable 
+#PBS -N scan_motifs_genomewide_{dataset}_{TF}_{run_date}
+#PBS -k doe
+#PBS -o /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/logs/scan_motifs_genomewide_{dataset}_{TF}_{run_date}.out
+#PBS -e /grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/logs/scan_motifs_genomewide_{dataset}_{TF}_{run_date}.err\n
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+echo Jobid: $PBS_JOBID
+echo Running on host `hostname`
+echo Running on nodes `cat $PBS_NODEFILE`
+
+NNODES=`wc -l < $PBS_NODEFILE`
+NRANKS=1
+NDEPTH=32
+NTHREADS=2
+NTOTRANKS=$(( NNODES * NRANKS_PER_NODE ))
+
+echo "NUM_OF_NODES=${{NNODES}}  TOTAL_NUM_RANKS=${{NTOTRANKS}}  RANKS_PER_NODE=${{NRANKS}}  THREADS_PER_RANK=${{NTHREADS}}"
+
+source ~/.bashrc
+conda activate r-env
+
+mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
+perl=`which perl`
+homer_cmd=`ls ${{homer_dir}}/bin/scanMotifGenomeWide.pl`
+output_file="${{output_basename}}.txt"
+
+if [[ -f ${{homer_cmd}} ]]; then 
+    printf "${{homer_cmd}} exists."
+fi
+
+${{mpiexec}} -n ${{NRANKS}} --ppn ${{NRANKS}} --depth ${{NDEPTH}} --cpu-bind depth --env OMP_NUM_THREADS="${{NTHREADS}}" ${{perl}} ${{homer_cmd}} ${{motif_file}} ${{genome}} > ${{output_file}}
+
+status=$?
+echo "Exit status of job is: $status"')
+
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 lapply(agg_methods, function(each_method){
 
     training_data <- glue("{model_data_dir}/train_{each_method}.csv.gz")
@@ -785,16 +696,13 @@ lapply(agg_methods, function(each_method){
     system(pbs_script)
 
 })
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system("qstat -u temi")
-```
 
-## Step 7: Evaluate elastic net model(s)
-I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_dir <- glue('{project_dir}/models')
 data_dir <- glue('{project_dir}/model_data/{dataset}_{TF}/data_{todays_date}')
 model_types <- c('linear', 'logistic')
@@ -805,21 +713,21 @@ if(!dir.exists(output_dir)){
 } else {
     print('Model evaluation directory exists.')
 }
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #; file.exists(pbs_script)
 evaluate_rscript <- glue('{project_dir}/scripts/utilities/enet_evaluate.R')
 if(file.exists(evaluate_rscript)){print('enet evaluate R script exists.')}
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #; file.exists(pbs_script)
 evaluate_pbs_script <- glue('{project_dir}/scripts/utilities/enet_evaluate_pbs.sh')
 if(file.exists(evaluate_pbs_script)){print('enet evaluate pbs script exists.')}
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # go through each model_types and predict_ons
 
 for(model_type in model_types){
@@ -830,16 +738,13 @@ for(model_type in model_types){
     }
 }
 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 system("qstat -u temi")
-```
 
 
-## Step 7: Read in the models and evaluation and explore and all that 
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 library(RColorBrewer)
 library(ggthemes)
 library(forcats)
@@ -847,32 +752,32 @@ library(ggrepel)
 library(glmnet)
 library(ggpubr)
 library(ROCR)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #TF <- 'GATA3'
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
-agg_meancenter <- 'aggByMeanCenter'
 agg_mean <- 'aggByMean'
 agg_upstream <- 'aggByUpstream'
 agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
-agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
-```
+agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 enformer_annotations <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/metadata/enformer_tracks_annotated-resaved.txt')
 enformer_annotations$feature_names <- paste('f_', 1:5313, sep='')
 enformer_annotations[1:5, ]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 collate_coefficients <- function(fit){
     min_error_index <- fit$index['min', ]
     one_sd_index <- fit$index['1se', ]
@@ -897,20 +802,18 @@ collate_coefficients <- function(fit){
 
     return(fit_beta)
 }
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_model <- function(model, X_test_set, y_test_set){
 
     features <- model$glmnet.fit$beta |> rownames()
     #X_test_set <- X_test_set[, features]
     assess.glmnet(model, newx = X_test_set, newy = y_test_set) |> unlist()
 }
-```
 
-#### Read in both the linear and logistic (binary) models
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_dir <- glue('{project_dir}/models')
 model_type <- 'logistic'
 
@@ -924,9 +827,9 @@ logistic_models_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(logistic_models_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_dir <- glue('{project_dir}/models')
 model_type <- 'linear'
 
@@ -940,38 +843,25 @@ linear_models_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(linear_models_list) <- agg_methods
-```
 
-#### Read in the evaluations
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 model_evaluation_dir <- glue('{project_dir}/model_evaluation')
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 data_type <- 'train'
 model_type <- 'logistic'
 train_logistic_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{data_type}_{model_type}_{run_date}.rds'))
 
 data_type <- 'test'
 test_logistic_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{data_type}_{model_type}_{run_date}.rds'))
-```
-
-```{r}
-pred <- with(train_logistic_eval[["aggByMeanCenter"]] |> as.data.frame(), ROCR::prediction(prediction_response, class))
-```
-
-```{r}
-dt <- train_logistic_eval[["aggByMeanCenter"]] |> as.data.frame()
-```
 
 
-
-auc: area under the curve
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # for logistic regression
 train_logistic_auc <- lapply(agg_methods, function(each_agg){
-    pred <- with(train_logistic_eval[[each_agg]] |> as.data.frame(), ROCR::prediction(prediction_response, class))
+    pred <- with(train_logistic_eval[[each_agg]], ROCR::prediction(prediction_response, class))
     perf <- ROCR::performance(pred, "auc")
     return(perf@y.values[[1]])
 })
@@ -979,15 +869,14 @@ names(train_logistic_auc) <- agg_methods
 
 # for logistic regression
 test_logistic_auc <- lapply(agg_methods, function(each_agg){
-    pred <- with(test_logistic_eval[[each_agg]] |> as.data.frame(), ROCR::prediction(prediction_response, class))
+    pred <- with(test_logistic_eval[[each_agg]], ROCR::prediction(prediction_response, class))
     perf <- ROCR::performance(pred, "auc")
     return(perf@y.values[[1]])
 })
 names(test_logistic_auc) <- agg_methods
-```
 
-matthews correlation coefficient
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # for logistic regression
 train_logistic_mcc <- lapply(agg_methods, function(each_agg){
     pred <- with(train_logistic_eval[[each_agg]], ROCR::prediction(prediction_response, class))
@@ -1003,14 +892,14 @@ test_logistic_mcc <- lapply(agg_methods, function(each_agg){
     return(max(perf@y.values[[1]], na.rm=T))
 })
 names(test_logistic_mcc) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 train_logistic_auc <- do.call('rbind', train_logistic_auc) 
 test_logistic_auc <- do.call('rbind', test_logistic_auc)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 logistic_auc <- list(train_logistic_auc, test_logistic_auc) %>%
     purrr::map(~ .x %>%
         as.data.frame() %>% 
@@ -1018,22 +907,19 @@ logistic_auc <- list(train_logistic_auc, test_logistic_auc) %>%
     purrr::reduce(left_join, by='agg_method')
 colnames(logistic_auc) <- c('agg_method', 'train', 'test')
 logistic_auc
-```
 
-#### some plots
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 data_types <- c('train', 'test')
 res_df <- data.frame(logistic_auc)
 res_df <- res_df %>% arrange(desc(train))
 #res_df$agg_method <- rownames(res_df)
 res_for_plot <- reshape2::melt(res_df, measure.vars = data_types)
-```
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 colnames(res_for_plot) <- c("agg_method", "data_type", "AUC")
 res_for_plot$AUC <- as.numeric(res_for_plot$AUC)
-res_for_plot$agg_method <- factor(res_for_plot$agg_method, levels=c('aggByUpstream', 'aggByPreCenter', 'aggByCenter', 'aggByPostCenter', 'aggByDownstream', 'aggByUpstreamDownstream', 'aggByMean', 'aggByMeanCenter'))
-
-ggplot(res_for_plot, aes(x=data_type, y=agg_method, fill=AUC)) + 
+ggplot(res_for_plot, aes(x=data_type, y=factor(agg_method), fill=AUC)) + 
     geom_tile() +
     theme_classic() +
     theme(text = element_text(size = 15))  + 
@@ -1041,26 +927,23 @@ ggplot(res_for_plot, aes(x=data_type, y=agg_method, fill=AUC)) +
         x='data type', y='aggregation method/model') +
     scale_fill_gradient(low = "white", high = "red") +
     geom_text(aes(label = round(AUC, 3)), color = "black", size = 4)
-```
 
 
-#### Linear models
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 data_type <- 'train'
 model_type <- 'linear'
 train_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{data_type}_{model_type}_{run_date}.rds'))
 
 data_type <- 'test'
 test_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{data_type}_{model_type}_{run_date}.rds'))
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 boxplot(prediction_link ~ class, data=test_linear_eval$aggByMean, frame.plot=F, ylab=expression(beta * X), col='orange')
 mtext(glue('{}'))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 all_test_linear_eval <- purrr::map(.x=agg_methods, function(each_method){
     test_linear_eval[[each_method]] %>% 
         as.data.frame() %>%
@@ -1068,9 +951,9 @@ all_test_linear_eval <- purrr::map(.x=agg_methods, function(each_method){
         dplyr::select(class, prediction_link, agg_method)
 }) %>% do.call('rbind', .) %>% as.data.frame()
 all_test_linear_eval[1:5, ]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 all_test_linear_eval %>%
     dplyr::mutate(class = as.factor(class)) %>%
     ggplot(.) + aes(x=prediction_link, fill=class) + 
@@ -1080,10 +963,9 @@ all_test_linear_eval %>%
     theme(plot.title=element_text(size=20), 
         axis.title=element_text(size=18)) +
     facet_wrap(~agg_method, scales='free') 
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 train_linear_cor <- lapply(agg_methods, function(each_method){
     out <- with(train_linear_eval[[each_method]], cor(norm_bc, prediction_link))
     return(out)
@@ -1095,14 +977,14 @@ test_linear_cor <- lapply(agg_methods, function(each_method){
     return(out)
 })
 names(test_linear_cor) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 train_linear_cor <- do.call('rbind', train_linear_cor) 
 test_linear_cor <- do.call('rbind', test_linear_cor)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 linear_cor <- list(train_linear_cor, test_linear_cor) %>%
     purrr::map(~ .x %>%
         as.data.frame() %>% 
@@ -1110,17 +992,16 @@ linear_cor <- list(train_linear_cor, test_linear_cor) %>%
     purrr::reduce(left_join, by='agg_method')
 colnames(linear_cor) <- c('agg_method', 'train', 'test')
 linear_cor
-```
 
-#### some plots
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 data_types <- c('train', 'test')
 res_df <- data.frame(linear_cor)
 res_df <- res_df %>% arrange(desc(train))
 #res_df$agg_method <- rownames(res_df)
 res_for_plot <- reshape2::melt(res_df, measure.vars = data_types)
-```
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 colnames(res_for_plot) <- c("agg_method", "data_type", "cor")
 res_for_plot$cor <- as.numeric(res_for_plot$cor)
 ggplot(res_for_plot, aes(x=data_type, y=factor(agg_method), fill=cor)) + 
@@ -1131,25 +1012,13 @@ ggplot(res_for_plot, aes(x=data_type, y=factor(agg_method), fill=cor)) +
         x='data type', y='aggregation method/model') +
     scale_fill_gradient(low = "white", high = "red") +
     geom_text(aes(label = round(cor, 3)), color = "black", size = 4)
-```
 
 
-
-
-
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 boxplot(prediction_link ~ class, data=test_linear_eval$aggByPreCenter, frame.plot=F, ylab=expression(beta * X))
-```
 
 
-
-
-
-
-#### Read in the training and test data
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 train_dataset <- 'cistrome'
 #train_date <- 
 # load all the training data
@@ -1162,9 +1031,9 @@ train_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(train_data_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_dataset <- 'cistrome'
 # load all the training data
 cistrome_data_dir <- glue('{project_dir}/model_data/{test_dataset}_{TF}/data_{todays_date}')
@@ -1176,19 +1045,18 @@ test_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(test_data_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 newx <- as.matrix(test_data_list$aggByMean[, -c(1:4)])
 newx[1:5, 1:5] ; dim(newx)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 coef(logistic_models_list$aggByMean, s='lambda.1se')
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 #use_s <- logistic_models_list$aggByMean$lambda.1se
 
 link_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", type='link')
@@ -1196,28 +1064,25 @@ response_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", t
 #class_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", type='class')
 
 # class_pred <- glmnet::predict.glmnet(logistic_models_list$aggByMean$glmnet.fit, as.matrix(test_data_list$aggByMean[, -c(1:4)]), s="lambda.1se", type='response')
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 link_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='link')
 # response_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='response')
 # class_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='class')
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 View(link_pred) ; View(class_pred) ; View(response_pred)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 dataset_type <- 'cistrome'
 cistrome_gt <- Sys.glob(glue('{project_dir}/motif_intervals/{dataset_type}/intervals_{todays_date}/ground_truth/{dataset_type}_{TF}_*.txt')) |> data.table::fread()
 colnames(cistrome_gt) <- c('region', 'class', 'binding_counts')
-```
 
-#### REad in the random set and match the binding counts by region
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 random_dataset <- 'random'
 dataset_type <- 'random'
 
@@ -1227,9 +1092,9 @@ random_gt <- random_gt[, c('region', 'class')]
 random_gt <- base::merge(random_gt, cistrome_gt[, c('region', 'binding_counts')], by='region')
 random_gt$binding_strength <- with(random_gt, ((binding_counts - min(binding_counts))/(max(binding_counts) - min(binding_counts))))
 head(random_gt, 5) ; random_gt |> dim()
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 random_set <- purrr::map(.x=agg_methods, function(each_method){
 
     random_agg_file <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset_type}_{TF}_{data_date}/{dataset_type}_{each_method}_{TF}.csv.gz')
@@ -1245,40 +1110,32 @@ random_set <- purrr::map(.x=agg_methods, function(each_method){
 
 names(random_set) <- agg_methods
 
-```
 
 
-Colors to be used for plotting
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 assays <- unique(enformer_annotations$assay)
 assays <- assays[!is.na(assays)]
 useColors <- RColorBrewer::brewer.pal(n=length(assays), name='Dark2')
 names(useColors) <- assays[!is.na(assays)]
 useColors
-```
 
 
-#### Analyse the linear models ========================
-
-Collect the coefficients per model
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 linear_models_coefficients <- purrr::map(.x=agg_methods, function(each_method){
     dt <- collate_coefficients(linear_models_list[[each_method]])
     dt$agg_model <- each_method
     return(dt)
 })
 names(linear_models_coefficients) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # an example
 pdt <- linear_models_coefficients$aggByPostCenter
 pdt[1:10, ]
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter', annotate_dt=list()){
 
     # set the colors
@@ -1325,21 +1182,20 @@ plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter
             panel.background = element_blank(),
             axis.line.y = element_line(linewidth = 0.2, linetype = "solid", colour = "black"))
 }
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 temps <- purrr::map(.x=names(linear_models_coefficients), function(each_aggm){
     plot_and_annotate_coefficients(linear_models_coefficients[[each_aggm]], TF, each_aggm)
 })
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plts <- ggpubr::ggarrange(plotlist=temps, common.legend=T, legend='top', nrow=length(temps))
 ggpubr::annotate_figure(plts, top=text_grob("Using binding counts", size=15))
-```
 
-#### Plot the mse of the training and test and random performance
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 train_mse <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1362,10 +1218,9 @@ train_r2 <- purrr::map(.x=agg_methods, function(each_method){
 
 }, .progress=T)
 names(train_r2) <- agg_methods
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 test_mse <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1389,9 +1244,9 @@ test_r2 <- purrr::map(.x=agg_methods, function(each_method){
 
 }, .progress=T)
 names(test_r2) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 random_mse <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1412,13 +1267,13 @@ random_r2 <- purrr::map(.x=agg_methods, function(each_method){
 
 }, .progress=T)
 names(random_r2) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 do.call('rbind', random_r2)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_train <- do.call('rbind', train_mse)[, 'mse.lambda.1se']
 tm_train <- tm_train[order(tm_train, decreasing = FALSE)]
 
@@ -1433,9 +1288,9 @@ tm_random <- tm_random[order(tm_random, decreasing = FALSE)]
 # mtext(glue('mse of models on {dataset} train data for {TF}'), side=3, cex=1.2, line=2)
 # mtext('aggregation method/models', side=1, line=4)
 # text(xbp, 0.05, labels=round(tm_train, 3),cex=1,pos=3) 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_train <- data.frame(tm_train)
 tm_train <- tm_train %>% tibble::rownames_to_column('agg_model')
 
@@ -1448,14 +1303,14 @@ tm_random <- tm_random %>% tibble::rownames_to_column('agg_model')
 tm <- purrr::reduce(list(tm_train, tm_test, tm_random), dplyr::left_join, by = 'agg_model')
 colnames(tm) <- c('agg_model', 'train', 'test', 'random')
 tm
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_plt <- tm %>% pivot_longer(c('train', 'test', 'random')) 
 tm_plt
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_plt %>% 
     ggplot(.) + aes(x=reorder(agg_model, value), y=value, fill=name) +
     geom_bar(stat = "identity", position = 'dodge') +
@@ -1469,9 +1324,9 @@ tm_plt %>%
         legend.key.size = unit(1.5, 'cm'), legend.text=element_text(size=12)) + 
         guides(fill=guide_legend(title="")) +
     geom_text(aes(label=round(value, 3)), size = 3.5, vjust=-0.5, position = position_dodge(width=0.9))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # r2
 r2_train <- do.call('rbind', train_r2) |> as.data.frame()
 r2_test <- do.call('rbind', test_r2) |> as.data.frame()
@@ -1485,14 +1340,14 @@ r2_random <- r2_random %>% tibble::rownames_to_column('agg_model')
 r2 <- purrr::reduce(list(r2_train, r2_test, r2_random), dplyr::left_join, by = 'agg_model')
 colnames(r2) <- c('agg_model', 'train', 'test', 'random')
 r2
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 r2_plt <- r2 %>% pivot_longer(c('train', 'test', 'random')) 
 r2_plt
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 r2_plt %>% 
     ggplot(.) + aes(x=reorder(agg_model, value), y=value, fill=name) +
     geom_bar(stat = "identity", position = 'dodge') +
@@ -1506,15 +1361,9 @@ r2_plt %>%
         legend.key.size = unit(1.5, 'cm'), legend.text=element_text(size=12)) + 
         guides(fill=guide_legend(title="")) +
     geom_text(aes(label=round(value, 3)), size = 3.5, vjust=-0.5, position = position_dodge(width=0.9))
-```
 
 
-
-## ============= Binary/binomial models ===============
-
-
-#### Plot the AUC of the training performance
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 train_dataset <- 'cistrome'
 #train_date <- 
 # load all the training data
@@ -1527,9 +1376,9 @@ train_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(train_data_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 cistrome_train_assess_metrics <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1539,9 +1388,9 @@ cistrome_train_assess_metrics <- purrr::map(.x=agg_methods, function(each_method
 
 }, .progress=T)
 names(cistrome_train_assess_metrics) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_train <- do.call('rbind', cistrome_train_assess_metrics)[, 'mse.lambda.1se']
 tm_train <- tm_train[order(tm_train, decreasing = FALSE)]
 xbp <- barplot(tm_train, xaxt='n', space=0.1, xlab=NULL, ylab='mean squared error (mse)', col=ifelse(tm_train == min(tm_train),"green", ifelse(tm_train == max(tm_train), 'red', 'grey'))) #names.arg=names(tm_train), las=1.5)
@@ -1549,11 +1398,9 @@ text(cex=0.9, x=xbp+0.05, y=0.0, names(tm_train), xpd=TRUE, srt=25, pos=2)
 mtext(glue('mse of models on {dataset} train data for {TF}'), side=3, cex=1.2, line=2)
 mtext('aggregation method/models', side=1, line=4)
 text(xbp, 0.05, labels=round(tm_train, 3),cex=1,pos=3) 
-```
 
 
-#### Test on the rest of Cistrome (if the test data exists)
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_dataset <- 'cistrome'
 # load all the training data
 cistrome_data_dir <- glue('{project_dir}/model_data/{test_dataset}_{TF}/data_{todays_date}')
@@ -1565,9 +1412,9 @@ test_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(test_data_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 cistrome_test_assess_metrics <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1577,9 +1424,9 @@ cistrome_test_assess_metrics <- purrr::map(.x=agg_methods, function(each_method)
 
 }, .progress=T)
 names(cistrome_test_assess_metrics) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_test <- do.call('rbind', cistrome_test_assess_metrics)[, 'auc']
 tm_test <- tm_test[order(tm_test,decreasing = TRUE)]
 xbp <- barplot(tm_test, xaxt='n', space=0.1, xlab=NULL, ylab='AUC', col=ifelse(tm_test == max(tm_test),"green", ifelse(tm_test == min(tm_test), 'red', 'grey'))) #names.arg=names(tm_test), las=1.5)
@@ -1587,9 +1434,9 @@ text(cex=0.9, x=xbp+0.05, y=0.0, names(tm_test), xpd=TRUE, srt=25, pos=2)
 mtext(glue('AUC of models on {dataset} test data for {TF}'), side=3, cex=1.2, line=2)
 mtext('aggregation method/models', side=1, line=4)
 text(xbp, 0.6, labels=round(tm_test, 3),cex=1,pos=3) 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_train <- data.frame(tm_train)
 tm_train <- tm_train %>% tibble::rownames_to_column('agg_model')
 
@@ -1599,14 +1446,14 @@ tm_test <- tm_test %>% tibble::rownames_to_column('agg_model')
 tm <- merge(tm_train, tm_test, by = 'agg_model')
 colnames(tm) <- c('agg_model', 'train', 'test')
 tm
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_plt <- tm %>% pivot_longer(c('train', 'test')) 
 tm_plt
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tm_plt %>% 
     ggplot(.) + aes(x=reorder(agg_model, -value), y=value, fill=name) +
     geom_bar(stat = "identity", position = 'dodge') +
@@ -1620,28 +1467,9 @@ tm_plt %>%
         legend.key.size = unit(1, 'cm')) + 
         guides(fill=guide_legend(title="")) +
     geom_text(aes(label=round(value, 3)), size = 4, vjust=-0.5, position = position_dodge(width=0.9))
-```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### IGNORE THE REST OF THE NOTEBOOK 
-- I have some old codes here and I don't want to delete them yet
-
-<!-- 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 all_mcs %>%  
     dplyr::mutate(feature_names=forcats::fct_reorder(feature_names, -plt_order)) %>%
     ggplot(.) + 
@@ -1655,34 +1483,30 @@ all_mcs %>%
             panel.background = element_blank(),
             axis.line.y = element_line(linewidth = 0.2, linetype = "solid", colour = "black"))
 
-```
 
 
-
-#### panelled plot
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 all_mcs <- enformer_annotations %>%
     dplyr::select(feature_names, target) %>%
     full_join(all_mcs, by=c('feature_names')) %>%
     dplyr::arrange(assay, desc(lambda.1se)) %>%
     dplyr::mutate(assay = factor(assay), plt_order=1:nrow(.)) %>%
     dplyr::filter(abs(lambda.1se) > 0)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plt_grps <- pdt %>% 
     group_by(assay) %>%
     mutate(lmax=max(lambda.1se), lmin=min(lambda.1se)) %>%
     dplyr::filter(((lambda.1se == max(lambda.1se)) | (lambda.1se == min(lambda.1se)))) %>% dplyr::filter(assay %in% c('TF ChIP-seq', 'Histone ChIP-seq'))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 tf_specific_annotations <- pdt[!is.na(pdt$target) & startsWith(pdt$target, 'FOX'), ]
 tf_specific_annotations
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 pdt <- enformer_annotations %>%
     dplyr::select(feature_names, target) %>%
     full_join(pdt, by=c('feature_names')) %>%
@@ -1690,12 +1514,9 @@ pdt <- enformer_annotations %>%
     dplyr::mutate(assay = factor(assay), plt_order=1:nrow(.)) %>%
     dplyr::filter(abs(lambda.1se) > 0)
     pdt[1:10, ]
-```
 
 
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # pdt %>%
 #     ggplot(., aes(y = lambda.1se, x=feature_names, col=assay)) +
 #         geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names), color='black') + 
@@ -1706,14 +1527,13 @@ pdt <- enformer_annotations %>%
 #         axis.text.x=element_blank(),
 #         axis.ticks.x=element_blank()) +
 #     scale_color_brewer(palette='Dark2')
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_method <- c('aggByPreCenter')
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
  pdt %>%
     dplyr::mutate(feature_names=forcats::fct_reorder(feature_names, -plt_order)) %>%
     ggplot(., aes(y = lambda.1se, x=feature_names, col=assay)) +
@@ -1736,29 +1556,21 @@ agg_method <- c('aggByPreCenter')
     geom_text_repel(data = tf_specific_annotations,
         aes(label = target), color='black', 
        box.padding = unit(0.45, "lines")) 
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 coeff_dt <- models_coefficients$aggByPostCenter
-```
 
 
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plot_and_annotate_coefficients(models_coefficients$aggByPostCenter, 'FOXA1')
-```
 
 
-
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plot_tracks_coefficients(models_coefficients$aggByPostCenter)
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 
 df_beta_list <- models_coefficients
 
@@ -1794,35 +1606,24 @@ for(mi in seq_along(df_beta_list)){
     plot.new()
     legend('right', legend=names(bmodel_df_beta_split), col=useColors[1:length(bmodel_df_beta_split)], lty=1, bty='n')
 }
-```
 
 
-
-Since these are cv.glmnet objects, I need to select the lambda that corresponds to the highest metric
-either use `lambda.min` or `lambda.1se`
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 whlm <- which(model_rds$lambda == model_rds[['lambda.min']])
 model_rds$cvm[whlm]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 temp_roc <- roc.glmnet(models_list[[agg_methods[1]]]$fit.preval, newy=training_data_list[[agg_methods[1]]]$class, family='binomial')
 best_temp_roc <- temp_roc[[whlm]]
 best_temp_roc |> head()
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plot(best_temp_roc)
-```
 
 
-
-
-## Test on Kawakami
-This is assuming that the same data exists for Kawakami
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_id <- 'kawakami'
 # load all the training data
 kawakami_data_dir <- glue('{project_dir}/model_data/{test_id}_{TF}/data_{todays_date}')
@@ -1834,39 +1635,39 @@ test_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(test_data_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_data_list[[agg_methods[1]]][1:5, 1:5]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 X_test <- test_data_list[[agg_methods[1]]][ , -c(1:3)]
 y_test <- test_data_list[[agg_methods[1]]][ , c(1:3)]
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 test_model(models_list[[agg_methods[1]]], X_test, y_test$class)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 assess.glmnet(models_list[[agg_methods[1]]], X_test |> as.matrix(), y_test$class)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 print(names(models_list))
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_rds <- glue('{model_dir}/{id}_{TF}_{agg_methods[1]}_binary_{todays_date}.rds')
 model_rds <- readRDS(agg_rds)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 plot(model_rds)
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # load all the training data
 training_data_list <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1875,16 +1676,15 @@ training_data_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(training_data_list) <- agg_methods
-```
 
 
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 agg_rds <- glue('{model_dir}/{id}_{TF}_{each_method}_binary_{todays_date}.rds')
 model_rds <- readRDS(agg_rds)
 roc.glmnet(model_rds$fit.preval, newy=training_data$class, family='binomial')
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # roc
 training_roc_list <- purrr::map(.x=agg_methods, function(each_method){
 
@@ -1892,27 +1692,17 @@ training_roc_list <- purrr::map(.x=agg_methods, function(each_method){
 
 }, .progress=T)
 names(training_roc_list) <- agg_methods
-```
 
-```{r}
+
+## ------------------------------------------------------------------------------------------------------------------------------------------
 assess.glmnet()
-```
 
 
-
-
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 training_data_metrics[[1]] |> head()
-```
 
 
-
-
-
-
-```{r}
+## ------------------------------------------------------------------------------------------------------------------------------------------
 # layout(matrix(c(1, 2, 3, 4, 5), nrow=5, ncol=1, byrow=T), height=c(6, 6, 6, 6, 6))
 # layout.show(5)
 plot_tracks_coefficients <- function(model_coeffs, which_s='lambda.1se'){
@@ -1940,6 +1730,4 @@ plot_tracks_coefficients <- function(model_coeffs, which_s='lambda.1se'){
     legend('right', legend=names(bmodel_df_beta_split), col=useColors[1:length(bmodel_df_beta_split)], lty=1, bty='n')
 
 }
-```
 
-```{r} -->

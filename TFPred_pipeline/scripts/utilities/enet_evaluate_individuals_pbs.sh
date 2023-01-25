@@ -2,11 +2,11 @@
 #PBS -l select=1:system=polaris
 #PBS -l walltime=01:00:00,filesystems=grand
 #PBS -A covid-ct
-#PBS -q debug-scaling    
-#PBS -N prediction_scores
+#PBS -q preemptable    
+#PBS -N individuals_evaluate
 #PBS -k doe
-#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/prediction_scores.out
-#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/logs/prediction_scores.err
+#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/logs/individuals_evaluate.out
+#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/logs/individuals_evaluate.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
@@ -17,7 +17,7 @@ echo Running on nodes `cat $PBS_NODEFILE`
 
 NNODES=`wc -l < $PBS_NODEFILE`
 NRANKS=1
-NDEPTH=24
+NDEPTH=48
 NTHREADS=2
 
 #NTOTRANKS=$(( NNODES * NRANKS ))
@@ -36,9 +36,9 @@ echo "PBS_JOBID = " $PBS_JOBID
 #Rscript="~/miniconda3/envs/r-env/bin/Rscript"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${pscore_script}" "${model_dir}" "${model_id}" "${individual_data_dir}" "${TF}" "${model_type}" "${run_date}" "${output_dir}" "${ground_truth_file}"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_dir}" "${model_id}" "${model_type}" "${predict_on}" "${individuals_data_dir}" "${individuals_ground_truth_file}" "${TF}" "${run_date}" "${output_dir}"
 
 status=$?
-echo "Exit status of pscore run is: $status"
+echo "Exit status of evaluation run on individuals is: $status"
 
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh

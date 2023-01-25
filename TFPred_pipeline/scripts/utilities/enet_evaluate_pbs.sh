@@ -39,6 +39,6 @@ mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 ${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluation_rscript}" "${model_dir}" "${model_id}" "${model_type}" "${predict_on}" "${data_dir}" "${TF}" "${run_date}" "${output_dir}"
 
 status=$?
-echo "Exit status of training run for ${metainfo} is: $status"
+echo "Exit status of evaluation run on ${predict_on} data is: $status"
 
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh

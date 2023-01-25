@@ -1,6 +1,6 @@
 # Usage: This script is used to predict on batches using ENFORMER on individuals' regions
 # Author: Temi
-# Date: Thursday 13 Jan 2023
+# Date: Wed 25 Jan 2023
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
@@ -24,6 +24,11 @@ script_path = os.path.abspath(whereis_script)
 batch_utils_path = os.path.join(script_path, 'batch_utils')
 sys.path.append(batch_utils_path)
 
+# list of chromosomes 
+# chromosomes = [f'chr{i}' for i in range(1, 23)]
+# chromosomes.extend(['chrX'])
+
+# main 
 def main():
 
     global use_parsl
@@ -64,7 +69,12 @@ def main():
 
         # personalized parameters 
         individuals = parameters['individuals'] if sequence_source == 'personalized' else None
-        vcf_file = parameters['vcf_file']if sequence_source == 'personalized' else None
+        #vcf_file = parameters['vcf_file']if sequence_source == 'personalized' else None
+        vcf_files_dict = parameters['vcf_files'] if sequence_source == 'personalized' else None
+
+        # use only the chromosomes that have been made available in the config file
+        chromosomes = list(vcf_files_dict['files'].keys())
+        print(chromosomes)
     
     # write the params_path to a config.json file in a predefined folder
     config_data = {'params_path': params_path}
@@ -100,7 +110,7 @@ def main():
             pass
         elif isinstance(individuals, type('str')):
             if os.path.isfile(individuals):
-                id_list = pd.read_table(individuals, header=None)[0].tolist()
+                id_list = pd.read_table(individuals, header=None)[0].tolist()[0:25]
             else:
                 id_list = [individuals]
         print(f'[INFO] Predicting for these individuals: {id_list}')
@@ -117,42 +127,48 @@ def main():
     # better to read the file in and pass it around than to just pass the file path adn read it everytime
     logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
         
+    # list of intervals to be predicted on
+    a = pd.read_table(interval_list_file, sep=' ', header=None)
+    list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
+
     for each_id in id_list:
-        
-        # this is specific to an individual but is cached per individual
-        # I want to cache this but it is a bit tricky to do for now
-        #global make_cyvcf_object
-        if sequence_source == 'personalized':
-            def make_cyvcf_object(vcf_file=vcf_file, sample=each_id):
-                import cyvcf2
-                return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
-        elif sequence_source == 'reference':
-            make_cyvcf_object = None
-            pass
-        elif sequence_source == 'random':
-            make_cyvcf_object = None
-            pass
-
-        # create the directories for this individual 
-        if not os.path.exists(f'{output_dir}/{each_id}'):
-            print(f'[INFO] Creating output directory at {output_dir}/{each_id}')
-            os.makedirs(f'{output_dir}/{each_id}')
-
-        #print(f'{intervals_dir}/{each_id}_{TF}_*.txt')
-        #interval_list_file = glob.glob(f'{intervals_dir}/{each_id}_{TF}_*.txt')[0]
-        a = pd.read_table(interval_list_file, sep=' ', header=None)
-        list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
-
-        tic_prediction = time.perf_counter() # as opposed to process_time
-
-        batches = generate_batch(list_of_regions, batch_n=batch_size)
-        count = 0
         app_futures = []
-        for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
-            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv))
 
-            count = count + 1
+        for chromosome in chromosomes:
+            chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
 
+            if not chr_list_of_regions:
+                continue
+
+            chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
+            if sequence_source == 'personalized':
+                def make_cyvcf_object(vcf_file=chr_vcf_file, sample=each_id):
+                    import cyvcf2
+                    return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+            elif sequence_source == 'reference':
+                make_cyvcf_object = None
+                pass
+            elif sequence_source == 'random':
+                make_cyvcf_object = None
+                pass
+
+            # create the directories for this individual 
+            if not os.path.exists(f'{output_dir}/{each_id}'):
+                print(f'[INFO] Creating output directory at {output_dir}/{each_id}')
+                os.makedirs(f'{output_dir}/{each_id}')
+
+            tic_prediction = time.perf_counter() # as opposed to process_time
+
+            batches = generate_batch(chr_list_of_regions, batch_n=batch_size)
+
+            count = 0
+            #app_futures = []
+            for batch_query in tqdm.tqdm(batches):
+                count = count + 1
+                print(f"[INFO] Creating futures for batch {count} of {batch_size} batches for chromosome {chromosome}")
+                app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv))
+
+        #print(app_futures)
         if use_parsl == True:
             exec_futures = [q.result() for q in tqdm.tqdm(app_futures, desc=f'[INFO] Executing futures for all {len(app_futures)} batches')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
 

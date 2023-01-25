@@ -29,8 +29,8 @@ if __name__ == 'predictUtils_two':
             project_dir = parameters['project_dir']
 
         sequence_source = parameters['sequence_source']
-        if sequence_source == 'personalized':
-            vcf_file = parameters['vcf_file']
+        # if sequence_source == 'personalized':
+        #     vcf_file = parameters['vcf_file']
 
         log_dir = os.path.join(project_dir, parameters['log_dir'])
         write_log = parameters["write_log"]

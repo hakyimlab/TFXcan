@@ -1,0 +1,138 @@
+---
+title: "Complete TFpred Pipeline - Using Geuvadis data/vcf files"
+author: "Temi"
+date: 'Wed Jan 25 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+data_dir <- glue('{imlab_dir}/data/freedman_data/peaks_liftover')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
+```
+
+```{r}
+dataset <- 'geuvadis'
+TF <- 'FOXA1'
+todays_date <- data_date <- run_date <- '2023-01-11' #Sys.Date()
+```
+
+```{r}
+peaks_dir <- glue('{project_dir}/files/peaks_files/{dataset}_{TF}')
+if(!dir.exists(peaks_dir)){
+    dir.create(peaks_dir, recursive=T)
+} 
+
+homer_files_dir <- glue('{project_dir}/files/homer_files/{dataset}_{TF}')
+if(!dir.exists(homer_files_dir)){
+    dir.create(homer_files_dir, recursive=T)
+}
+
+regions_dir <- glue('{project_dir}/files/defined_regions/{dataset}_{TF}')
+if(!dir.exists(regions_dir)){
+    dir.create(regions_dir, recursive=T)
+}
+
+common_dir <- glue('{project_dir}/files/homer_files/common_files')
+if(!dir.exists(common_dir)){
+    dir.create(common_dir, recursive=T)
+}
+```
+
+
+```{r}
+valid_chromosomes
+```
+
+```{r}
+pat <- paste0('*.', valid_chromosomes, '.*vcf.gz$', collapse='|') # paste0('^', TF_info$DCid, collapse='_*|')
+vcfs_dir <- glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only')
+grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+```
+
+```{r}
+vcf_files <- lapply(valid_chromosomes, function(chr){
+    pat <- paste0('*.\\b', chr, '\\b.*vcf.gz$', collapse='|')
+    #print(pat)
+    grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+})
+names(vcf_files) <- valid_chromosomes
+vcf_files
+```
+
+```{r}
+vcf_files <- list(folder=glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only'), files=vcf_files)
+vcf_files
+```
+
+
+```{r}
+list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
+```
+
+```{r}
+predictor_file <- Sys.glob(glue('{save_dir}/predictors/{dataset}_{TF}_*.txt'))
+predictor_file
+```
+
+For now, I will do 4 individuals
+```{r}
+enformer_parameters_json <- list()
+
+# '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
+enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/{dataset}_individuals.txt')
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['interval_list_file']] <- predictor_file
+enformer_parameters_json[['prediction_data_name']] <- dataset
+enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['date']] <- data_date
+enformer_parameters_json[['create_hdf5_file']] <- FALSE
+
+enformer_parameters_json[['vcf_split']] <- TRUE
+enformer_parameters_json[['vcf_files']] <- vcf_files
+
+#enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['use_parsl']] <- T
+enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
+enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['sequence_source']] <- "personalized"
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['log_dir']] <- "cobalt_log"
+enformer_parameters_json[['batch_size']] <- 5
+enformer_parameters_json[['predict_on_n_regions']] <- 500
+enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="02:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/enformer_parameters_{dataset}_{TF}.json')
+param_file
+```
+
+
+```{r}
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict/new_enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```
