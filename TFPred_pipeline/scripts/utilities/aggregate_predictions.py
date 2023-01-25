@@ -128,4 +128,4 @@ print(f'[INFO] Aggregation complete for all.')
 
 # for i in `ls ./*.gz`; do zcat \"$i\" | sed '1d'; done > k_aggByMean_T_compiled.csv & gzip -f k_aggByMean_T_compiled.csv
 
-# python3 ../scripts/utilities/aggregate_predictions.py --metadata_file /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/aggregation_config_freedman_FOXA1.json --agg_types "aggByCenter aggByPreCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"
+# python3 ../scripts/utilities/aggregate_predictions.py --metadata_file /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/aggregation_config_freedman_FOXA1.json --agg_types "aggByCenter aggByMeanCenter, aggByPreCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"

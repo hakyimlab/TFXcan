@@ -26,7 +26,7 @@ source ~/.bashrc
 conda activate dl-tools
 #printf "Aggregation type: ${agg_type}\n"
 
-python3 "${aggregate_py}" --metadata_file "${aggregation_config}" --agg_types "aggByCenter aggByPreCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"
+python3 "${aggregate_py}" --metadata_file "${aggregation_config}" --agg_types "aggByCenter aggByPreCenter aggByMeanCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"
 
 # python3 "${collect_py}" --metadata_file "${aggregation_config}" --agg_types "${agg_types}"
 # #mpiexec -n 1 --ppn 1 --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" python3 "${collect_py}" --metadata_file "${aggregation_config}" --agg_types "${agg_types}"

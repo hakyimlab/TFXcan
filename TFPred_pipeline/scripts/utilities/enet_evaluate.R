@@ -1,4 +1,4 @@
-# Predict on test, train or individuals
+# Predict on test, train
 
 arguments <- commandArgs(trailingOnly=TRUE)
 #print(arguments)
@@ -24,12 +24,13 @@ print(glue('model dir is {model_dir}\nTF is {TF}\nmodel_id is {model_id}\noutput
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
+agg_meancenter <- 'aggByMeanCenter'
 agg_mean <- 'aggByMean'
 agg_upstream <- 'aggByUpstream'
 agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
-agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
 
 # read in the models
 # load all the models coefficients
