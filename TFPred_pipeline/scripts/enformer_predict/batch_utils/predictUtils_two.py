@@ -76,7 +76,6 @@ class FastaStringExtractor:
 
 @lru_cache(5)
 def get_fastaExtractor(fasta_file=fasta_file):
-
     """
     Create a fasta extractor object.
 
@@ -89,7 +88,6 @@ def get_fastaExtractor(fasta_file=fasta_file):
 
 @lru_cache(5)
 def get_model(model_path=model_path):
-
     import tensorflow as tf
     return tf.saved_model.load(model_path).model
 
@@ -113,7 +111,6 @@ def get_gpu_memory():
     return memory_values
 
 def setup_logger(logger_name, log_file, level=logging.INFO):
-
     log_setup = logging.getLogger(logger_name)
     formatter = logging.Formatter('[%(levelname)s: %(asctime)s] %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
     fileHandler = logging.FileHandler(log_file, mode='a')
@@ -127,7 +124,6 @@ def setup_logger(logger_name, log_file, level=logging.INFO):
     return None
 
 def logger(msg, level, logfile):
- 
     if logfile == 'memory'   : log = logging.getLogger('memory_log')
     if logfile == 'cache'   : log = logging.getLogger('cache_log') 
     if logfile == 'run_error'    : log = logging.getLogger('error_log')
@@ -138,12 +134,10 @@ def logger(msg, level, logfile):
 
     return None
 
-
 def generate_random_sequence_inputs(size=393216):
     import numpy as np
     r_seq_list = np.random.choice(['A', 'G', 'T', 'C'], size)
     return(''.join(r_seq_list))
-
 
 def check_query(sample, query, output_dir, logfile):
     """

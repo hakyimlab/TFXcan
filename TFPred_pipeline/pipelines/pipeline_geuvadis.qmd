@@ -27,8 +27,8 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 
 ```{r}
 dataset <- 'geuvadis'
-TF <- 'FOXA1'
-todays_date <- data_date <- run_date <- '2023-01-11' #Sys.Date()
+TF <- 'AR'
+todays_date <- data_date <- run_date <- "2023-01-27" #Sys.Date()
 ```
 
 ```{r}
@@ -55,6 +55,7 @@ if(!dir.exists(common_dir)){
 
 
 ```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
 valid_chromosomes
 ```
 
@@ -79,14 +80,21 @@ vcf_files <- list(folder=glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only'), files=
 vcf_files
 ```
 
-
 ```{r}
 list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
 ```
 
 ```{r}
-predictor_file <- Sys.glob(glue('{save_dir}/predictors/{dataset}_{TF}_*.txt'))
-predictor_file
+predictor_file <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/predictors/baca_cwas_{TF}_regions_hg38_2023-01-27.csv')
+predictor_file ; file.exists(predictor_file)
+```
+```{r}
+metadata_dir <- glue('{project_dir}/metadata')
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
 ```
 
 For now, I will do 4 individuals
@@ -111,15 +119,15 @@ enformer_parameters_json[['sub_dir']] <- TRUE
 enformer_parameters_json[['use_parsl']] <- T
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
 enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
-enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata"
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
 enformer_parameters_json[['log_dir']] <- "cobalt_log"
-enformer_parameters_json[['batch_size']] <- 5
-enformer_parameters_json[['predict_on_n_regions']] <- 500
+enformer_parameters_json[['batch_size']] <- 80
+enformer_parameters_json[['predict_on_n_regions']] <- -1
 enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="02:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),

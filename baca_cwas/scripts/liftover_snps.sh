@@ -3,10 +3,10 @@
 #PBS -l walltime=01:00:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q preemptable    
-#PBS -N liftover
+#PBS -N liftover_snps
 #PBS -k doe
-#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover.out
-#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover.err
+#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.out
+#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
@@ -27,11 +27,13 @@ echo "NUM_OF_NODES=${NNODES}  TOTAL_NUM_RANKS=${NTOTRANKS}  RANKS_PER_NODE=${NRA
 
 echo "PBS_JOBID = " $PBS_JOBID
 
+source ~/.bashrc
+conda activate r-env
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" "${liftover_cmd}" "${input_bed}" "${chain_file}" "${output_bed}" "${unmapped_bed}"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${liftoverSNPs_R}" "${input_snps}}" "${lifted_snps}"
 
 status=$?
-echo "Exit status of lifting over is: $status"
+echo "Exit status of lifting over SNPs is: $status"
 
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh

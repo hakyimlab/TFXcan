@@ -1,10 +1,10 @@
 {
   "individuals": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt",
   "project_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline",
-  "interval_list_file": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/motif_intervals/freedman/intervals_2023-01-11/predictors/freedman_FOXA1_47000.txt",
+  "interval_list_file": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/predictors/baca_cwas_AR_regions_hg38_2023-01-27.txt",
   "prediction_data_name": "geuvadis",
-  "TF": "FOXA1",
-  "date": "2023-01-11",
+  "TF": "AR",
+  "date": "2023-01-27",
   "create_hdf5_file": false,
   "vcf_split": true,
   "vcf_files": {
@@ -44,8 +44,8 @@
   "sequence_source": "personalized",
   "predictions_log_dir": "predictions_log",
   "log_dir": "cobalt_log",
-  "batch_size": 5,
-  "predict_on_n_regions": 500,
+  "batch_size": 500,
+  "predict_on_n_regions": -1,
   "write_log": {
     "memory": false,
     "error": true,
@@ -53,11 +53,11 @@
     "cache": false
   },
   "parsl_parameters": {
-    "job_name": "enformer_predict_geuvadis_FOXA1",
-    "num_of_full_nodes": 10,
-    "walltime": "02:00:00",
+    "job_name": "enformer_predict_geuvadis_AR",
+    "num_of_full_nodes": 50,
+    "walltime": "12:00:00",
     "min_num_blocks": 0,
     "max_num_blocks": 10,
-    "queue": "preemptable"
+    "queue": "prod"
   }
 }
