@@ -10,6 +10,7 @@ temp/*
 old_scripts/
 *__*__/*
 TFPred_pipeline/*
+baca_cwas/*
 
 .*
 
@@ -27,6 +28,8 @@ TFPred_pipeline/*
 !.gitignore
 !TFPred_pipeline/scripts/
 !TFPred_pipeline/pipelines/
+!baca_cwas/predictors
+!baca_cwas/scripts
 
 
 
