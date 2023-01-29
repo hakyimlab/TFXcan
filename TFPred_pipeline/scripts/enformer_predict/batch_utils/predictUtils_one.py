@@ -51,7 +51,7 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
         print(f'[ERROR] of type {type(merr)} at run_batch_predictions')
 
     # first check the queries
-    check_result = (predictUtils_two.check_query(sample = id, query = each_region, output_dir=output_dir, logfile=logfile) for each_region in tqdm.tqdm(batch_regions, desc=f'[INFO] Checking query for batch'))
+    check_result = predictUtils_two.check_queries(sample = id, queries = batch_regions, output_dir=output_dir, logfile=logfile)
     # filter for nones
     filtered_check_result = [r for r in check_result if r is not None]
 

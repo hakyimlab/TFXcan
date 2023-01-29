@@ -63,8 +63,8 @@ if(!dir.exists(run_utils)){
 
 ```{r}
 dataset <- 'cistrome' # change this variable name 
-TF <- 'AR' #FOXA1' #HOXB13' #'PPARG' #PR
-todays_date <- data_date <- run_date <- Sys.Date() #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
+TF <- 'FOXA1' #FOXA1' #HOXB13' #'PPARG' #PR
+todays_date <- data_date <- run_date <- '2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
 ```
 
@@ -584,6 +584,12 @@ agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_cen
 agg_methods
 ```
 
+```{r}
+aggregate_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 "{aggregation_python_script}" --metadata_file "{aggregation_config}" --agg_types "aggByCenter aggByPreCenter aggByMeanCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"')
+
+aggregate_cmd
+```
+
 
 When submitting multiple jobs, it is necessary to space them a little so they don't interfere (this has happened many times)
 ```{r}
@@ -597,11 +603,10 @@ When submitting multiple jobs, it is necessary to space them a little so they do
 #     while((as.numeric(Sys.time()) - as.numeric(date_time)) < 2){}
 # }
 
-pbs_script <- glue('qsub -v aggregate_py={aggregation_python_script},aggregation_config={aggregation_config} {aggregation_pbs_script}')
-print(pbs_script)
-```
-```{r}
-system(pbs_script)
+# pbs_script <- glue('qsub -v aggregate_py={aggregation_python_script},aggregation_config={aggregation_config} {aggregation_pbs_script}')
+# print(pbs_script)
+
+# system(pbs_script)
 ```
 ```{r}
 system('qstat -u temi')
