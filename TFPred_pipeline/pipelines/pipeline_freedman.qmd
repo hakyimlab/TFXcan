@@ -406,16 +406,29 @@ Aggregate the predictions
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
+agg_meancenter <- 'aggByMeanCenter'
 agg_mean <- 'aggByMean'
 agg_upstream <- 'aggByUpstream'
 agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
-agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
-
-# agg_methods <- c(agg_center, agg_precenter)
+agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
 agg_methods
 ```
+
+
+I am using parsl - so I don't need qsub
+```{r}
+aggregate_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 "{aggregation_python_script}" --metadata_file "{aggregation_config}" --agg_types "aggByCenter aggByPreCenter aggByMeanCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"')
+
+aggregate_cmd
+```
+
+```{r}
+glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+```
+
+
 
 ```{r}
 pbs_script <- glue('qsub -v aggregate_py={aggregation_python_script},aggregation_config={aggregation_config} {aggregation_pbs_script}')

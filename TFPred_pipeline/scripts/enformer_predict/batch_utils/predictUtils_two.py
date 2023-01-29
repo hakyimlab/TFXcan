@@ -139,7 +139,7 @@ def generate_random_sequence_inputs(size=393216):
     r_seq_list = np.random.choice(['A', 'G', 'T', 'C'], size)
     return(''.join(r_seq_list))
 
-def check_query(sample, query, output_dir, logfile):
+def check_query(sample, queries, output_dir, logfile):
     """
     Check whether a given region, for an individual has been predicted and logged.
 
@@ -186,6 +186,51 @@ def check_query(sample, query, output_dir, logfile):
                 return({'query':query, 'logtype':'n'}) # log type is 'y' i.e to log or 'n' i.e not to log
             else:
                 return({'query':query, 'logtype':'y'})
+                
+def check_queries(sample, queries, output_dir, logfile):
+    """
+    Check whether a given region, for an individual has been predicted and logged.
+
+    Parameters:
+        sample: str 
+            The name/id of an individual
+        queries: A batch
+            A region in the genome in the form `chr_start_end`.
+        output_dir: str (path)
+            The folder where the predictions should have been logged. 
+        logfile: pd.DataFrame 
+            A dataframe of a log file or `None` if the log file does not exist. 
+    
+    Returns: dict
+        'query': the query region if it has not been logged or predictions don't exist
+        'logtype': whether it should be logged if it has not been logged
+
+    If predictions exist and the query has been logged, this function returns None.
+    """
+    import pandas as pd
+    import os
+    import numpy as np
+
+    if isinstance(logfile, type(None)):
+        output = [{'query':query, 'logtype':'y'} for query in queries]
+        return(output)
+
+    elif isinstance(logfile, pd.DataFrame):# should have read it>
+
+        id_logfile = logfile.loc[logfile['individual'] == sample, : ]
+        # check if the file is saved
+        queries_saved = [str(f'{output_dir}/{sample}/{query}_predictions.h5') for query in queries]
+        queries_saved = np.array([os.path.isfile(q) for q in queries_saved])
+        # check if the file is in the logfile
+        query_logged = np.array([(query in id_logfile.motif.values) for query in queries])
+        # 
+        assert query_logged.shape[0] == queries_saved.shape[0], "Lengths of queries logged and saved conditions are not the same"
+        queries_condition = queries_saved * query_logged
+        queries_condition = queries_condition.tolist()
+        # 
+        output = [{'query':queries[i], 'logtype':'n'} if qc is True else {'query':queries[i], 'logtype':'y'} for i, qc in enumerate(queries_condition)]
+
+        return(output)
 
 def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True, resize_length=None, write_log=write_log):
 

@@ -111,7 +111,7 @@ def main():
             pass
         elif isinstance(individuals, type('str')):
             if os.path.isfile(individuals):
-                id_list = pd.read_table(individuals, header=None)[0].tolist()[0:499]
+                id_list = pd.read_table(individuals, header=None)[0].tolist()[0:99]
             else:
                 id_list = [individuals]
         #print(f'[INFO] Predicting for these individuals: {id_list}')
@@ -136,10 +136,18 @@ def main():
 
     # filter the list of chromosomes to be compatible with the available regions
     chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
+    print(f'[INFO] Available chromosomes are: {chromosomes}')
 
-    
     for each_id in id_list:
         app_futures = []
+
+
+        # filter where each_id is in the log file
+        if not logfile is None:
+            id_logfile = logfile.loc[logfile['individual'] == each_id, : ]
+        elif logfile is None:
+            id_logfile = logfile
+
         for chromosome in chromosomes:
             # print(chromosome)
             # print(list_of_regions[0:5])
@@ -174,7 +182,7 @@ def main():
             for batch_query in tqdm.tqdm(batches):
                 count = count + 1
                 #print(f"[INFO] Creating futures for batch {count} of {batch_size} batches for chromosome {chromosome}")
-                app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv))
+                app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=id_logfile, predictions_log_file=logfile_csv))
 
         #print(app_futures)
         if use_parsl == True:

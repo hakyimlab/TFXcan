@@ -127,7 +127,7 @@ enformer_parameters_json[['log_dir']] <- "cobalt_log"
 enformer_parameters_json[['batch_size']] <- 80
 enformer_parameters_json[['predict_on_n_regions']] <- -1
 enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="24:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -141,6 +141,6 @@ param_file
 
 
 ```{r}
-prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict/new_enformer_predict.py --param_config {param_file}')
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\nnohup python3 {project_dir}/scripts/enformer_predict/new_enformer_predict.py --param_config {param_file} > nohup_{TF}_{todays_date}.out &')
 prediction_cmd
 ```
