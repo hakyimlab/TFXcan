@@ -40,7 +40,7 @@ library(jsonlite)
 
 ```{r}
 imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
-project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFpred_pipeline')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
 ```
 
 ```{r}
@@ -188,14 +188,16 @@ Aggregate the predictions
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
+agg_meancenter <- 'aggByMeanCenter'
 agg_mean <- 'aggByMean'
 agg_upstream <- 'aggByUpstream'
 agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
-agg_methods <- c(agg_postcenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
 agg_methods
 ```
+
 
 Check that the appropriate scripts exist
 ```{r}
@@ -213,9 +215,15 @@ aggregation_python_script ; file.exists(aggregation_python_script)
 dataset <- 'random'
 TF <- 'FOXA1'
 
-aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
+aggregation_config <- glue("{project_dir}/config_files/aggregation_config_{dataset}_{TF}.json")
 aggregation_config ; file.exists(aggregation_config)
 
+```
+
+```{r}
+aggregate_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 "{aggregation_python_script}" --metadata_file "{aggregation_config}" --agg_types "aggByCenter aggByPreCenter aggByMeanCenter aggByPostCenter aggByUpstreamDownstream aggByDownstream aggByUpstream aggByMean"')
+
+aggregate_cmd
 ```
 
 ```{r}

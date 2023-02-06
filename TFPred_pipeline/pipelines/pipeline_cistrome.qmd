@@ -63,8 +63,8 @@ if(!dir.exists(run_utils)){
 
 ```{r}
 dataset <- 'cistrome' # change this variable name 
-TF <- 'FOXA1' #FOXA1' #HOXB13' #'PPARG' #PR
-todays_date <- data_date <- run_date <- '2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
+TF <- 'PR' #FOXA1' #HOXB13' #'PPARG' #PR
+todays_date <- data_date <- run_date <- '2023-01-18' #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
 ```
 
@@ -496,7 +496,6 @@ enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
 
 
-
 # no need to change these
 enformer_parameters_json[['sub_dir']] <- TRUE
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
@@ -564,7 +563,7 @@ aggregation_python_script ; file.exists(aggregation_python_script)
 ```
 
 ```{r}
-aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
+aggregation_config <- glue("{project_dir}/config_files/aggregation_config_{dataset}_{TF}.json")
 aggregation_config ; file.exists(aggregation_config)
 ```
 
@@ -630,7 +629,7 @@ Remove/clean up all the aggregated batches
 #### - read in the aggregated predictions
 ```{r}
 # read in some directives
-jfile <- jsonlite::fromJSON(glue('{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json'))
+jfile <- jsonlite::fromJSON(glue('{project_dir}/config_files/aggregation_config_{dataset}_{TF}.json'))
 data_date <- jfile$run_date
 TF <- jfile$transcription_factor
 #dataset <- jfile$each_id
@@ -688,6 +687,11 @@ names(agg_transform_list) <- agg_methods
 # look at one of them
 agg_transform_list[[1]][1:5, 1:7]
 ```
+
+```{r}
+
+```
+
 
 ```{r}
 sapply(agg_transform_list, dim) # should all be the same
@@ -855,10 +859,6 @@ library(ROCR)
 ```
 
 ```{r}
-#TF <- 'GATA3'
-```
-
-```{r}
 agg_center <- 'aggByCenter'
 agg_precenter <- 'aggByPreCenter'
 agg_postcenter <- 'aggByPostCenter'
@@ -936,6 +936,7 @@ model_dir <- glue('{project_dir}/models')
 model_type <- 'linear'
 
 # load all the models
+agg_methods <- agg_methods[!agg_methods == 'aggByMeanCenter']
 linear_models_list <- purrr::map(.x=agg_methods, function(each_method){
 
     agg_rds <- glue('{model_dir}/{dataset}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
@@ -973,6 +974,12 @@ dt <- train_logistic_eval[["aggByMeanCenter"]] |> as.data.frame()
 
 
 auc: area under the curve
+
+```{r}
+plt_orders <- c('aggByUpstream', 'aggByPreCenter', 'aggByCenter', 'aggByMeanCenter', 'aggByPostCenter', 'aggByDownstream', 'aggByUpstreamDownstream', 'aggByMean')
+plt_orders <- plt_orders[!plt_orders == 'aggByMeanCenter']
+```
+
 ```{r}
 # for logistic regression
 train_logistic_auc <- lapply(agg_methods, function(each_agg){
@@ -1036,13 +1043,13 @@ res_for_plot <- reshape2::melt(res_df, measure.vars = data_types)
 ```{r}
 colnames(res_for_plot) <- c("agg_method", "data_type", "AUC")
 res_for_plot$AUC <- as.numeric(res_for_plot$AUC)
-res_for_plot$agg_method <- factor(res_for_plot$agg_method, levels=c('aggByUpstream', 'aggByPreCenter', 'aggByCenter', 'aggByPostCenter', 'aggByDownstream', 'aggByUpstreamDownstream', 'aggByMean', 'aggByMeanCenter'))
+res_for_plot$agg_method <- factor(res_for_plot$agg_method, levels=plt_orders)
 
 ggplot(res_for_plot, aes(x=data_type, y=agg_method, fill=AUC)) + 
     geom_tile() +
     theme_classic() +
     theme(text = element_text(size = 15))  + 
-    labs(title=glue("AUC of {TF} Cistrome models"),
+    labs(title=glue("AUC of {TF}-logistic Cistrome models"),
         x='data type', y='aggregation method/model') +
     scale_fill_gradient(low = "white", high = "red") +
     geom_text(aes(label = round(AUC, 3)), color = "black", size = 4)
@@ -1061,8 +1068,18 @@ test_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{data_ty
 
 
 ```{r}
-boxplot(prediction_link ~ class, data=test_linear_eval$aggByMean, frame.plot=F, ylab=expression(beta * X), col='orange')
-mtext(glue('{}'))
+aggm <- 'aggByPreCenter'
+
+t_test_result <- with(test_linear_eval[[aggm]], t.test(prediction_link ~ class))
+pv <- t_test_result$p.value
+est <- round(t_test_result$estimate, 2)
+conf_int <- round(t_test_result$conf.int, 3)
+report_label <- glue('t-test, mean_0 = {est[1]}, mean_1 = {est[2]}\np < {ifelse(pv > 0, pv, "2.2e-16")}, 95% conf. int.: {conf_int[1]} to {conf_int[2]}')
+
+boxplot(prediction_link ~ class, data=test_linear_eval[[aggm]], frame.plot=F, ylab=expression(beta * X ~ "/ TFPred Scores"), col='orange', pch=20)
+mtext(glue('Distribution of {aggm} {TF}-linear 
+scores'), adj=0, cex=1.5)
+mtext(report_label, adj = 0, line=-3, cex=1.0)
 ```
 
 ```{r}
@@ -1076,16 +1093,45 @@ all_test_linear_eval[1:5, ]
 ```
 
 ```{r}
+facet_labs <- all_test_linear_eval %>% 
+    dplyr::group_by(agg_method) %>% 
+    dplyr::summarise(pvalue = t.test(prediction_link[class==0], prediction_link[class==1])$p.value) %>%
+    dplyr::mutate(pvalue = ifelse(pvalue == 0, ', p < 2.2e-16', pvalue)) 
+facet_labs_names <- facet_labs$agg_method
+facet_labs <- facet_labs %>%
+    tidyr::unite('label', agg_method:pvalue, sep=' ') %>% pull(label)
+names(facet_labs) <- facet_labs_names
+facet_labs
+```
+
+```{r}
 all_test_linear_eval %>%
     dplyr::mutate(class = as.factor(class)) %>%
-    ggplot(.) + aes(x=prediction_link, fill=class) + 
-    geom_density(alpha=0.5) + 
+    ggplot(.) + aes(y=prediction_link, x=class, fill=class) + 
+    geom_boxplot(outlier.size=0.5) + 
     theme_bw() +
-    labs(title='Density plot of linear models', y='density', x=expression(X*beta)) +
+    labs(title=glue('Distribution of {TF}-linear TFPred scores on test data'), y=expression(X*beta~'/ TFPred scores'), x='class') +
     theme(plot.title=element_text(size=20), 
         axis.title=element_text(size=18)) +
-    facet_wrap(~agg_method, scales='free') 
+    facet_wrap(~agg_method, scales='free', labeller = labeller(agg_method = facet_labs)) 
 ```
+Distance per agg method
+
+```{r}
+
+all_test_linear_eval %>% 
+    dplyr::group_by(agg_method) %>%
+    dplyr::summarise(mean_difference = abs(mean(prediction_link[class==0]) - mean(prediction_link[class==1]))) %>%
+    dplyr::mutate(agg_method = factor(agg_method, levels=plt_orders)) %>%
+    ggplot(.) + aes(x=agg_method, y=mean_difference, group=1) + 
+    geom_point() + geom_line() + 
+    theme_bw() + 
+    theme(axis.text.x=element_text(angle = 45, vjust = 0.9, color='black'),
+        axis.title.x=element_text(vjust=12), 
+        panel.border=element_blank()) +
+    labs(title='Mean differences of TFPred-linear scores by aggregation method', x='aggregation method', y='mean difference')
+```
+
 
 
 ```{r}
@@ -1128,28 +1174,16 @@ res_for_plot <- reshape2::melt(res_df, measure.vars = data_types)
 ```{r}
 colnames(res_for_plot) <- c("agg_method", "data_type", "cor")
 res_for_plot$cor <- as.numeric(res_for_plot$cor)
+res_for_plot$agg_method <- factor(res_for_plot$agg_method, level=plt_orders)
 ggplot(res_for_plot, aes(x=data_type, y=factor(agg_method), fill=cor)) + 
     geom_tile() +
     theme_classic() +
     theme(text = element_text(size = 15))  + 
-    labs(title=glue("Correlation of {TF} Cistrome models"),
+    labs(title=glue("Correlation of {TF}-linear Cistrome models"),
         x='data type', y='aggregation method/model') +
-    scale_fill_gradient(low = "white", high = "red") +
+        scale_fill_gradient(low = "white", high = "red") +
     geom_text(aes(label = round(cor, 3)), color = "black", size = 4)
 ```
-
-
-
-
-
-
-
-```{r}
-boxplot(prediction_link ~ class, data=test_linear_eval$aggByPreCenter, frame.plot=F, ylab=expression(beta * X))
-```
-
-
-
 
 
 
@@ -1189,29 +1223,7 @@ newx[1:5, 1:5] ; dim(newx)
 ```
 
 ```{r}
-coef(logistic_models_list$aggByMean, s='lambda.1se')
-```
-
-
-```{r}
-#use_s <- logistic_models_list$aggByMean$lambda.1se
-
-link_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", type='link')
-response_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", type='response')
-#class_pred <- predict(logistic_models_list$aggByMean, newx, s="lambda.1se", type='class')
-
-# class_pred <- glmnet::predict.glmnet(logistic_models_list$aggByMean$glmnet.fit, as.matrix(test_data_list$aggByMean[, -c(1:4)]), s="lambda.1se", type='response')
-```
-
-```{r}
-link_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='link')
-# response_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='response')
-# class_pred <- predict(linear_models_list$aggByMean, newx, s="lambda.1se", type='class')
-```
-
-
-```{r}
-View(link_pred) ; View(class_pred) ; View(response_pred)
+coef(linear_models_list$aggByMeanCenter, s='lambda.1se')
 ```
 
 ```{r}
@@ -1221,7 +1233,6 @@ colnames(cistrome_gt) <- c('region', 'class', 'binding_counts')
 ```
 
 #### REad in the random set and match the binding counts by region
-
 ```{r}
 random_dataset <- 'random'
 dataset_type <- 'random'
@@ -1241,7 +1252,7 @@ random_set <- purrr::map(.x=agg_methods, function(each_method){
     random_dt <- data.table::fread(random_agg_file)
 
     # merge
-    new_dt <- base::merge(random_gt, random_dt, by.x='region', by.y='V1')
+    new_dt <- base::merge(random_gt, random_dt, by.x='region', by.y='id')
     colnames(new_dt) <- c('region', 'class', 'binding_counts', 'binding_strength', paste('f_', 1:(ncol(new_dt)-4), sep=''))
 
     return(new_dt)
@@ -1278,13 +1289,14 @@ names(linear_models_coefficients) <- agg_methods
 
 ```{r}
 # an example
-pdt <- linear_models_coefficients$aggByPostCenter
+b_model = 'aggByPreCenter'
+pdt <- linear_models_coefficients[[b_model]]
 pdt[1:10, ]
 ```
 
 
 ```{r}
-plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter', annotate_dt=list()){
+plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter', annotate_dt=list(), model_method='linear'){
 
     # set the colors
     # uc <- useColors %>% as.data.frame() %>%
@@ -1318,7 +1330,7 @@ plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter
         ggplot(., aes(y = lambda.1se, x=feature_names)) +
             geom_segment(aes(y = 0, x = feature_names, yend = lambda.1se, xend = feature_names, colour=assay)) +
         ggplot2::geom_point(size=0.9, aes(colour=assay)) +
-        labs(title=glue('Plot of coefficients of {TF} {agg_method} predictors'), x = 'non-zero tracks/predictors', y='coefficients') +
+        labs(title=glue('Plot of coefficients of {TF}-{model_method} {agg_method} predictors'), x = 'non-zero tracks/predictors', y='coefficients') +
         geom_text_repel(data = plt_grps, aes(label = target), box.padding = unit(0.45, "lines")) +
         geom_text_repel(data = tf_specific_annotations, aes(label = target), color='black', box.padding = unit(0.45, "lines")) + 
         scale_color_manual(values = useColors) +
@@ -1331,6 +1343,11 @@ plot_and_annotate_coefficients <- function(coeff_dt, TF, agg_method='aggByCenter
             axis.line.y = element_line(linewidth = 0.2, linetype = "solid", colour = "black"))
 }
 ```
+
+```{r}
+plot_and_annotate_coefficients(linear_models_coefficients[[b_model]], TF, b_model,  model_method='linear')
+```
+
 
 ```{r}
 temps <- purrr::map(.x=names(linear_models_coefficients), function(each_aggm){
@@ -1626,6 +1643,16 @@ tm_plt %>%
         guides(fill=guide_legend(title="")) +
     geom_text(aes(label=round(value, 3)), size = 4, vjust=-0.5, position = position_dodge(width=0.9))
 ```
+
+```{r}
+df <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/transcription_factor_availability_2.txt')
+```
+
+```{r}
+df[df$TF == 'PR', ]
+```
+
+
 
 
 

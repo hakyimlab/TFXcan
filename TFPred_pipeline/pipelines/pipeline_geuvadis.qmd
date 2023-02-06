@@ -89,7 +89,7 @@ predictor_file <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/T
 predictor_file ; file.exists(predictor_file)
 ```
 ```{r}
-metadata_dir <- glue('{project_dir}/metadata')
+metadata_dir <- glue('{project_dir}/config_files')
 if(!dir.exists(metadata_dir)){
     dir.create(metadata_dir, recursive=T)
 } else {
@@ -103,15 +103,17 @@ enformer_parameters_json <- list()
 
 # '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
 enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/{dataset}_individuals.txt')
+enformer_parameters_json[['n_individuals']] <- 200
 enformer_parameters_json[['project_dir']] <- as.character(project_dir)
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['prediction_data_name']] <- dataset
 enformer_parameters_json[['TF']] <- TF
-enformer_parameters_json[['date']] <- data_date
+enformer_parameters_json[['date']] <- Sys.Date() #data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
 
 enformer_parameters_json[['vcf_split']] <- TRUE
 enformer_parameters_json[['vcf_files']] <- vcf_files
+
 
 #enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
 
@@ -119,15 +121,15 @@ enformer_parameters_json[['sub_dir']] <- TRUE
 enformer_parameters_json[['use_parsl']] <- T
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
 enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
-enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/config_files"
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
 enformer_parameters_json[['log_dir']] <- "cobalt_log"
-enformer_parameters_json[['batch_size']] <- 80
+enformer_parameters_json[['batch_size']] <- 40
 enformer_parameters_json[['predict_on_n_regions']] <- -1
 enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="24:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -144,3 +146,590 @@ param_file
 prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\nnohup python3 {project_dir}/scripts/enformer_predict/new_enformer_predict.py --param_config {param_file} > nohup_{TF}_{todays_date}.out &')
 prediction_cmd
 ```
+
+
+## Step 4: Collect/aggregate the predictions
+
+This aggregations section makes use of the final json file created from making predicitions to determine what to aggregate. 
+The user supplies what aggregation option.
+
+There are currently 7 valid options for aggregations:
+- aggByCenter:
+- aggByMean:
+- aggByUpstream:
+- aggByDownstream:
+- aggByUpstreamDownstream:
+- aggByPreCenter
+- aggByPostCenter
+
+Check that the appropriate scripts exist
+```{r}
+# check that the script exists
+aggregation_pbs_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions_pbs.sh")
+aggregation_pbs_script ; file.exists(aggregation_pbs_script)
+```
+
+```{r}
+aggregation_python_script <- glue("{project_dir}/scripts/utilities/aggregate_predictions.py")
+aggregation_python_script ; file.exists(aggregation_python_script)
+```
+
+```{r}
+aggregation_config <- glue("{project_dir}/config_files/aggregation_config_{dataset}_{TF}.json")
+aggregation_config ; file.exists(aggregation_config)
+```
+
+Aggregate the predictions
+
+```{r}
+agg_center <- 'aggByCenter'
+agg_precenter <- 'aggByPreCenter'
+agg_postcenter <- 'aggByPostCenter'
+agg_meancenter <- 'aggByMeanCenter'
+agg_mean <- 'aggByMean'
+agg_upstream <- 'aggByUpstream'
+agg_downstream <- 'aggByDownstream'
+agg_upstream_downstream <- 'aggByUpstreamDownstream'
+
+agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods
+```
+
+
+I am using parsl - so I don't need qsub
+```{r}
+aggregate_cmd <- glue("conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {aggregation_python_script} --metadata_file {aggregation_config} --agg_types \"{paste0(agg_methods, collapse = ' ')}\"")
+
+aggregate_cmd
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+
+### Step 5: Testing models on these individual data
+
+#### Stand alone script to collect prediction scores (TFScores)
+
+```{r}
+model_date <- '2023-01-24'
+model_dir <- glue('{project_dir}/models')
+model_id <- 'cistrome'
+model_types <- c('linear', 'logistic')
+predict_on <- glue('{project_dir}/metadata/1000_genome_individuals.txt')
+individuals_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
+
+run_date <- todays_date
+output_dir <- glue('{project_dir}/model_evaluation')
+if(!dir.exists(output_dir)){
+    dir.create(output_dir, recursive=T)
+} else {
+    print('Model evaluation directory exists.')
+}
+
+n_individuals <- 99
+
+# individuals_ground_truth_file <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{run_date}/ground_truth/{dataset}_{TF}_*.txt')
+# gt_file <- Sys.glob(glue('{individuals_ground_truth_file}'))
+```
+
+```{r}
+#; file.exists(pbs_script)
+evaluate_rscript <- glue('{project_dir}/scripts/utilities/enet_evaluate_geuvadis.R')
+if(file.exists(evaluate_rscript)){print('enet evaluate R script exists.')}
+```
+```{r}
+#; file.exists(pbs_script)
+evaluate_pbs_script <- glue('{project_dir}/scripts/utilities/enet_evaluate_geuvadis.sh')
+if(file.exists(evaluate_pbs_script)){print('enet evaluate pbs script exists.')}
+```
+
+```{r}
+# go through each model_types and predict_ons
+cmds <- c()
+for(model_type in model_types){
+    pbs_script <- glue('qsub -v evaluate_rscript={evaluate_rscript},model_dir={model_dir},model_id={model_id},model_type={model_type},predict_on={predict_on},individuals_data_dir={individuals_data_dir},n_individuals={n_individuals},TF={TF},run_date={model_date},output_dir={output_dir} {evaluate_pbs_script}')
+
+    cmds <- append(pbs_script, cmds)
+}
+print(cmds)
+
+```
+
+```{r}
+for(cmd in cmds){system(cmd)}
+#system(pbs_script)
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+
+# Evaluating the models on Geuvadis individuals
+```{r}
+library(ggthemes)
+library(ggsignif)
+library(ROCR)
+```
+
+```{r}
+#ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
+individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt', header=F)
+ind_names <- individuals$V1[1:99]#[-1]#[1:5
+ind_names
+```
+
+Read in the evaluations of the models
+```{r}
+model_evaluation_dir <- glue('{project_dir}/model_evaluation')
+```
+
+```{r}
+model_type <- 'logistic'
+individual_logistic_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{model_type}_evaluation_{model_date}.rds'))
+
+model_type <- 'linear'
+individual_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{model_type}_evaluation_{model_date}.rds'))
+```
+
+
+```{r}
+merge(
+    subset(individual_linear_eval$HG00096$aggByMean, id %in% common_regions[1:10]),
+    subset(individual_linear_eval$HG00097$aggByMean, id %in% common_regions[1:10]), 
+    by='id'
+)
+```
+
+
+## CWAS weights predictions
+
+```{r}
+predixcan_result_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/prediXcan/output'
+baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'top1')
+```
+
+```{r}
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/{baca_models[6]}/baca_cwas_predict.txt'))
+baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
+colnames(baca_predictions) <- baca_predictions[1, ]
+baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
+baca_predictions$region <- gsub('\\:|\\-', '_', baca_predictions[['region']])
+baca_predictions <- baca_predictions %>% dplyr::mutate(across(!region, as.numeric))
+baca_predictions[1:5, 1:5] |> summary()
+```
+
+```{r}
+# tfpred_result <- individual_linear_eval[[ind]]$aggByMeanCenter
+# tfpred_result[1:5, ]
+```
+
+```{r}
+aggm <- 'aggByMeanCenter'
+
+
+ind_names <- names(individual_linear_eval)
+out <- lapply(ind_names, function(each_ind){
+    a <- individual_linear_eval[[each_ind]][[aggm]]
+    #print(head(a))
+    colnames(a) <- c('region', each_ind)
+    return(a)
+})
+
+
+names(out) <- ind_names
+linear_agg_eval <- out %>% purrr::reduce(dplyr::inner_join, by='region')
+linear_agg_eval[1:5, 1:5]
+```
+
+```{r}
+common_regions <- intersect(linear_agg_eval$region, baca_predictions$region)
+length(common_regions)
+```
+
+```{r}
+linear_agg_eval[linear_agg_eval$region %in% common_regions[1:10], 1:5]
+```
+
+### Correlation
+```{r}
+dim(linear_agg_eval) ; dim(baca_predictions)
+```
+
+```{r}
+tfpred_ca <- linear_agg_eval %>% tibble::column_to_rownames('region')
+tfpred_ca <- tfpred_ca[common_regions, ]
+
+cwas_ca <- baca_predictions %>% tibble::column_to_rownames('region')
+cwas_ca <- cwas_ca[common_regions, ]
+```
+
+```{r}
+tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
+```
+
+```{r}
+region_correlations <- purrr::map(1:length(common_regions), function(i){
+    ca <- tfpred_ca[i, ] |> unlist() |> unname()
+    da <- cwas_ca[i, ] |> unlist() |> unname()
+    return(cor(ca, da, method='spearman'))
+}, .progress=T)
+
+region_correlations <- unlist(region_correlations)
+names(region_correlations) <- common_regions
+region_correlations <- region_correlations[!is.na(region_correlations)]
+region_correlations[1:5]
+```
+
+```{r}
+summary(region_correlations)
+```
+
+
+```{r}
+hist(region_correlations, main='', xlab=expression(italic(r) ~ ", correlation"), col='brown')
+mtext(glue('Distribution of correlations between CWAS {baca_models[6]} scores and TFPred scores \nfor {length(region_correlations)} regions'), adj=0, cex=1.5)
+```
+
+```{r}
+qqR2 <- function(corvec,nn,pad_neg_with_0 = FALSE,...)
+{
+## nn is the sample size, number of individuals used to compute correlation.
+## needs correlation vector as input.
+## nullcorvec generates a random sample from correlation distributions, under the null hypothesis of 0 correlation using Fisher's approximation.
+  if(pad_neg_with_0) corvec[corvec < 0 | is.na(corvec) ]=0
+  mm <- length(corvec)
+  nullcorvec = tanh(rnorm(mm)/sqrt(nn-3)) ## null correlation vector
+  qqplot(nullcorvec^2,corvec^2,...); abline(0,1, col='red')#; grid()
+}
+
+qqR <- function(corvec,nn,...)
+{
+## nn is the sample size, number of individuals used to compute correlation.
+## needs correlation vector as input.
+## nullcorvec generates a random sample from correlation distributions, under the null hypothesis of 0 correlation using Fisher's approximation.
+  mm <- length(corvec)
+  nullcorvec = tanh(rnorm(mm)/sqrt(nn-3)) ## null correlation vector
+  qqplot(nullcorvec,corvec,...); abline(0,1)#; grid()
+}
+
+
+qqunif = 
+  function(p,BH=T,CI=T,mlog10_p_thres=30,...)
+  {
+    ## thresholded by default at 1e-30
+    p=na.omit(p)
+    nn = length(p)
+    xx =  -log10((1:nn)/(nn+1))
+    
+    p_thres = 10^{-mlog10_p_thres}
+    if( sum( p < p_thres) )
+    {
+      warning(paste("thresholding p to ",p_thres) )
+      p = pmax(p, p_thres)
+    }
+    plot( xx,  -sort(log10(p)),
+          xlab=expression(Expected~~-log[10](italic(p))),
+          ylab=expression(Observed~~-log[10](italic(p))),
+          cex.lab=1,mgp=c(2,1,0),
+          ... )
+    abline(0,1,col='gray')
+    if(BH)
+    {
+      abline(-log10(0.05),1, col='red',lty=1)
+      abline(-log10(0.10),1, col='green',lty=2)
+      abline(-log10(0.25),1, col='blue',lty=3)
+      legend('topleft', c("FDR = 0.05","FDR = 0.10","FDR = 0.25"),
+             col=c('red','green','blue'),lty=1:3, cex=1)
+      abline(h=-log10(0.05/nn)) ## bonferroni
+    }
+    if(CI)
+    {
+      ## create the confidence intervals
+      c95 <- rep(0,nn)
+      c05 <- rep(0,nn)
+      ## the jth order statistic from a
+      ## uniform(0,1) sample
+      ## has a beta(j,n-j+1) distribution
+      ## (Casella & Berger, 2002,
+      ## 2nd edition, pg 230, Duxbury)
+      ## this portion was posted by anonymous on
+      ## http://gettinggeneticsdone.blogspot.com/2009/11/qq-plots-of-p-values-in-r-using-ggplot2.html
+      
+      for(i in 1:nn)
+      {
+        c95[i] <- qbeta(0.95,i,nn-i+1)
+        c05[i] <- qbeta(0.05,i,nn-i+1)
+      }
+      
+      lines(xx,-log10(c95),col='gray')
+      lines(xx,-log10(c05),col='gray')
+    }
+  }
+
+```
+
+```{r}
+par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+
+qqR(region_correlations, nn=length(region_correlations), frame.plot=F, pch=21, col='black', bg='black', cex.lab=1)
+qqR2(region_correlations, nn=length(region_correlations), frame.plot=F,pch=21, col='black', bg='black', cex.lab=1)
+
+mtext(glue('qqplot of R & {expression(R^2)} between CWAS scores and TFPred scores for {length(region_correlations)} regions'), side=3, line=-1.5, adj=0.05, cex=1.2, outer=TRUE)
+```
+
+```{r}
+qqR2(region_correlations, nn=length(region_correlations), frame.plot=F,pch=21, col='black', bg='black', cex.lab=1)
+mtext(glue('qqplot of R-squared between \nCWAS scores and TFPred scores for {length(region_correlations)} regions'), side=3, line=-1.5, adj=0.05, cex=1.2)
+```
+
+
+
+```{r}
+region_correlations_test <- purrr::map(1:length(common_regions), function(i){
+    ca <- tfpred_ca[i, ] |> unlist() |> unname()
+    da <- cwas_ca[i, ] |> unlist() |> unname() |> as.numeric()
+    return(cor.test(ca, da, method='spearman')$p.value)
+}, .progress=T)
+
+region_correlations_test <- unlist(region_correlations_test)
+names(region_correlations_test) <- common_regions
+region_correlations_test <- region_correlations_test[!is.na(region_correlations_test)]
+region_correlations_test[1:5]
+```
+
+```{r}
+par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+
+hist(region_correlations_test, main='', xlab=expression(italic(p) ~ ", p-value"), cex.lab=1)
+qqunif(region_correlations_test, frame.plot=F, pch=21, bg='black')
+mtext(glue('Distribution of correlation test pvalues between CWAS scores and TFPred scores \nfor {length(region_correlations)} regions'), side=3, line=-1, adj=0.05, cex=1.2, outer=TRUE) 
+```
+
+
+### Scatterplot for one individual
+```{r}
+ind <- 'HG00096'
+```
+```{r}
+lowest_pvalues <- sort(region_correlations_test, decreasing=F)[1:4]
+lowest_pvalues_loci <- names(lowest_pvalues)
+```
+
+```{r}
+cor_values <- region_correlations[lowest_pvalues_loci]
+cor_values
+```
+
+
+```{r}
+
+par(mfrow=c(2,2), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
+
+for(i in 1:length(lowest_pvalues_loci)){
+    x <- tfpred_ca[lowest_pvalues_loci[i], ] |> unlist() |> unname() |> as.numeric()
+    y <- cwas_ca[lowest_pvalues_loci[i], ] |> unlist() |> unname() |> as.numeric()
+
+    txt <- paste(lowest_pvalues_loci[i], ', p = ', formatC(lowest_pvalues[i], format = "e", digits = 2), ', ', expression(r), ' = ', round(cor_values[i] |> unname(), 2))
+
+    print(txt)
+    plot(x, y,
+        frame.plot=F, xlab='', ylab='', pch=21, col='black', bg='brown',
+        main=txt
+    )
+    abline(lm(y ~ x), col='red')
+    #abline(lm(x ~ y), col='red')
+}
+
+mtext(glue('CWAS {baca_models[6]} model scores vs {aggm} TFPred scores \nfor top 4 regions by pvalues across 99 individuals'), side=3, adj=0, cex=1.5, outer=T)
+mtext(glue('CWAS predictions'), side=2, adj=0.5, cex=1, outer=T)
+mtext(glue('TFPred scores'), side=1, adj=0.5, cex=1, outer=T)
+```
+
+### correlation across individuals
+
+```{r}
+tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
+```
+
+```{r}
+ind_cor_loci <- sapply(colnames(tfpred_ca), function(each_ind){
+    cor(tfpred_ca[common_regions, each_ind], cwas_ca[common_regions, each_ind])
+})
+
+```
+
+```{r}
+test_loci <- 'chr1_11151993_11152693'
+tfpred_ca[test_loci, ] |> unlist() |> unname() ; cwas_ca[test_loci, ] |> unlist() |> unname()
+```
+
+```{r}
+a <- cwas_ca[test_loci, ] |> unlist() |> unname()
+b <- tfpred_ca[test_loci, ] |> unlist() |> unname()
+```
+
+```{r}
+a[a < 0.1]
+b[b < 0.1]
+```
+
+```{r}
+dt <- cbind(a, b)
+dt <- dt[dt[, 'b'] < 0.1, ] |> as.data.frame()
+```
+
+```{r}
+with(dt, plot(a, b, xlab='cwas', ylab='TFPred'))
+```
+
+```{r}
+dt %>% ggplot() + aes(a, b) + geom_point() + geom_smooth()
+```
+
+
+
+
+```{r}
+plot(a, b, xlab='cwas', ylab='TFPred'
+)
+```
+
+```{r}
+cor(a, b, method='pearson')
+```
+
+
+
+```{r}
+test_loci %in% row.names(cwas_ca)
+```
+
+```{r}
+hg38_bed_files[hg38_bed_files$hg19_id == 'chr1:11212050-11212750', ]
+```
+
+
+```{r}
+barplot(ind_cor_loci, xaxt='n', xlab='individual', ylab=expression(italic(r)*', correlation'), cex.lab=1, col=ifelse(ind_cor_loci < 0, 'brown', 'blue'))
+mtext(glue('Correlation between CWAS {baca_models[6]} model scores and TFPred scores \nacross {nrow(tfpred_ca)} regions for 99 individuals'),line=0, cex=1.5, adj=0)
+```
+
+
+### Shuffling individuals in CWAS predictions
+
+```{r}
+# permute the individuals for CWAS prediction
+
+permutation_matrix <- matrix(NA, nrow=nrow(cwas_ca), ncol=1)
+
+for(i in 1:ncol(permutation_matrix)){
+    pm <- sample(1:ncol(cwas_ca), ncol(cwas_ca))
+    temp_cwas_ca <- cwas_ca[, pm]
+
+    rc <- purrr::map(1:length(common_regions), function(i){
+        ca <- tfpred_ca[i, ] |> unlist() |> unname()
+        da <- temp_cwas_ca[i, ] |> unlist() |> unname()
+        return(cor(ca, da))
+    }, .progress=T)
+
+    rc <- unlist(rc) |> unname()
+    permutation_matrix[ , i] <- rc
+}
+
+permutation_matrix[1:5, ]
+```
+
+```{r}
+permutation_pvalues <- matrix(NA, nrow=nrow(cwas_ca), ncol=1)
+
+for(i in 1:ncol(permutation_pvalues)){
+    pm <- sample(1:ncol(cwas_ca), ncol(cwas_ca))
+    temp_cwas_ca <- cwas_ca[, pm]
+
+    rc <- purrr::map(1:length(common_regions), function(i){
+        ca <- tfpred_ca[i, ] |> unlist() |> unname()
+        da <- temp_cwas_ca[i, ] |> unlist() |> unname()
+        return(cor.test(ca, da, method='spearman')$p.value)
+    }, .progress=T)
+
+    rc <- unlist(rc) |> unname()
+    permutation_pvalues[ , i] <- rc
+}
+
+permutation_pvalues[1:5, ]
+```
+
+```{r}
+par(mfrow=c(2,2), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
+
+for(i in 1:ncol(permutation_matrix)){
+    x <- permutation_matrix[, i][!is.na(permutation_matrix[, i])]
+    hist(x, main='', xlab=expression(italic(r) ~ ", correlation"), col='brown')
+    mtext(glue('permutation {i}'), adj=0, cex=1.5)
+
+}
+
+mtext(glue('Distribution of correlations between CWAS scores and TFPred scores \nfor {length(region_correlations)} regions'), adj=0, cex=1.5, outer=T)
+
+```
+
+```{r}
+
+#layout(matrix(c(1,2,3,4), 2, 2, byrow = TRUE), heights=c(6,6), widths=c(6, 6))
+
+
+plots_list <- list()
+
+plotit <- function(x, i){
+    par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+    hist(x, main='', xlab=expression(italic(p) ~ ", p-value"), cex.lab=1, col='brown')
+    qqunif(x, frame.plot=F, pch=21,bg='black')
+    mtext(glue('permutation test'), side=3, line=-1, adj=0.05, cex=1.2, outer=TRUE)
+}
+
+
+for(i in 1:ncol(permutation_pvalues)){
+
+    x <- permutation_pvalues[, i][!is.na(permutation_pvalues[, i])]
+    plots_list[[i]] <- function(){plotit(x=x, i=i)}
+    #mtext(glue('permutation {i}'), side=3, line=-1, adj=0.05, cex=1.2, outer=T)
+
+}
+
+```
+
+```{r}
+for(i in 1:length(plots_list)){
+    plots_list[[i]]()
+}
+```
+
+```{r}
+par(mfrow=c(2,1))
+plot(1:20)
+plot(1:20)
+```
+
+```{r}
+plot(1:20)
+p1 <- recordPlot()
+```
+
+```{r}
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+

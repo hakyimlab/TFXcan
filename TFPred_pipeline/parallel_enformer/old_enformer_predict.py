@@ -1,6 +1,6 @@
 # Usage: This script is used to predict on batches using ENFORMER on individuals' regions
 # Author: Temi
-# Date: Wed 25 Jan 2023
+# Date: Thursday 13 Jan 2023
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
@@ -23,6 +23,10 @@ whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os
 script_path = os.path.abspath(whereis_script)
 batch_utils_path = os.path.join(script_path, 'batch_utils')
 sys.path.append(batch_utils_path)
+
+# list of chromosomes 
+chromosomes = [f'chr{i}' for i in range(1, 23)]
+chromosomes.extend(['chrX'])
 
 # main 
 def main():
@@ -65,18 +69,8 @@ def main():
 
         # personalized parameters 
         individuals = parameters['individuals'] if sequence_source == 'personalized' else None
-        #vcf_file = parameters['vcf_file']if sequence_source == 'personalized' else None
-        vcf_files_dict = parameters['vcf_files'] if sequence_source == 'personalized' else None
-
-        # personalized parameters
-        if sequence_source == 'personalized':
-             # use only the chromosomes that have been made available in the config file vcf params
-            chromosomes = list(vcf_files_dict['files'].keys())
-        # list of chromosomes (if the sequence source is reference)
-        elif sequence_source == 'reference':
-            chromosomes = [f'chr{i}' for i in range(1, 23)]
-            chromosomes.extend(['chrX'])
-
+        vcf_file = parameters['vcf_file']if sequence_source == 'personalized' else None
+    
     # write the params_path to a config.json file in a predefined folder
     config_data = {'params_path': params_path}
     with open(f'{batch_utils_path}/config.json', mode='w') as cj:
@@ -111,10 +105,10 @@ def main():
             pass
         elif isinstance(individuals, type('str')):
             if os.path.isfile(individuals):
-                id_list = pd.read_table(individuals, header=None)[0].tolist()[0:99]
+                id_list = pd.read_table(individuals, header=None)[0].tolist()
             else:
                 id_list = [individuals]
-        #print(f'[INFO] Predicting for these individuals: {id_list}')
+        print(f'[INFO] Predicting for these individuals: {id_list}')
     elif sequence_source == 'reference':
         id_list = [prediction_data_name]
         print(f'[INFO] Predicting on a reference set')
@@ -128,77 +122,63 @@ def main():
     # better to read the file in and pass it around than to just pass the file path adn read it everytime
     logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
         
-    # list of intervals to be predicted on
-    a = pd.read_table(interval_list_file, sep=' ', header=None).dropna(axis=0)
-    #print(a.head())
-    list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
-    #print(list_of_regions[0:10])
-
-    # filter the list of chromosomes to be compatible with the available regions
-    chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
-    print(f'[INFO] Available chromosomes are: {chromosomes}')
+    for chromosome in chromosomes:
+        
 
     for each_id in id_list:
+
+        # I need to use the chromosome information
+
+        
+        # this is specific to an individual but is cached per individual
+        # I want to cache this but it is a bit tricky to do for now
+        #global make_cyvcf_object
+        if sequence_source == 'personalized':
+            def make_cyvcf_object(vcf_file=vcf_file, sample=each_id):
+                import cyvcf2
+                return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
+        elif sequence_source == 'reference':
+            make_cyvcf_object = None
+            pass
+        elif sequence_source == 'random':
+            make_cyvcf_object = None
+            pass
+
+        # create the directories for this individual 
+        if not os.path.exists(f'{output_dir}/{each_id}'):
+            print(f'[INFO] Creating output directory at {output_dir}/{each_id}')
+            os.makedirs(f'{output_dir}/{each_id}')
+
+        #print(f'{intervals_dir}/{each_id}_{TF}_*.txt')
+        #interval_list_file = glob.glob(f'{intervals_dir}/{each_id}_{TF}_*.txt')[0]
+        a = pd.read_table(interval_list_file, sep=' ', header=None)
+        list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
+
+        tic_prediction = time.perf_counter() # as opposed to process_time
+
+        batches = generate_batch(list_of_regions, batch_n=batch_size)
+        count = 0
         app_futures = []
+        for batch_query in tqdm.tqdm(batches, desc=f"[INFO] Creating futures for batch {count+1} of {batch_size}"):
+            app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count+1, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=logfile, predictions_log_file=logfile_csv))
 
+            count = count + 1
 
-        # filter where each_id is in the log file
-        if not logfile is None:
-            id_logfile = logfile.loc[logfile['individual'] == each_id, : ]
-        elif logfile is None:
-            id_logfile = logfile
-
-        for chromosome in chromosomes:
-            # print(chromosome)
-            # print(list_of_regions[0:5])
-            chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
-            #print(chr_list_of_regions[0:5])
-
-            if not chr_list_of_regions:
-                continue
-
-            chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
-            if sequence_source == 'personalized':
-                def make_cyvcf_object(vcf_file=chr_vcf_file, sample=each_id):
-                    import cyvcf2
-                    return(cyvcf2.cyvcf2.VCF(vcf_file, samples=sample))
-            elif sequence_source == 'reference':
-                make_cyvcf_object = None
-                pass
-            elif sequence_source == 'random':
-                make_cyvcf_object = None
-                pass
-
-            # create the directories for this individual 
-            if not os.path.exists(f'{output_dir}/{each_id}'):
-                print(f'[INFO] Creating output directory at {output_dir}/{each_id}')
-                os.makedirs(f'{output_dir}/{each_id}')
-
-            tic_prediction = time.perf_counter() # as opposed to process_time
-            batches = generate_batch(chr_list_of_regions, batch_n=batch_size)
-
-            count = 0
-            #app_futures = []
-            for batch_query in tqdm.tqdm(batches):
-                count = count + 1
-                #print(f"[INFO] Creating futures for batch {count} of {batch_size} batches for chromosome {chromosome}")
-                app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=id_logfile, predictions_log_file=logfile_csv))
-
-        #print(app_futures)
         if use_parsl == True:
-            exec_futures = [q.result() for q in tqdm.tqdm(app_futures, desc=f'[INFO] Executing futures for {len(app_futures)} batches')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futueares)} input regions')]
+            exec_futures = [q.result() for q in tqdm.tqdm(app_futures, desc=f'[INFO] Executing futures for all {len(app_futures)} batches')] #for q in tqdm.tqdm(query_futures, desc=f'[INFO] Executing futures for {len(query_futures)} input regions')]
 
         toc_prediction = time.perf_counter()
 
         print(f'[INFO] (time) to create inputs and predict on {len(list_of_regions)} queries is {toc_prediction - tic_prediction}')
 
         if use_parsl == True:
-            print(f'[INFO] Finished predictions for {each_id}: {exec_futures[0:10]} ...\n')
+            print(f'[INFO] Finished predictions for {each_id}: {exec_futures} ...\n')
         elif use_parsl == False:
             print(f'[INFO] Finished predictions for {each_id}: {app_futures} ...\n')
 
     print(f'[INFO] Finished predicting for all inputs.')
     
+
     if create_hdf5_file == True:
         print(f'[INFO] Creating HDF5 database(s)')
         finished_predictions = pd.read_csv(logfile_csv)
@@ -237,8 +217,6 @@ def main():
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{TF}.json` file to {metadata_dir}')
 
         agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'log_file':logfile_csv, 'sequence_source':prediction_data_name, 'run_date':run_date, 'transcription_factor':TF, 'individuals':individuals}
-
-        print(agg_dt)
 
         with(open(f'{metadata_dir}/aggregation_config_{prediction_data_name}_{TF}.json', mode='w')) as wj:
             json.dump(agg_dt, wj)     
