@@ -1,4 +1,8 @@
 
+# Usage
+# Author
+# Date
+
 library(data.table)
 library(dplyr)
 library(tidyr)
@@ -79,4 +83,30 @@ b <- gsub('eGFP-', '', a) |> sort()
 length(b)
 
 length(unique(b))
+
+
+
+# exploring cistrome db
+colnames(cistrome_db)
+
+TFs <- cistrome_db$Factor |> unique() |> as.data.frame() %>% dplyr::rename(TF=1)
+TFs |> head()
+
+TF_cell_type <- cistrome_db %>% dplyr::group_by(Factor, Cell_type) %>% dplyr::summarise(counts = n()) %>% dplyr::arrange(desc(counts))
+TF_cell_line <- cistrome_db %>% dplyr::group_by(Factor, Cell_line) %>% dplyr::summarise(counts = n()) %>% dplyr::arrange(desc(counts))
+TF_tissue_type <- cistrome_db %>% dplyr::group_by(Factor, Tissue_type) %>% dplyr::summarise(counts = n()) %>% dplyr::arrange(desc(counts))
+
+xls_file <- glue('{project_dir}/metadata/cistrome_db_metadata.xlsx')
+sheets_to_write <- list('All TFs' = TFs, 'TF-cellType pairs' = TF_cell_type, 'TF-cellLine pairs' = TF_cell_line, 'TF-tissueType pairs' = TF_tissue_type)
+openxlsx::write.xlsx(sheets_to_write, file = xls_file)
+
+library(xlsx)
+library(openxlsx)
+
+
+write.xlsx(TFs, file=xls_file, sheetName="CistromeDB-TFs", row.names=FALSE)
+write.xlsx(TF_cell_type, file=xls_file, sheetName="TF-cellType-pairs", append=TRUE, row.names=FALSE)
+write.xlsx(TF_cell_line, file=xls_file, sheetName="TF-cellLine-pairs", append=TRUE, row.names=FALSE)
+write.xlsx(TF_tissue_type, file=xls_file, sheetName="TF-Tissue-pairs", append=TRUE, row.names=FALSE)
+
 

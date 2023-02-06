@@ -1,10 +1,11 @@
 {
   "individuals": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt",
+  "n_individuals": 99,
   "project_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline",
   "interval_list_file": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/predictors/baca_cwas_AR_regions_hg38_2023-01-27.csv",
   "prediction_data_name": "geuvadis",
   "TF": "AR",
-  "date": "2023-01-27",
+  "date": "2023-02-01",
   "create_hdf5_file": false,
   "vcf_split": true,
   "vcf_files": {
@@ -39,7 +40,7 @@
   "use_parsl": true,
   "model_path": "/lus/grand/projects/covid-ct/imlab/data/enformer/raw",
   "hg38_fasta_file": "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
-  "metadata_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata",
+  "metadata_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/config_files",
   "output_dir": "enformer_predictions",
   "sequence_source": "personalized",
   "predictions_log_dir": "predictions_log",
@@ -55,7 +56,7 @@
   "parsl_parameters": {
     "job_name": "enformer_predict_geuvadis_AR",
     "num_of_full_nodes": 10,
-    "walltime": "24:00:00",
+    "walltime": "06:00:00",
     "min_num_blocks": 0,
     "max_num_blocks": 10,
     "queue": "preemptable"

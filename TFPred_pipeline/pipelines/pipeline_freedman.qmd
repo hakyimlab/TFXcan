@@ -264,11 +264,10 @@ predictor_file <- glue('{save_dir}/predictors/{dataset}_{TF}_{nrow(freedman_dr)}
 predictor_file
 ```
 
-
 ## Step 3: Predict on these regions with ENFORMER
 ### Create the enformer_parameters.json file
 ```{r}
-metadata_dir <- glue('{project_dir}/metadata')
+metadata_dir <- glue('{project_dir}/config_files')
 if(!dir.exists(metadata_dir)){
     dir.create(metadata_dir, recursive=T)
 } else {
@@ -276,21 +275,21 @@ if(!dir.exists(metadata_dir)){
 }
 ```
 
-
 ```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''), "chrX")
 valid_chromosomes
 ```
 
 ```{r}
 pat <- paste0('*.', valid_chromosomes, '.*vcf.gz$', collapse='|') # paste0('^', TF_info$DCid, collapse='_*|')
-vcfs_dir <- glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only')
+vcfs_dir <- glue('{imlab_dir}/data/freedman_vcfs/vcfs_2023-01-25') # /lus/grand/projects/covid-ct/imlab/data/freedman_vcfs/vcfs_2023-01-25
 grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
 ```
 
 ```{r}
 vcf_files <- lapply(valid_chromosomes, function(chr){
-    pat <- paste0('*.\\b', chr, '\\b.*vcf.gz$', collapse='|')
-    #print(pat)
+    pat <- paste0('^.*', chr, '_.*vcf.gz$', collapse='|')
+
     grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
 })
 names(vcf_files) <- valid_chromosomes
@@ -298,10 +297,9 @@ vcf_files
 ```
 
 ```{r}
-vcf_files <- list(folder=glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only'), files=vcf_files)
+vcf_files <- list(folder=vcfs_dir, files=vcf_files)
 vcf_files
 ```
-
 
 ```{r}
 list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
@@ -317,7 +315,8 @@ For now, I will do 4 individuals
 enformer_parameters_json <- list()
 
 # '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
-enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/individuals.txt')
+enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/{dataset}_individuals.txt')
+enformer_parameters_json[['n_individuals']] <- -1
 enformer_parameters_json[['project_dir']] <- as.character(project_dir)
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['prediction_data_name']] <- dataset
@@ -334,15 +333,15 @@ enformer_parameters_json[['sub_dir']] <- TRUE
 enformer_parameters_json[['use_parsl']] <- T
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
 enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
-enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata"
+enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/config_files"
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
 enformer_parameters_json[['log_dir']] <- "cobalt_log"
 enformer_parameters_json[['batch_size']] <- 40
 enformer_parameters_json[['predict_on_n_regions']] <- -1
-enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=4, "queue"="preemptable")
+enformer_parameters_json[['write_log']] <- list('memory'=T, 'error'=T, 'time'=F, 'cache'=T)
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -396,7 +395,7 @@ aggregation_python_script ; file.exists(aggregation_python_script)
 ```
 
 ```{r}
-aggregation_config <- glue("{project_dir}/metadata/aggregation_config_{dataset}_{TF}.json")
+aggregation_config <- glue("{project_dir}/config_files/aggregation_config_{dataset}_{TF}.json")
 aggregation_config ; file.exists(aggregation_config)
 ```
 
@@ -477,7 +476,7 @@ Remove/clean up all the aggregated batches
 model_dir <- glue('{project_dir}/models')
 model_id <- 'cistrome'
 model_types <- c('linear', 'logistic')
-predict_on <- glue('{project_dir}/metadata/individuals.txt')
+predict_on <- glue('{project_dir}/metadata/freedman_individuals.txt')
 individuals_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
 
 run_date <- todays_date
@@ -530,11 +529,12 @@ system('qstat -u temi')
 library(ggthemes)
 library(ggsignif)
 library(ROCR)
+library(glmnet)
 ```
 
 ```{r}
 #ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
-individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/individuals.txt', header=F)
+individuals <- data.table::fread(glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/{dataset}_individuals.txt'), header=F)
 ind_names <- individuals$V1#[-1]#[1:5
 ind_names
 ```
@@ -575,6 +575,7 @@ individual_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{m
 #### AUC plots per individual
 ```{r}
 # collect the prediction scores per individual (on the linear evaluations)
+#agg_methods <- agg_methods[!agg_methods == 'aggByMeanCenter']
 predicted_probabilities <- lapply(ind_names, function(each_ind){
 
     out <- lapply(agg_methods, function(each_method){
@@ -607,6 +608,21 @@ colnames(individual_aucs) <- ind_names
 individual_aucs
 ```
 
+```{r}
+
+individual_aucs %>% tibble::rownames_to_column('agg_method') %>% tidyr::pivot_longer(!agg_method) %>% ggplot(.) + aes(x=agg_method, y=value) + 
+geom_boxplot() + geom_jitter() + theme_bw() + 
+    theme(panel.border=element_blank(),
+        axis.text = element_text(size = 12, color='black'),
+        axis.text.x = element_text(angle=45, vjust=0.6),
+        axis.title = element_text(size=15, color='black'),
+        plot.title= element_text(size=18)) +
+    labs(title='AUC of TFPred predictions across individuals per aggregation method', x='aggregation method',y='AUC')
+#barplot(t(individual_aucs), beside=T)
+```
+
+
+
 #### I can predict on a random set and include the AUC too
 
 #### REad in the random set and match the binding counts by region
@@ -626,6 +642,10 @@ logistic_models_list <- purrr::map(.x=agg_methods, function(each_method){
 }, .progress=T)
 
 names(logistic_models_list) <- agg_methods
+```
+
+```{r}
+
 ```
 
 ```{r}
@@ -653,7 +673,7 @@ random_set <- purrr::map(.x=agg_methods, function(each_method){
     random_dt <- data.table::fread(random_agg_file)
 
     # merge
-    new_dt <- base::merge(random_gt, random_dt, by.x='region', by.y='V1')
+    new_dt <- base::merge(random_gt, random_dt, by.x='region', by.y='id')
     colnames(new_dt) <- c('region', 'class', 'binding_counts', 'binding_strength', paste('f_', 1:(ncol(new_dt)-4), sep=''))
 
     return(new_dt)
@@ -679,6 +699,21 @@ rownames(random_AUC) <- agg_methods
 colnames(random_AUC) <- 'random'
 random_AUC
 ```
+
+```{r}
+# pick and individuals and plot against
+
+individual_aucs %>% tibble::rownames_to_column('agg_method') %>% dplyr::select(agg_method, LuCaP_173) %>% dplyr::left_join((random_AUC %>% as.data.frame() %>% tibble::rownames_to_column('agg_method')), by='agg_method') %>% tidyr::pivot_longer(!agg_method) %>% ggplot(.) + 
+    aes(x=name, y=value) + geom_boxplot(width=0.5) + 
+    geom_jitter() + labs(x='individual or random data', y='AUC', title='AUC of TFPred\'s performance on \none individual vs random set/genome') +
+    theme_bw() + 
+    theme(panel.border=element_blank(),
+        axis.text = element_text(size = 12, color='black'),
+        axis.text.x = element_text(vjust=0.6),
+        axis.title = element_text(size=15, color='black'),
+        plot.title= element_text(size=18))
+```
+
 
 ```{r}
 individual_aucs <- individual_aucs %>% tibble::rownames_to_column('agg_method')
@@ -715,6 +750,49 @@ p <- ggplot(res_for_plot, aes(x=individual, y=factor(agg_method), fill=AUC)) +
     geom_text(aes(label = round(AUC, 3)), color = "black", size = 4) 
 
 p + geom_tile(data=auc_merged, aes(x=individual, y=factor(agg_method)), fill="transparent", colour="black", size=1)
+```
+
+```{r}
+colnames(res_for_plot) <- c("agg_method", "individual", "AUC")
+res_for_plot$AUC <- as.numeric(res_for_plot$AUC) %>% round(3)
+
+top_aucs <- res_for_plot %>% group_by(individual) %>% slice_max(order_by = AUC, with_ties = TRUE)
+
+auc_merged <- merge(res_for_plot, top_aucs)
+```
+
+
+```{r}
+library(scales)
+temps <- purrr::map(.x=names(linear_models_coefficients), function(each_aggm){
+    res_for_plot %>% 
+        dplyr::filter(agg_method == each_aggm) %>%
+        ggplot(.) + aes(x=individual, y=AUC) +
+        geom_bar(stat='identity') + 
+        scale_y_continuous(limits=c(0.4,1), oob = rescale_none) +
+        theme_bw()+ theme(axis.text.x=element_text(angle=45, vjust=1))
+})
+```
+
+```{r}
+temps[[1]]
+```
+
+
+```{r}
+p <- ggplot(res_for_plot, aes(x=individual, y=factor(agg_method), fill=AUC)) + 
+    geom_bar(stat='identity') +
+    theme_classic() 
+
+
+    # theme(text = element_text(size = 15), 
+    #     axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))  + 
+    # labs(title=glue("AUC of {TF} Cistrome models"),
+    #     x='individual', y='aggregation method/model', subtitle='Black borders represent highest AUCs across individuals') +
+    # scale_fill_gradientn(colours=c("white", "orange", "red"), limits = c(0.4, 1)) +
+    # geom_text(aes(label = round(AUC, 3)), color = "black", size = 4) 
+
+p #+ geom_tile(data=auc_merged, aes(x=individual, y=factor(agg_method)), fill="transparent", colour="black", size=1)
 ```
 
 
@@ -798,7 +876,7 @@ ttest_pvalues$aggByPreCenter$pvalues |> hist()
 ```
 
 ```{r}
-use_method <- 'aggByPreCenter'
+use_method <- 'aggByMeanCenter'
 dt_observed <- reshape2::melt(pscores_list[[use_method]]$observed, measure.vars = c(ind_names))
 dt_predicted <- reshape2::melt(pscores_list[[use_method]]$predicted, measure.vars = c(ind_names))
 
@@ -810,16 +888,19 @@ colnames(dt) <- c('region', 'individual', 'observed', 'predicted')
 ```{r}
 t_test_result <- t.test(dt$predicted ~ dt$observed)
 pv <- t_test_result$p.value
-est <- t_test_result$estimate
+est <- round(t_test_result$estimate, 2) |> unname()
 conf_int <- round(t_test_result$conf.int, 3)
-report_label <- glue('T test ({use_method} model), p < {ifelse(pv > 0, pv, "2.2e-16")}, \n95% conf. int.: {conf_int[1]} to {conf_int[2]}')
+report_label <- glue('t-test\nmean_0 = {est[1]}, mean_1 = {est[2]}\np < {ifelse(pv > 0, pv, "2.2e-16")}\n95% conf. int.: {conf_int[1]} to {conf_int[2]}')
 ```
 
-
 ```{r}
-boxplot(dt$predicted ~ dt$observed, frame.plot=F, col='palegreen1', ylab='predicted TFPred Scores', xlab='observed')
-points(est,col="red",pch=18, cex=2)
-mtext(report_label, adj = 0, line=1, cex=1.5)
+at.x <- seq(1,by=.5,length.out=2)
+
+boxplot(dt$predicted ~ dt$observed, frame.plot=F, col='orange', ylab=expression(beta * X ~ "/ Predicted TFPred Scores"), xlab='observed class', pch=20, boxwex=0.3, at = at.x)
+#points(est,col="red",pch=18, cex=2)
+mtext(glue('Distribution of {use_method} {TF}-linear scores \nacross the genome for all individuals'), adj=0, cex=1.5, line=0)
+mtext(report_label, adj = 0, line=-4, cex=1.0)
+#dev.off()
 ```
 
 ```{r}
@@ -924,7 +1005,7 @@ purrr::map(.x=agg_methods, function(each_agg){
 Here I take one aggregation method and grouped by individuals to plot the distribution of scores
 #### same plot as above but grouped by individual and for one aggregation model
 ```{r}
-use_method <- 'aggByPreCenter'
+use_method <- 'aggByMeanCenter'
 
 dt_observed <- reshape2::melt(pscores_list[[use_method]]$observed, measure.vars = c(ind_names))
 dt_predicted <- reshape2::melt(pscores_list[[use_method]]$predicted, measure.vars = c(ind_names))
@@ -976,8 +1057,8 @@ dt %>% mutate(observed=as.factor(observed)) %>%
     ggplot(.) + aes(x=.data[['individual']], y=.data[['predicted']]) + 
     geom_violin(aes(fill=.data[['observed']])) + 
     geom_boxplot(aes(fill=.data[['observed']]), position=position_dodge(0.9), width=0.2) +
-    geom_signif(annotation = ttest_pvalues, tip_length = 0.02, y_position = ytip, xmin = xmins, xmax = xmaxs) + theme_minimal() + ggthemes::geom_rangeframe() +
-    labs(title=use_method, y='TFPred score')
+    geom_signif(annotation = ttest_pvalues, tip_length = 0.02, y_position = ytip, xmin = xmins, xmax = xmaxs) + theme_minimal() +
+    labs(title=glue('{use_method} {TF}-linear scores by individual across the genome'), y='TFPred score') + theme(axis.text.x=element_text(angle=45, color='black'), axis.line.x = element_blank())
 
 ```
 
@@ -1007,6 +1088,13 @@ fgt <- freedman_ground_truth[freedman_ground_truth$region %in% pscores_list[[ind
 fgt[1:5, ] ; dim(fgt)
 ```
 
+```{r}
+pscores_list[[ind_names[1]]]$region[1:5]
+
+pscores_list$aggByPreCenter[[2]][1:5, ]
+```
+
+
 
 Create a list of list(aggmethod(observed, predicted))
 ```{r}
@@ -1033,7 +1121,7 @@ names(pscores_list) <- agg_methods
 ```
 
 ```{r}
-tempo <- pscores_list$aggByPreCenter
+tempo <- pscores_list[[use_method]]
 
 obs <- tempo$observed %>% select(-region) %>% as.matrix()
 rownames(obs) <- tempo$observed$region
@@ -1058,9 +1146,19 @@ for(cc in 1:nrow(obs) ) {
     tvec[cc] = res$statistic
 }
 
-hist(pvec)
-
 ```
+
+```{r}
+hist(pvec, xlab='pvalue', main='')
+mtext(glue('histogram of t-test pvalues \nacross 17 individuals for each loci'), adj=0, cex=1.5,line=0)
+```
+
+```{r}
+hist(tvec, xlab='t-statistic', main='')
+mtext(glue('distribution of t-statistic \nacross 17 individuals for each loci'), adj=0.1, cex=1.5,line=0)
+```
+
+
 
 
 Filter out the regions that are all 0 or 1 (since there will be no variability when doing the tests), and regions that are not bound or bound in less than 4 individuals
@@ -1103,7 +1201,66 @@ qqplot_extended <- function(pvector, main=NULL, ...) {
         xlim=c(0,max(exp)), ylim=c(0,max(obs)))
     lines(exp, exp, col="red")
 }
+
+qqunif = 
+  function(p,BH=T,CI=T,mlog10_p_thres=30,...)
+  {
+    ## thresholded by default at 1e-30
+    p=na.omit(p)
+    nn = length(p)
+    xx =  -log10((1:nn)/(nn+1))
+    
+    p_thres = 10^{-mlog10_p_thres}
+    if( sum( p < p_thres) )
+    {
+      warning(paste("thresholding p to ",p_thres) )
+      p = pmax(p, p_thres)
+    }
+    plot( xx,  -sort(log10(p)),
+          xlab=expression(Expected~~-log[10](italic(p))),
+          ylab=expression(Observed~~-log[10](italic(p))),
+          cex.lab=1,mgp=c(2,1,0),
+          ... )
+    abline(0,1,col='gray')
+    if(BH)
+    {
+      abline(-log10(0.05),1, col='red',lty=1)
+      abline(-log10(0.10),1, col='green',lty=2)
+      abline(-log10(0.25),1, col='blue',lty=3)
+      legend('bottomright', c("FDR = 0.05","FDR = 0.10","FDR = 0.25"),
+             col=c('red','green','blue'),lty=1:3, cex=1)
+      abline(h=-log10(0.05/nn)) ## bonferroni
+    }
+    if(CI)
+    {
+      ## create the confidence intervals
+      c95 <- rep(0,nn)
+      c05 <- rep(0,nn)
+      ## the jth order statistic from a
+      ## uniform(0,1) sample
+      ## has a beta(j,n-j+1) distribution
+      ## (Casella & Berger, 2002,
+      ## 2nd edition, pg 230, Duxbury)
+      ## this portion was posted by anonymous on
+      ## http://gettinggeneticsdone.blogspot.com/2009/11/qq-plots-of-p-values-in-r-using-ggplot2.html
+      
+      for(i in 1:nn)
+      {
+        c95[i] <- qbeta(0.95,i,nn-i+1)
+        c05[i] <- qbeta(0.05,i,nn-i+1)
+      }
+      
+      lines(xx,-log10(c95),col='gray')
+      lines(xx,-log10(c05),col='gray')
+    }
+  }
 ```
+
+```{r}
+qqunif(pvec, frame.plot=F, pch=20) 
+mtext(glue('qqplot of t-test pvalues \nacross 17 individuals for each loci'), adj=0, cex=1.5)
+```
+
 
 Calculate p-values with a t-test using one aggregation model
 ```{r}

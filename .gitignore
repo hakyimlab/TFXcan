@@ -11,6 +11,9 @@ old_scripts/
 *__*__/*
 TFPred_pipeline/*
 baca_cwas/*
+enformer_test/*
+geuvadis_individuals/*
+
 
 .*
 
@@ -30,6 +33,10 @@ baca_cwas/*
 !TFPred_pipeline/pipelines/
 !baca_cwas/predictors
 !baca_cwas/scripts
+!TFPred_pipeline/parallel_enformer
+!TFPred_pipeline/config_files
+!TFPred_pipeline/helpers
+
 
 
 

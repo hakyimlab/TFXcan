@@ -30,7 +30,6 @@ zip::unzip(ar_zip, files=files_to_read, exdir=output_dir)
 ```
 
 ```{r}
-
 ar_files <- list.files(glue('{output_dir}/{TF}'))
 ar_files_locus <- sapply(strsplit(x=ar_files, split='\\.'), getElement, 1)
 ar_files_locus[1:5]
@@ -53,6 +52,21 @@ out <- purrr::map(.x=1:length(ar_files_locus), .f=function(i){
 
 cwas_db <- do.call('rbind', out)
 ```
+
+```{r}
+# collect extra columns
+extra_dt <- purrr::map(.x=1:length(ar_files_locus), .f=function(i){
+    locus <- ar_files_locus[i]
+    load(glue('{output_dir}/{TF}/{locus}.wgt.RDat'), rdt <- new.env())
+    extra <- c(locus, TF, rdt$N.tot, rdt$N.as, rdt$cv.performance[c('rsq', 'pval'), c('lasso')] |> unname()) |> as.data.frame() |> t() |> unname()
+    return(extra)
+}, .progress=T)
+
+extra_dt <- do.call('rbind', extra_dt) |> as.data.frame()
+colnames(extra_dt) <- c('locus', 'TF', 'n_snps_in_window', "n.snps.in.model", "pred.perf.R2", "pred.perf.pval")
+extra_dt[1:5, ]
+```
+
 
 ```{r}
 dim(cwas_db) ; cwas_db[1:5, ]
@@ -146,6 +160,20 @@ write.table(hg19_snps, glue("{project_dir}/snps/hg19_snps.bed"), col.names=F, qu
 ```
 
 ```{r}
+tt <- dplyr::inner_join(extra_dt, hg38_bed_files, by=c('locus' = 'hg19_id'))
+tt$locus <- tt$hg38_id
+tt$hg38_id <- NULL
+tt$chr <- NULL
+tt[1:5, ]
+```
+
+```{r}
+write.table(tt, file=glue('{project_dir}/output/{TF}_baca_cwas_extra_hg38_2023-01-27.txt'), col.names=T, row.names=F, quote=F)
+```
+
+
+
+```{r}
 # lift over these files
 liftover_sh <-  "/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
 liftover_cmd <- '/lus/grand/projects/covid-ct/imlab/users/temi/software/liftOver'
@@ -194,6 +222,12 @@ tt[1:5, ] ; dim(tt)
 write.table(tt, file=glue('{project_dir}/output/{TF}_baca_cwas_weights_hg38_2023-01-27.txt'), col.names=T, row.names=F, quote=F)
 ```
 
+```{r}
+lo_snps <- data.table::fread(glue("{project_dir}/bed_files/baca_cwas_loci_hg38.bed"))
+colnames(lo_snps) <- 
+```
+
+
 #### Prepare the regions for ENFORMER
 ```{r}
 # write out the snps to a file
@@ -219,7 +253,114 @@ run_data <- Sys.Date()
 ```
 
 
+### start here
+
+```{r}
+library(RSQLite)
+library(dbplyr)
+library(DBI)
+```
+
+```{r}
+db_folder <- glue('{project_dir}/db_folder')
+if(!dir.exists(db_folder)){dir.create(db_folder)}
+```
+
+```{r}
+# write out the snps to a file
+baca_weights <- data.table::fread(glue('{project_dir}/output/{TF}_baca_cwas_weights_hg38_2023-01-27.txt'))
+baca_weights[1:5, ]
+
+baca_weights$varIDs <- with(baca_weights, paste0('chr', chr, '_', position, '_', a1, '_', a2, '_', 'b38', sep=''))
+```
+
+Baca has 6 models/weights
+
+```{r}
+baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'top1')
+```
+
+```{r}
+baca_extra <- data.table::fread(glue('{project_dir}/output/{TF}_baca_cwas_extra_hg38_2023-01-27.txt'))
+baca_extra <- baca_extra %>% dplyr::rename(gene=locus, genename=TF)
+baca_extra$pred.perf.qval <- NA
+baca_extra[1:5, ]
+```
+
+Predict_db format
+
+```{r}
+baca_weights_list <- purrr::map(.x=baca_models, function(each_m){
+    model_weights <- baca_weights %>% 
+        dplyr::select(gene=locus, rsid=snp_id, varID=varIDs, ref_allele=a1, eff_allele=a2, weight=as.symbol(each_m)) %>% as.data.frame()
+
+    each_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder}/baca_cwas_{each_m}.db'))
+    dbWriteTable(each_db, "extra", baca_extra, overwrite=T)
+    dbWriteTable(each_db, "weights", model_weights, overwrite=T)
+    dbDisconnect(each_db)
+
+    return(0)
+})
+
+names(baca_weights_list) <- baca_models
+```
+
+```{r}
+lasso_weights <- baca_weights %>% dplyr::select(gene=locus, rsid=snp_id, varID=varIDs, ref_allele=a1, eff_allele=a2, weight=lasso) %>% as.data.frame()
+lasso_weights[1:5, ]
+
+lasso_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder}/baca_cwas_lasso.db'))
+dbWriteTable(lasso_db, "extra", baca_extra, overwrite=T)
+dbWriteTable(lasso_db, "weights", lasso_weights, overwrite=T)
+dbDisconnect(lasso_db)
+```
+
 ```{r}
 
 ```
+
+extra column : dunno what this is
+```{r}
+predixcan_dir='/lus/grand/projects/covid-ct/imlab/users/temi/projects/prediXcan/tutorial'
+predict_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{predixcan_dir}/data/models/gtex_v8_en/en_Whole_Blood.db'))
+#dbplyr::src_dbi(predict_db)
+extra_dt <- tbl(predict_db, 'extra') %>% as.data.frame()
+extra_dt |> head()
+```
+
+```{r}
+cwas_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder}/baca_cwas_lasso.db'))
+dbplyr::src_dbi(cwas_db)
+```
+
+```{r}
+weights_tbl <- tbl(cwas_db, 'weights')
+weights_tbl# %>% dplyr::select(rsid)
+```
+
+```{r}
+extra_tbl <- tbl(cwas_db, 'extra')
+extra_tbl # %>% dplyr::select(rsid)
+```
+
+```{r}
+```
+
+
+```{r}
+dbDisconnect(cwas_db)
+```
+
+
+
+# prepare SQLite database
+
+
+```{r}
+
+```
+
+
+
+
 

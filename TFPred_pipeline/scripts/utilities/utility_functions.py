@@ -6,13 +6,14 @@ import numpy as np
     
 #     return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
 
-def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, base_path, save_dir, agg_types, batch_num=None):
+def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, save_dir, agg_types, batch_num=None):
 
     import h5py
     import numpy as np
     import os, sys, subprocess, tqdm
     import pandas as pd
     import multiprocessing
+    import itertools
 
     # these are the bins/ positions
     upstream = list(range(0, 7)) # or 0 to 7
@@ -64,21 +65,24 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, base
 
     if each_id in ['kawakami', 'cistrome']:
         pred_type = 'ref'
+        haplotypes = ['haplotype0']
     elif each_id in ['random']:
         pred_type = 'random'
+        haplotypes = ['haplotype0']
     else:
         pred_type = 'var'
+        haplotypes  = ['haplotype1', 'haplotype2']
 
     print(f'[INFO] Seeing {multiprocessing.cpu_count()} CPUs')
-    print(f'[INFO] Starting job for {each_id}')
+    print(f'[INFO] Starting to collect predictions for {each_id}')
 
-    def read_file(motif, dir = predictions_path):
+    def read_file(motif, dir, haplotype):
         import os
         import h5py
         import numpy as np
 
         output = {}
-        fle = f'{dir}/{motif}_predictions.h5'
+        fle = os.path.join(dir, haplotype, f'{motif}_predictions.h5')  #f'{dir}//{motif}_predictions.h5'
         if os.path.isfile(fle):
             with h5py.File(fle, 'r') as f:
                 filekey = list(f.keys())[0]
@@ -90,28 +94,46 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, base
 
     if __name__ == '__main__':
 
-        for agg_type in agg_types:
+        motifs_list = log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist()
+        print(len(motifs_list))
 
-            motifs_list = log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist()
-            print(len(motifs_list))
-            #print(motifs_list[0:5])
-
+        pooled_dictionary = {}
+        for haplotype in haplotypes:
             pool = multiprocessing.Pool(16)
-            outputs_list = pool.map(read_file, motifs_list)
+            outputs_list = pool.starmap(read_file, itertools.product(motifs_list, [predictions_path], [haplotype])) #pool.map(read_file, motifs_list) # 'haplotype1
+
             predictions =  {k: v for d in outputs_list for k, v in d.items()}
+            pooled_dictionary[haplotype] = predictions
 
-            print(f'[INFO] Successfully read all files: {len(predictions)}')
+        if len(haplotypes) == 2:
+            # check that the keys match
+            match_condition = sorted(list(pooled_dictionary[haplotypes[0]].keys())) == sorted(list(pooled_dictionary[haplotypes[1]].keys()))
+            if not match_condition:
+                raise Exception(f'[ERROR] Fatal: Haplotypes 1 and 2 regions are different.Haplotype1 length is {len(list(pooled_dictionary[haplotypes[0]].keys()))} abd Haplotype2 length is {len(list(pooled_dictionary[haplotypes[1]].keys()))}')
+            else:
+                # one one of them
+                ids = list(pooled_dictionary[haplotypes[0]].keys())
+                summed_pooled_dictionary = {id: np.add(pooled_dictionary[haplotypes[0]][id], pooled_dictionary[haplotypes[1]][id]) for id in ids}
 
-            data_dict = {}
-        
-            if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(predictions)
-            if agg_type == 'aggByMeanCenter': data_dict[agg_type] = agg_by_mean(predictions, use_bins=mean_center)
-            if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(predictions, center=center)
-            if agg_type == 'aggByPreCenter': data_dict[agg_type] = agg_by_center(predictions, center=pre_center)
-            if agg_type == 'aggByPostCenter': data_dict[agg_type] = agg_by_center(predictions, center=post_center)
-            if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=upstream)
-            if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=downstream)
-            if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(predictions, use_bins=upstream + downstream)
+        elif len(haplotypes) == 1:
+            summed_pooled_dictionary = pooled_dictionary[haplotypes[0]]
+        print(f'[INFO] Successfully read all files into pooled dictionary.')
+
+
+        for agg_type in agg_types:
+            try:
+                data_dict = {}
+                if agg_type == 'aggByMean': data_dict[agg_type] = agg_by_mean(summed_pooled_dictionary)
+                if agg_type == 'aggByMeanCenter': data_dict[agg_type] = agg_by_mean(summed_pooled_dictionary, use_bins=mean_center)
+                if agg_type == 'aggByCenter': data_dict[agg_type] = agg_by_center(summed_pooled_dictionary, center=center)
+                if agg_type == 'aggByPreCenter': data_dict[agg_type] = agg_by_center(summed_pooled_dictionary, center=pre_center)
+                if agg_type == 'aggByPostCenter': data_dict[agg_type] = agg_by_center(summed_pooled_dictionary, center=post_center)
+                if agg_type == 'aggByUpstream': data_dict[agg_type] = agg_by_mean(summed_pooled_dictionary, use_bins=upstream)
+                if agg_type == 'aggByDownstream': data_dict[agg_type] = agg_by_mean(summed_pooled_dictionary, use_bins=downstream)
+                if agg_type == 'aggByUpstreamDownstream': data_dict[agg_type] = agg_by_mean(summed_pooled_dictionary, use_bins=upstream + downstream)
+            
+            except ValueError as ve:
+                raise ValueError(f'[ERROR] Problem with arrays for {each_id}, {agg_type}')
 
             #ty = pd.concat([pd.Series(list(predictions.keys())), pd.DataFrame(dt)], axis=1)
             ty = pd.DataFrame(data_dict[agg_type])

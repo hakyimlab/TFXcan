@@ -61,7 +61,7 @@ def run_batch_predictions(batch_regions, batch_num, id, script_path, vcf_func, o
 
         tic = time.perf_counter()
 
-        reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_region=filtered_check_result, sample=id, model=None, vcf_func=vcf_func, output_dir=output_dir, predictions_log_file=predictions_log_file, batch_num=batch_num)
+        reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_regions=filtered_check_result, sample=id, model=None, vcf_func=vcf_func, output_dir=output_dir, predictions_log_file=predictions_log_file, batch_num=batch_num)
         
         toc = time.perf_counter()
 
