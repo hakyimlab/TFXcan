@@ -1,4 +1,6 @@
-
+# Usage: A module to check that things are fine and all that
+# Author: Temi
+# Date: Mon Feb 6 2023
 
 
 def check_queries(sample, queries, output_dir, prediction_logfiles_folder, sequence_source):
@@ -7,17 +9,21 @@ def check_queries(sample, queries, output_dir, prediction_logfiles_folder, seque
 
     Parameters:
         sample: str 
-            The name/id of an individual
-        queries: A batch
-            A region in the genome in the form `chr_start_end`.
+            The name/id of an individual/sample
+        queries: an iterable
+            A batch of regions each in the genome in the form `chr_start_end`.
         output_dir: str (path)
             The folder where the predictions should have been logged. 
-        logfile: pd.DataFrame 
-            A dataframe of a log file or `None` if the log file does not exist. 
+        prediction_logfiles_folder: a directory
+            A directory within which the {sample}_log.csv file should have been logged. 
+            If the file is not found, the regions are returned and will be logged after prediction.
+        sequence_source: str ('personalized' or 'reference')
+            where is the sequence sourced from? 
+            This argument is needed to know what folders to look into within the output directory.
     
     Returns: dict
         'query': the query region if it has not been logged or predictions don't exist
-        'logtype': whether it should be logged if it has not been logged
+        'logtype': whether it should be logged if it has not been logged i.e. 'y' or 'n'
 
     If predictions exist and the query has been logged, this function returns None.
     """

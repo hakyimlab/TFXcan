@@ -34,7 +34,6 @@ class FastaStringExtractor:
     def close(self):
         return self.fasta.close()
 
-
 @functools.lru_cache(5)
 def get_fastaExtractor(fasta_file):
     """
@@ -74,21 +73,24 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
         region: str
             A region in the genome in the form `chr_start_end`.
         fasta_func:
-            A function that returns a fastaExtractor object. This is currently not needed and depends on the `get_fastaExtractor` function in this module.
+            A function that returns a fastaExtractor object
         resize_for_enformer: bool
             Should a given region be resized to an appropriate input of 393216 bp for ENFORMER?
         resize_length: int or None
             If `resize_for_enformer` is false, resize the sequence up to the supplied argument. If None, resizing is not done. 
+        print_sequence: boolean
+            Should the extracted sequence be printed on the screen?
         write_log: bool
             Should info/error/warnings be written to a log file? Depends on the `setup_logger` and `logger` functions in this module as well as the `logging` module. 
-        script_path: str (path), default is the path to where this file is.
-            The path to this module.
 
     Returns: dict
         sequences: str
-            The sequences extracted from the fastaExtractor object
+            The one-hot encoded sequences extracted from the fastaExtractor object
         interval_object: kipoiseq.Interval object
             The interval object giving the chr, start, end, and other information.
+
+    Dependencies:
+        - `one_hot_encode` : A function to one-hot encode the extracted sequence
     """
 
     import kipoiseq
@@ -135,6 +137,24 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
 
 def find_variants_in_vcf_file(cyvcf2_object, interval_object, samples):
 
+    """
+    Given a cyvcf2 object and a kipoiseq.Interval object, as well as a list of samples, extract the variants for the samples for the intervals.
+
+    Parameters:
+        cyvcf2_object: A cyvcf2 object
+
+        interval_object: a kiposeq.Interval object
+            should have `chrom`, `start`, and `end` attributes
+        samples: list
+            a list of samples: [a, b, c]
+            At least one of these samples should be in the vcf file. 
+
+    Returns: dict
+        chr: the chromosome
+        position: the list of positions
+        sample: the samples and variants information
+    """
+
     #n_samples = len(samples)
 
     # check that samples are in the vcf file
@@ -162,6 +182,25 @@ def find_variants_in_vcf_file(cyvcf2_object, interval_object, samples):
 
 def create_mapping_dictionary(variants_array, interval_start, haplotype='both', sequence_source = 'reference', samples=None):
 
+    """
+    Given a cyvcf2 object and a kipoiseq.Interval object, as well as a list of samples, extract the variants for the samples for the intervals.
+
+    Parameters:
+        variants_array: the output of `find_variants_in_vcf_file`
+
+        interval_start: where does the extracted string interval start i.e. the coordinates
+        haplotype: should both haplotypes be extracted?
+
+        samples: list
+            a list of samples: [a, b, c]
+            At least one of these samples should be in the vcf file. 
+
+    Returns: dict
+        chr: the chromosome
+        position: the list of positions
+        sample: the samples and variants information
+    """
+
     # sequence_source is needed to do the right check
 
     import numpy as np
@@ -173,45 +212,63 @@ def create_mapping_dictionary(variants_array, interval_start, haplotype='both', 
     T = np.array([0,0,0,1], dtype=np.float32)
     seq_dict = {'A': A, 'C': C, 'G': G, 'T': T}
 
+    # collect common information
+    samples_haplotype_map = {}
+    samples_haplotype_map['positions'] = tuple(variants_array['positions'][i] - interval_start for i in range(len(variants_array['positions'])))
+    if samples is None:
+        samples = list(variants_array.keys())
+        samples.remove('chr')
+        samples.remove('positions')
+    else:
+        pass
+
+    # collect samples variants details
     if haplotype == 'hap1':
-        haplotype_map = {(variants_array[i][1] - interval_start): variants_array[i][3][0] for i in range(0, len(variants_array))}
-        return(haplotype_map)
-        #return({(k - interval_start): v for k, v in haplotype_map.items() if v is not None})
-    elif haplotype == 'hap2':
-        haplotype_map = {(variants_array[i][1] - interval_start): variants_array[i][3][1] for i in range(0, len(variants_array))}
-        return(haplotype_map)
-
-    elif haplotype == 'both':
-        samples_haplotype_map = {}
-        samples_haplotype_map['positions'] = tuple(variants_array['positions'][i] - interval_start for i in range(len(variants_array['positions'])))
-
-        if samples is None:
-            samples = list(variants_array.keys())
-            samples.remove('chr')
-            samples.remove('positions')
-        else:
-            pass
-        
         for i, sample in enumerate(samples):
-            samples_haplotype_map[sample] = {}
+            samples_haplotype_map[sample]['haplotype0'] = tuple(seq_dict[variants_array[sample][i][1][0]] for i in range(0, len(variants_array[sample])))
+    elif haplotype == 'hap2':
+        for i, sample in enumerate(samples):
+            samples_haplotype_map[sample]['haplotype0'] = tuple(seq_dict[variants_array[sample][i][1][1]] for i in range(0, len(variants_array[sample])))
+    elif haplotype == 'both':
+        for i, sample in enumerate(samples):
             samples_haplotype_map[sample]['haplotype1'] = tuple(seq_dict[variants_array[sample][i][1][0]] for i in range(0, len(variants_array[sample])))
             samples_haplotype_map[sample]['haplotype2'] = tuple(seq_dict[variants_array[sample][i][1][1]] for i in range(0, len(variants_array[sample])))
 
-        # check 
-        for sample in samples:
-            # reference 
-            if sequence_source == 'reference':
-                condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype0'])
-            elif sequence_source == 'personalized':
-                condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype1']) == len(samples_haplotype_map[sample]['haplotype2'])
+    # check 
+    for sample in samples:
+        # reference 
+        if sequence_source == 'reference':
+            condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype0'])
+        elif sequence_source == 'personalized':
+            condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype1']) == len(samples_haplotype_map[sample]['haplotype2'])
 
-            if not condition:
-                raise Exception('[ERROR] Fatal. {sample} positions and haplotypes do not match.')
+        if not condition:
+            raise Exception('[ERROR] Fatal. {sample} positions and haplotypes do not match.')
                 
-        return(samples_haplotype_map)
+    return(samples_haplotype_map)
 
     
 def replace_variants_in_reference_sequence(query_sequences_encoded, mapping_dict, samples=None):
+
+    """
+    Given a cyvcf2 object and a kipoiseq.Interval object, as well as a list of samples, extract the variants for the samples for the intervals.
+
+    Parameters:
+        variants_array: the output of `find_variants_in_vcf_file`
+
+        interval_start: where does the extracted string interval start i.e. the coordinates
+        haplotype: should both haplotypes be extracted?
+
+        samples: list
+            a list of samples: [a, b, c]
+            At least one of these samples should be in the vcf file. 
+
+    Returns: dict
+        chr: the chromosome
+        position: the list of positions
+        sample: the samples and variants information
+    """
+    
 
     import copy
     import numpy as np

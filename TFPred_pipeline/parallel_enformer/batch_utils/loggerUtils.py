@@ -46,11 +46,8 @@ def logger(msg, level, logfile):
     return None
 
 def write_logger(log_msg_type, logfile, message):
-
     if log_msg_type == 'memory': setup_logger('memory_log', logfile) ; logger(message, 'info', 'memory')
-
     if log_msg_type == 'cache': setup_logger('cache_log', logfile) ; logger(message, 'info', 'cache')
-
     if log_msg_type == 'error': setup_logger('error_log', logfile) ; logger(message, 'error', 'run_error')
 
 
@@ -78,13 +75,14 @@ def save_haplotypes_h5_prediction(haplotype_predictions, metadata, output_dir, s
 
     import h5py
     import os
+    import numpy
 
+    region = metadata['region']
     for key, values in haplotype_predictions.items():
         houtput = os.path.join(output_dir, sample, key)
         if not os.path.exists(houtput): os.makedirs(houtput)
+        h5save = str(f'{houtput}/{region}_predictions.h5')
         for i in range(0, values.shape[0]):
-            region = metadata['region']
-            h5save = str(f'{houtput}/{region}_predictions.h5')
             with h5py.File(h5save, 'w') as hf:
                 hf.create_dataset(region, data=values[i, :])
     

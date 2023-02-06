@@ -54,8 +54,12 @@ print(f'GPU Memory before calling batch predict function is {loggerUtils.get_gpu
 
 def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, output_dir, prediction_logfiles_folder, sequence_source):
 
+    # this could mean
+    # - check_queries returned nothing because
+        # - nothing should be returned - good ; and it should return none
+        # - something is wrong with check_queries ; and I should fix that
     if (not batch_regions) or (batch_regions is None):
-        raise Exception(f'[INFO] The batches are empty.')
+        raise Exception(f'[INFO] There are no regions in this batch {batch_num}.')
 
     # print(f'batch_regions are: {batch_regions}')
     # print(f'samples are: {samples}')
@@ -64,7 +68,7 @@ def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, ou
     # print(f'prediction_logfiles_folder are: {prediction_logfiles_folder}')
     # print(f'sequence_source are: {sequence_source}')
 
-    print(f'GPU Memory at start of batch predict function is {loggerUtils.get_gpu_memory()}')
+    print(f'GPU Memory at start of batch {batch_num} predict function is {loggerUtils.get_gpu_memory()}')
 
     if grow_memory == True:
         gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -81,9 +85,9 @@ def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, ou
         #model = enformer_model # check global definitions
         enformer_model = predictionUtils.get_model(model_path)
         fasta_extractor = sequencesUtils.get_fastaExtractor(fasta_file)
-        print('Fasta and model successfully loaded')
+        #print('Fasta and model successfully loaded')
         for input_region in batch_regions:
-            print(f'Creating sequences for {input_region}')
+            #print(f'Creating sequences for {input_region}')
             samples_enformer_inputs = sequencesUtils.create_input_for_enformer(region_details=input_region, samples=samples, path_to_vcf=path_to_vcf, fasta_func=fasta_extractor, hap_type = 'both', resize_for_enformer=True, resize_length=None, write_log=write_log, sequence_source=sequence_source)
 
             print(f'Region {input_region} sequences successfully created')
@@ -120,7 +124,7 @@ def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, ou
                     predictions_log_file = os.path.join(prediction_logfiles_folder, f'{sample}_log.csv')
                     loggerUtils.log_predictions(predictions_log_file=predictions_log_file, what_to_write=sample_logging_info)
 
-        if write_log['logypes']['memory']:
+        if write_log['logtypes']['memory']:
             if tf.config.list_physical_devices('GPU'):
                 mem_use = loggerUtils.get_gpu_memory()
                 msg_mem_log = f"[INFO] GPU memory at the end of prediction batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {loggerUtils.get_gpu_name()}"

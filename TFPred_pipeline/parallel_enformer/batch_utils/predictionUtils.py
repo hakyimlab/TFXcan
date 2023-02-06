@@ -6,10 +6,30 @@ import functools
 
 @functools.lru_cache(5)
 def get_model(model_path):
+    """
+    Return a tensorflow model
+
+    Parameters:
+        model_path: str
+            A path to where the tensorflow model exists
+    Returns: 
+        a tensorflow model
+    """
     import tensorflow as tf
     return tf.saved_model.load(model_path).model
 
 def enformer_predict_on_sequence(model, sample_input):
+    """
+    given a compatible sequence that has been one-hot encoded, predict on ENFORMER
+
+    Parameters:
+        model: a tensorflow model
+        sample_input: a (1, 393216, 4) np.array that is a one-hot encoding of a sequence
+
+    Returns: A dictionary
+        of the form {'haplotype': _predictions_}
+        _predictions_ is a numpy array of shape (17, 5313) numpy array of predictions
+    """
     
     prediction_output = {}
     for haplotype, sequence_encoding in sample_input.items():

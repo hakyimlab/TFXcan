@@ -15,23 +15,22 @@ def run_batch_predictions(batch_regions, samples, path_to_vcf, batch_num, script
             A list of regions with each element (region) in the form `chr_start_end`.
         batch_num: num
             The number of the batch e.g. batch 1, batch 2, e.t.c.
-        id: str
-            The unique id for predictions or the name of the individual, used to save the and name the folders (e.g. 'kawakami', 'freedman', )
+        samples: list
+            a list of samples: [a, b, c]
         output_dir: str (path)
-            Where should the predictions be saved? Predictions are saved as `{id}/{region}_predictions.h5` 
-        logfile: str (path)
-            When predictions are made, they are logged in this file. Also useful for checking the log to prevent re-predicting an existing prediction. 
+            Where should the predictions be saved? Predictions are saved as `{sample}/{haplotype0, haplotype1, haplotype2}/{region}_predictions.h5` 
+        path_to_vcf: str (path)
+            The path to the vcf file
+        prediction_logfiles_folder: str (path)
+            When predictions are made, they are logged in this folder and saved as {sample}_log.csv. Also useful for checking the log to prevent re-predicting an existing prediction. 
         script_path: str (path), default is the path to where this file is.
             The path to this module.
-        predictions_log_dir: str (path)
-            This is the folder wherein predictions will be logged.
+        sequence_source: one of 'personalized' or 'reference'
 
     Returns: num
         A single value of either 0 (if predictions were successful) or 1 (if there was a error).
         Check the call logs or stacks for the source of the error. 
     """
-  
-    #print(f'Starting on batch {batch_num}')
 
     import sys, os, faulthandler, time, itertools
 
@@ -44,12 +43,12 @@ def run_batch_predictions(batch_regions, samples, path_to_vcf, batch_num, script
         import checksUtils
         import predictUtils_two
     except ModuleNotFoundError as merr:
-        print(f'[ERROR] of type {type(merr)} at run_batch_predictions')
+        print(f'[ERROR] {type(merr).__name__} at run_batch_predictions')
 
     check_these = itertools.product(samples, [batch_regions])
     check_results = [checksUtils.check_queries(sample=cq[0], queries=cq[1], output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source) for cq in check_these]
 
-    # filter for nones
+    # filter out nones
     filtered_check_result = [r for r in check_results if r is not None]
     if not filtered_check_result: # i.e. if the list is empty
         return(1)
@@ -64,7 +63,7 @@ def run_batch_predictions(batch_regions, samples, path_to_vcf, batch_num, script
             reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_regions=filtered_check_result, samples=samples, path_to_vcf = path_to_vcf, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, batch_num=batch_num, sequence_source=sequence_source)
             
             toc = time.perf_counter()
-            print(f'[INFO] (time) to predict on this batch is {toc - tic}')
+            print(f'[INFO] (time) to predict on batch {batch_num} is {toc - tic}')
             return(reg_prediction) # returns 0 returned by enformer_predict
         else:
             return(1)
