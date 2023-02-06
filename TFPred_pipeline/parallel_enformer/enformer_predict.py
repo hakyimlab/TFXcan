@@ -2,7 +2,7 @@
 # Author: Temi
 # Date: Wed 25 Jan 2023
 
-from __future__ import absolute_import, division, print_function, unicode_literals
+#from __future__ import absolute_import, division, print_function, unicode_literals
 import os, sys, json
 import pandas as pd # for manipulating dataframes
 import time
@@ -158,7 +158,7 @@ def main():
 
     if use_parsl == True:
         print(f'[INFO] Executing parsl futures for {len(app_futures)} batches')
-        exec_futures = [q.result() for q in app_futures] 
+        #exec_futures = [q.result() for q in app_futures] 
         print(f'[INFO] Finished predictions: {exec_futures[0:10]} ...\n')
     elif use_parsl == False:
         print(f'[INFO] Finished predictions for: {app_futures} ...\n')
