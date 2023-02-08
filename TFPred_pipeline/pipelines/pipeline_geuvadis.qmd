@@ -28,7 +28,7 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```{r}
 dataset <- 'geuvadis'
 TF <- 'AR'
-todays_date <- data_date <- run_date <- "2023-01-27" #Sys.Date()
+todays_date <- data_date <- run_date <- Sys.Date()
 ```
 
 ```{r}
@@ -97,17 +97,30 @@ if(!dir.exists(metadata_dir)){
 }
 ```
 
+```{r}
+# check that your individuals are present in the vcf
+individuals_1kg <- data.table::fread(glue('{project_dir}/metadata/samples_1KG_vcf.txt'), header=F)$V1
+individuals_geuvadis <- data.table::fread(glue('{project_dir}/metadata/{dataset}_individuals.txt'), header=F)$V1
+```
+
+```{r}
+valid_individuals <- individuals_geuvadis[individuals_geuvadis %in% individuals_1kg]
+write.table(valid_individuals, file=glue('{project_dir}/metadata/valid_{dataset}_individuals.txt'), quote=F, row.names=F, col.names=F)
+```
+
+
+
 For now, I will do 4 individuals
 ```{r}
 enformer_parameters_json <- list()
 
 # '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
-enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/{dataset}_individuals.txt')
-enformer_parameters_json[['n_individuals']] <- 200
+enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/valid_{dataset}_individuals.txt')
+enformer_parameters_json[['n_individuals']] <- -1
 enformer_parameters_json[['project_dir']] <- as.character(project_dir)
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['prediction_data_name']] <- dataset
-enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['transcription_factor']] <- TF
 enformer_parameters_json[['date']] <- Sys.Date() #data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
 
@@ -125,11 +138,10 @@ enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imla
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
-enformer_parameters_json[['log_dir']] <- "cobalt_log"
 enformer_parameters_json[['batch_size']] <- 40
 enformer_parameters_json[['predict_on_n_regions']] <- -1
-enformer_parameters_json[['write_log']] <- list('memory'=F, 'error'=T, 'time'=F, 'cache'=F)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+enformer_parameters_json[['write_log']] <- list('logdir' = glue('{dataset}_{run_date}_log'), 'logtypes' = list('memory'=F, 'error'=T, 'time'=F, 'cache'=F))
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=20, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),

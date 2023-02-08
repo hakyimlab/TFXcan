@@ -70,9 +70,11 @@ def main():
 
         if sequence_source == 'personalized':
              # use only the chromosomes that have been made available in the config file vcf params
+            print(f'[INFO] Sequence source is {sequence_source}. Using a reference genome + vcf files.')
             chromosomes = list(vcf_files_dict['files'].keys())
         # list of chromosomes (if the sequence source is reference)
         elif sequence_source == 'reference':
+            print(f'[INFO] Sequence source is {sequence_source}. Using a reference genome.')
             chromosomes = [f'chr{i}' for i in range(1, 23)]
             chromosomes.extend(['chrX'])
 
@@ -112,7 +114,10 @@ def main():
                     id_list = pd.read_table(individuals, header=None)[0].tolist()[0:(n_individuals)]
             else:
                 id_list = [individuals]
-        print(f'[INFO] Predicting for these individuals: {id_list}')
+        if len(id_list) > 10:
+            print(f'[INFO] Predicting on {len(id_list)} individuals.')
+        else:
+            print(f'[INFO] Predicting for these individuals: {id_list}')
 
     elif sequence_source == 'reference':
         id_list = [prediction_data_name]
@@ -125,46 +130,49 @@ def main():
     prediction_logfiles_folder = f'{predictions_log_dir}/{prediction_data_name}_{transcription_factor}_{run_date}'
     if not os.path.isdir(prediction_logfiles_folder):
         os.makedirs(prediction_logfiles_folder)
-    print(id_list)
-    print(prediction_logfiles_folder)
-
-    #logfile_csvs = [pathlib.Path(os.path.join(f'{prediction_logfiles_folder}', f'{sample}_log.csv')).touch() for sample in id_list]
-
-    # better to read the file in and pass it around than to just pass the file path adn read it everytime
-    #logfile = pd.read_csv(logfile_csv) if os.path.isfile(logfile_csv) else None
         
     # list of intervals to be predicted on
     a = pd.read_table(interval_list_file, sep=' ', header=None).dropna(axis=0) #.drop_duplicates(subset=['motif', 'sample', 'status', 'sequence_source'], keep='last')
     list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
+    print(f'[INFO] Predicting on {len(list_of_regions)} regions')
 
     # filter the list of chromosomes to be compatible with the available regions
     chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
     print(f'[INFO] Chromosomes to predict on are: {chromosomes}')
 
-    # collect all chromosomes
-    app_futures = []
-    for chromosome in chromosomes:
-        chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
-        chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
-        if not chr_list_of_regions:
-            print(f'[WARNING] {chromosome} motif sites are not available.')
-            continue
-        batches = generate_batch(chr_list_of_regions, batch_n=batch_size)
-        count = 0
-        #app_futures = []
-        for batch_query in batches:
-            count = count + 1
-            app_futures.append(prediction_fxn(batch_regions=batch_query, samples=id_list, path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))
+    # batch the samples too
+    # if you have 1000 individuals, it may be too much
+    if len(id_list) > 20:
+        sample_batches = generate_batch_n_elems(id_list, n = 20) # 5 samples in each batch
+    else:
+        sample_batches = id_list
 
-    if use_parsl == True:
-        print(f'[INFO] Executing parsl futures for {len(app_futures)} batches')
-        #exec_futures = [q.result() for q in app_futures] 
-        print(f'[INFO] Finished predictions: {exec_futures[0:10]} ...\n')
-    elif use_parsl == False:
-        print(f'[INFO] Finished predictions for: {app_futures} ...\n')
+    for sample_list in sample_batches:
+        # collect all chromosomes
+        sample_app_futures = []
+        for chromosome in chromosomes:
+            chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
 
-    print(f'[INFO] Finished predicting for all inputs.')
-    print(f'[INFO] Success for all.')
+            if sequence_source == 'personalized':
+                chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
+            elif sequence_source == 'reference':
+                chr_vcf_file = None
+
+            if not chr_list_of_regions:
+                print(f'[WARNING] {chromosome} motif sites are not available.')
+                continue
+
+            region_batches = generate_n_batches(chr_list_of_regions, batch_n=batch_size) # batch_size total batches
+            count = 0
+            for region_list in region_batches:
+                sample_app_futures.append(prediction_fxn(batch_regions=region_list, samples=sample_list, path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))
+
+        if use_parsl == True:
+            print(f'[INFO] Executing parsl futures for {len(sample_app_futures)} batches')
+            exec_futures = [q.result() for q in sample_app_futures] 
+            print(f'[INFO] Finished predictions for all')
+        elif use_parsl == False:
+            print(f'[INFO] Finished predictions for: {sample_app_futures} ...')
         
     # == After predictions are complete, a json file will be written out to help with aggregation
     if sequence_source == 'reference':
