@@ -38,10 +38,12 @@ def logger(msg, level, logfile):
     if logfile == 'memory'   : log = logging.getLogger('memory_log')
     if logfile == 'cache'   : log = logging.getLogger('cache_log') 
     if logfile == 'run_error'    : log = logging.getLogger('error_log')
+    if logfile == 'time'    : log = logging.getLogger('time_log')
 
     if level == 'info'    : log.info(msg) 
     if level == 'warning' : log.warning(msg)
     if level == 'error'   : log.error(msg)
+    if level == 'time'    : log.info(msg)
 
     return None
 
@@ -49,6 +51,7 @@ def write_logger(log_msg_type, logfile, message):
     if log_msg_type == 'memory': setup_logger('memory_log', logfile) ; logger(message, 'info', 'memory')
     if log_msg_type == 'cache': setup_logger('cache_log', logfile) ; logger(message, 'info', 'cache')
     if log_msg_type == 'error': setup_logger('error_log', logfile) ; logger(message, 'error', 'run_error')
+    if log_msg_type == 'time' : setup_logger('time_log', logfile) ; logger(message, 'info', 'time')
 
 
 def log_predictions(predictions_log_file, what_to_write):
@@ -79,10 +82,12 @@ def save_haplotypes_h5_prediction(haplotype_predictions, metadata, output_dir, s
 
     region = metadata['region']
     for key, values in haplotype_predictions.items():
+        #print(f'[INFO] This is what is being saved {values.shape}')
         houtput = os.path.join(output_dir, sample, key)
         if not os.path.exists(houtput): os.makedirs(houtput)
         h5save = str(f'{houtput}/{region}_predictions.h5')
         for i in range(0, values.shape[0]):
+            #print(values[i, :].shape)
             with h5py.File(h5save, 'w') as hf:
                 hf.create_dataset(region, data=values[i, :])
     

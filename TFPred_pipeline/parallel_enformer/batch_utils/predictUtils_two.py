@@ -28,7 +28,7 @@ if __name__ == 'predictUtils_two':
             project_dir = parameters['project_dir']
 
         sequence_source = parameters['sequence_source']
-        log_dir = os.path.join(project_dir, parameters['write_log']['logdir'])
+        write_logdir = parameters['write_log']['logdir']
         write_log = parameters["write_log"]
         fasta_file = parameters['hg38_fasta_file']
         model_path = parameters['model_path']
@@ -38,7 +38,11 @@ if __name__ == 'predictUtils_two':
 #     if write_log['logtypes'][ltype]: os.makedirs
 
 if any([write_log['logtypes'][ltype] for ltype in ['memory', 'error', 'time', 'cache']]):
-    parameters['write_log']['logdir'] = os.path.join(f"{project_dir}", f"{parameters['write_log']['logdir']}")
+    write_log['logdir'] = os.path.join(project_dir, write_logdir)
+
+
+print(write_log)
+print( write_log['logdir'])
 
 #import checksUtils
 import loggerUtils
@@ -86,6 +90,7 @@ def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, ou
         enformer_model = predictionUtils.get_model(model_path)
         fasta_extractor = sequencesUtils.get_fastaExtractor(fasta_file)
         #print('Fasta and model successfully loaded')
+        logger_output = []
         for input_region in batch_regions:
             #print(f'Creating sequences for {input_region}')
             samples_enformer_inputs = sequencesUtils.create_input_for_enformer(region_details=input_region, samples=samples, path_to_vcf=path_to_vcf, fasta_func=fasta_extractor, hap_type = 'both', resize_for_enformer=True, resize_length=None, write_log=write_log, sequence_source=sequence_source)
@@ -107,44 +112,45 @@ def enformer_predict_on_batch(batch_regions, samples, path_to_vcf, batch_num, ou
                     sample_predictions = predictionUtils.enformer_predict_on_sequence(model=enformer_model, sample_input=samples_enformer_inputs['sequence'][sample])
                 elif samples_enformer_inputs['metadata']['sequence_source'] in ['ref', 'random']:
                     sample_predictions = predictionUtils.enformer_predict_on_sequence(model=enformer_model, sample_input=samples_enformer_inputs['sequence'])
-
-                print(f'Sample {sample} predictions successfully created.')
                 
                 # check that the predictions have the appropriate shapes
                 for hap in sample_predictions.keys():
+                    print(f'Sample {sample} {hap} predictions of shape {sample_predictions[hap].shape} successfully created and saved.')
                     if sample_predictions[hap].shape != (1, 17, 5313):
                         raise Exception(f'[ERROR] {sample}\'s {hap} predictions shape is {sample_predictions[hap].shape} and is not the right shape.')
                     
-                # otherwise, you can save the predictions
+                # otherwise, you can save the predictions ; prediction will be reshaped to (17, 5313) here
                 sample_logging_info = loggerUtils.save_haplotypes_h5_prediction(haplotype_predictions=sample_predictions, metadata=samples_enformer_inputs['metadata'], output_dir=output_dir, sample=sample)
-
-                print(f'Sample {sample} predictions successfully saved.')
 
                 if (sample_logging_info is not None) and (len(sample_logging_info) == 4):
                     predictions_log_file = os.path.join(prediction_logfiles_folder, f'{sample}_log.csv')
-                    loggerUtils.log_predictions(predictions_log_file=predictions_log_file, what_to_write=sample_logging_info)
+                    logger_output.append(loggerUtils.log_predictions(predictions_log_file=predictions_log_file, what_to_write=sample_logging_info))
+                else:
+                    logger_output.append(1)
 
         if write_log['logtypes']['memory']:
             if tf.config.list_physical_devices('GPU'):
                 mem_use = loggerUtils.get_gpu_memory()
                 msg_mem_log = f"[INFO] GPU memory at the end of prediction batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {loggerUtils.get_gpu_name()}"
-                MEMORY_LOG_FILE = f"{write_log['logdir']}/memory_usage.log"
+                MEMORY_LOG_FILE = os.path.join(write_log['logdir'], "memory_usage.log")
                 loggerUtils.write_logger(log_msg_type = 'memory', logfile = MEMORY_LOG_FILE, message = msg_mem_log)
 
         if write_log['logtypes']['cache']:
-            msg_cac_log = f'[INFO] Cache details (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}, {loggerUtils.get_gpu_name()}]'
-            CACHE_LOG_FILE = f"{write_log['logdir']}/cache_usage.log"
+            msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}, {loggerUtils.get_gpu_name()}]'
+            CACHE_LOG_FILE = os.path.join(write_log['logdir'], 'cache_usage.log')
             loggerUtils.write_logger(log_msg_type = 'cache', logfile = CACHE_LOG_FILE, message = msg_cac_log)
+
+        return(logger_output)
     
     except (TypeError, AttributeError) as tfe:
         if write_log['logtypes']['error']:
             if tf.config.list_physical_devices('GPU'):
                 mem_use = loggerUtils.get_gpu_memory()
-                err_mem_log = f"[ERROR] GPU memory error of type {type(tfe)} for batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {loggerUtils.get_gpu_name()}"
-                MEMORY_ERROR_FILE = f"{write_log['logdir']}/error_details.log"
+                err_mem_log = f"[ERROR] GPU memory error of type {type(tfe).__name__} for batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {loggerUtils.get_gpu_name()}"
+                MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
                 loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_mem_log)
         else:
-            raise Exception(f'[ERROR] of {type(tfe)} at batch {batch_num}')
+            raise Exception(f'[ERROR] of {type(tfe).__name__} at batch {batch_num}')
 
 
 

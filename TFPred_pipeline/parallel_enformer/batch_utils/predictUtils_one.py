@@ -43,7 +43,7 @@ def run_batch_predictions(batch_regions, samples, path_to_vcf, batch_num, script
         import checksUtils
         import predictUtils_two
     except ModuleNotFoundError as merr:
-        print(f'[ERROR] {type(merr).__name__} at run_batch_predictions')
+        raise Exception(f'[ERROR] {type(merr).__name__} at run_batch_predictions. Cannot locate either of `checkUtils` or `predictUtils_two` modules.')
 
     check_these = itertools.product(samples, [batch_regions])
     check_results = [checksUtils.check_queries(sample=cq[0], queries=cq[1], output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source) for cq in check_these]
@@ -85,7 +85,7 @@ def return_prediction_function(use_parsl, fxn=run_batch_predictions):
     elif use_parsl == False:
         return fxn
 
-def generate_batch(lst, batch_n, len_lst = None):
+def generate_n_batches(lst, batch_n, len_lst = None):
     """
     Given a list, this function yields batches of an unspecified size but the number of batches is equal to `batch_n`
     E.g. generate_batch([0, 1, 2, 3, 4, 5, 6], batch_n=2) -> (0, 1, 2, 3), (4, 5, 6)
@@ -108,6 +108,11 @@ def generate_batch(lst, batch_n, len_lst = None):
         
     for i in range(0, len(lst), n_elems):
         yield lst[i:(i + n_elems)]
+
+def generate_batch_n_elems(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
 
 
 def make_h5_db(h5_file, csv_file, files_list, files_path, dataset):

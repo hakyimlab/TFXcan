@@ -94,6 +94,7 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
     """
 
     import kipoiseq
+    import os
 
     SEQUENCE_LENGTH = 393216
 
@@ -108,9 +109,9 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
         region_start = int(region_split[1])
         region_end = int(region_split[2])
     except ValueError:
-        if (write_log is not None) and write_log['logtypes']['error']:
+        if (write_log is not None) and (write_log['logtypes']['error']):
             err_msg = f'[REGION ERROR] {region} input start or end is invalid.'
-            MEMORY_ERROR_FILE = f"{write_log['logdir']}/error_details.log"
+            MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
             loggerUtils.write_logger(log_msg_type='error', logfile=MEMORY_ERROR_FILE, message=err_msg)
         return(None)
     
@@ -128,8 +129,8 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
         print(ref_sequences)
 
     if (write_log is not None) and (write_log['logtypes']['cache'] == True):
-        msg_cac_log = f'[CACHE INFO] (fasta) [{fasta_func.cache_info()}, {loggerUtils.get_gpu_name()}, {region}]'
-        CACHE_LOG_FILE = f"{write_log['logdir']}/cache_usage.log"
+        msg_cac_log = f'[CACHE] (fasta) [{get_fastaExtractor.cache_info()} for {region}]'
+        CACHE_LOG_FILE = os.path.join(write_log['logdir'], 'cache_usage.log')
         loggerUtils.write_logger(log_msg_type='cache', logfile=CACHE_LOG_FILE, message=msg_cac_log)
 
     return({'sequence': one_hot_encode(ref_sequences), 'interval_object': reg_interval})
@@ -225,25 +226,28 @@ def create_mapping_dictionary(variants_array, interval_start, haplotype='both', 
     # collect samples variants details
     if haplotype == 'hap1':
         for i, sample in enumerate(samples):
+            samples_haplotype_map[sample] = {}
             samples_haplotype_map[sample]['haplotype0'] = tuple(seq_dict[variants_array[sample][i][1][0]] for i in range(0, len(variants_array[sample])))
+            condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype0'])
+            if not condition:
+                raise Exception(f'[ERROR] Fatal. {sample} positions and haplotypes do not match.')
+
     elif haplotype == 'hap2':
         for i, sample in enumerate(samples):
+            samples_haplotype_map[sample] = {}
             samples_haplotype_map[sample]['haplotype0'] = tuple(seq_dict[variants_array[sample][i][1][1]] for i in range(0, len(variants_array[sample])))
+            condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype0'])
+            if not condition:
+                raise Exception(f'[ERROR] Fatal. {sample} positions and haplotypes do not match.')
+
     elif haplotype == 'both':
         for i, sample in enumerate(samples):
+            samples_haplotype_map[sample] = {}
             samples_haplotype_map[sample]['haplotype1'] = tuple(seq_dict[variants_array[sample][i][1][0]] for i in range(0, len(variants_array[sample])))
             samples_haplotype_map[sample]['haplotype2'] = tuple(seq_dict[variants_array[sample][i][1][1]] for i in range(0, len(variants_array[sample])))
-
-    # check 
-    for sample in samples:
-        # reference 
-        if sequence_source == 'reference':
-            condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype0'])
-        elif sequence_source == 'personalized':
             condition = len(samples_haplotype_map['positions']) == len(samples_haplotype_map[sample]['haplotype1']) == len(samples_haplotype_map[sample]['haplotype2'])
-
-        if not condition:
-            raise Exception('[ERROR] Fatal. {sample} positions and haplotypes do not match.')
+            if not condition:
+                raise Exception(f'[ERROR] Fatal. {sample} positions and haplotypes do not match.')
                 
     return(samples_haplotype_map)
 
@@ -269,12 +273,10 @@ def replace_variants_in_reference_sequence(query_sequences_encoded, mapping_dict
         sample: the samples and variants information
     """
     
-
     import copy
     import numpy as np
 
     variant_encoded = {}
-
     if samples is None:
         samples = list(mapping_dict.keys())
         samples.remove('positions')
@@ -290,26 +292,26 @@ def replace_variants_in_reference_sequence(query_sequences_encoded, mapping_dict
             haps = ['haplotype1', 'haplotype2']
             for j in range(len(mapping_dict[sample])):
                 ref_i = copy.deepcopy(query_sequences_encoded) # very important
-
                 # check that ref_i is of the right shape
                 if ref_i.shape != query_sequences_encoded.shape:
                     raise Exception(f'[ERROR] Fatal. The shape of copied encoded sequence is {ref_i.shape}')
-
                 bases = mapping_dict[sample][haps[j]]
-
                 try:
                     ref_i[:, np.array(indices), : ] = bases
                 except IndexError:
                     # this is a hack - I need to find a way around this later
-                    try:
-                        if 393216 in indices:
-                            
-                            indexerror_index = indices.index(393216)
-                            popped_index = indices.pop(indexerror_index)
-                            popped_base = bases.pop(indexerror_index)
-                            print(f'[INFO] Encountered an index error for {sample}. Correcting... Removed {popped_index} & {popped_base}')
-                    except:
-                        raise Exception(f'[ERROR] Fatal. The shape of copied encoded sequence is {ref_i.shape} for {sample}: max {np.max(indices)} min {np.min(indices)}')
+                    if any([i in indices for i in [393216, 393215]]):
+                        indexerror_index = indices.index(393216) # there is an index called 393216 and it should be removed
+                        l_indices = list(indices) # turn indices into a list
+                        l_bases = list(bases) # turn bases into a list
+                        popped_index = l_indices.pop(indexerror_index) # remove the value at the index (should be 393216)
+                        popped_base = l_bases.pop(indexerror_index) # remove the value that the same index in bases (some np.array)
+
+                        print(f'[INFO] Encountered an index error for {sample}. Index 393216 was found. Correcting and removed {popped_index} & {popped_base}')
+                        ref_i[:, np.array(l_indices), : ] = l_bases
+                    else:
+                        print(f'[INFO] Encountered an index error for {sample}. Could not correct this error by removing {popped_index} & {popped_base}')
+                        continue
 
                 sample_output[haps[j]] = ref_i
 
@@ -318,7 +320,6 @@ def replace_variants_in_reference_sequence(query_sequences_encoded, mapping_dict
     
         variant_encoded[sample] = sample_output
     return(variant_encoded)
-
 
 
 def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, hap_type = 'both', resize_for_enformer=True, resize_length=None, write_log=None, sequence_source=None):
@@ -338,6 +339,8 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
     import numpy as np
     import cyvcf2
     import loggerUtils
+    import os
+    import time
 
     # print('Within create input function')
     # print(f'Regions are: {region_details}')
@@ -351,20 +354,35 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
     if sequence_source is None:
         raise Exception(f'[ERROR] Fatal. Please, pass in a genome sequence source e.g. personalized, reference, or random.')
 
+    tic = time.perf_counter()
+
     if sequence_source == 'random':
+        if (write_log is not None) and (write_log['logtypes']['time']):
+            toc = time.perf_counter()
+            time_used = toc - tic
+            TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
+            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+            loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
         return({'sequence': {'haplotype0': one_hot_encode(generate_random_sequence_inputs())}, 'metadata': {'sequence_source':'random', 'region':region, 'logtype': logtype}})
     else:
         reference_sequence = extract_reference_sequence(region=region, fasta_func=fasta_func, resize_for_enformer=resize_for_enformer, write_log=write_log, resize_length=resize_length)
         #print(f'Region {region} sequences successfully created within create input function')
         if np.all(reference_sequence['sequence'] == 0.25): # check if all the sequence are "NNNNNNNNNNN..."
             if (write_log is not None) and (write_log['logtypes']['error']):
-                err_msg = f'[INPUT ERROR] {region} is invalid; all nucleotides are N.'
-                MEMORY_ERROR_FILE = f"{write_log['logdir']}/error_details.log"
+                err_msg = f'[INPUT] {region} is invalid; all nucleotides are N.'
+                MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
                 loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
             return(None)
 
         else:
             if sequence_source == 'reference':
+                if (write_log is not None) and (write_log['logtypes']['time']):
+                            toc = time.perf_counter()
+                            time_used = toc - tic
+                            TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
+                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+                            loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
+
                 return({'sequence': {'haplotype0': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':region, 'logtype': logtype}})
             elif sequence_source == 'personalized':
                 # which vcf file
@@ -373,8 +391,32 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
 
                 if samples_variants: # go on and change the variants by position
                     samples_mapping_dictionary = create_mapping_dictionary(variants_array=samples_variants, interval_start = reference_sequence['interval_object'].start, haplotype=hap_type, sequence_source=sequence_source, samples=None)
-                    samples_variants_encoded = replace_variants_in_reference_sequence(query_sequences_encoded = reference_sequence['sequence'], mapping_dict = samples_mapping_dictionary, samples=None)
-                    return({'sequence': samples_variants_encoded, 'metadata': {'sequence_source':'var', 'region':region, 'logtype': logtype}})
+
+                    try:
+                        samples_variants_encoded = replace_variants_in_reference_sequence(query_sequences_encoded = reference_sequence['sequence'], mapping_dict = samples_mapping_dictionary, samples=None)
+
+                        if (write_log is not None) and (write_log['logtypes']['time']):
+                            toc = time.perf_counter()
+                            time_used = toc - tic
+                            TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
+                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+                            loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
+
+                        return({'sequence': samples_variants_encoded, 'metadata': {'sequence_source':'var', 'region':region, 'logtype': logtype}})
+                    except Exception as ex:
+                        err_msg = f'[ERROR] Fatal of type {type(ex).__name__} for {region}'
+                        if (write_log is not None) and (write_log['logtypes']['error']):
+                            MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
+                            loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
+                        else:
+                            raise Exception(err_msg)
 
                 else: # return the reference and no need for having the same reference genome for all samples since one is enough 
+                    if (write_log is not None) and (write_log['logtypes']['time']):
+                            toc = time.perf_counter()
+                            time_used = toc - tic
+                            TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
+                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+                            loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
+
                     return({'sequence':{'haplotype1': reference_sequence['sequence'], 'haplotype2': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':region, 'logtype': logtype, 'samples': samples}})
