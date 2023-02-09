@@ -2,6 +2,17 @@
 # Author: Temi
 # Date: Mon Feb 6 2023
 
+def return_samples_to_predict_on(query, logging_list_per_sample):
+    ss = [sample for sample in logging_list_per_sample.keys() if query in logging_list_per_sample[sample]]
+    return(ss)
+
+def return_sample_logging_type(sample, query_region, logging_dictonary):
+    result = [elem['logtype'] for elem in logging_dictonary[sample] if elem['query'] == query_region][0]
+
+    if not result:
+        return('n')
+
+    return(result)
 
 def check_queries(sample, queries, output_dir, prediction_logfiles_folder, sequence_source):
     """
@@ -50,14 +61,18 @@ def check_queries(sample, queries, output_dir, prediction_logfiles_folder, seque
                     queries_saved = [str(f'{output_dir}/{sample}/haplotype0/{query}_predictions.h5') for query in queries]
                     queries_saved = np.array([os.path.isfile(q) for q in queries_saved])
                 # check if the file is in the logfile
-                query_logged = np.array([(query in id_logfile.motif.values) for query in queries])
-                # 
-                if not query_logged.shape[0] == queries_saved.shape[0]:
+                queries_logged = np.array([(query in id_logfile.motif.values) for query in queries])
+                # s
+                if not queries_logged.shape[0] == queries_saved.shape[0]:
                     raise Exception("Lengths of queries logged and saved conditions are not the same")
-                queries_condition = queries_saved * query_logged # true should not be predicted or logged; False should be
+                queries_condition = queries_saved * queries_logged # true should not be predicted or logged; False should be
                 queries_condition = queries_condition.tolist()
                 # 
-                output = [{'query':queries[i], 'logtype':'y'} for i, qc in enumerate(queries_condition) if qc is False]
+                output = [{'query':queries[i], 'logtype':'y'} for i, qc in enumerate(queries_condition) if qc is False] # assuming all predictions have not been logged hence logtype is y
+
+                # change those regions where queries_logged == True to 'n'
+                refined_output = [q_details.update({'logtype': 'n'}) for i, q_details in enumerate(output) if queries_logged[i] == True]
+
             except pd.errors.EmptyDataError:
                 id_logfile = None
                 output = [{'query':query, 'logtype':'y'} for query in queries]

@@ -8,11 +8,12 @@ def polaris_htParslConfig(params):
     from parsl.launchers import MpiExecLauncher
     from parsl.addresses import address_by_hostname
     from parsl.providers import PBSProProvider
+    import os
 
     print(f'Parsl version: {parsl.__version__}')
     # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
     workingdir = params['working_dir']
-    rundir = f'{workingdir}/runinfo'
+    rundir = os.path.join(workingdir, 'runinfo')
     job_name = params['job_name']
     
     # I want to put the cobalt directives 

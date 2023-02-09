@@ -45,29 +45,42 @@ def run_batch_predictions(batch_regions, samples, path_to_vcf, batch_num, script
     except ModuleNotFoundError as merr:
         raise Exception(f'[ERROR] {type(merr).__name__} at run_batch_predictions. Cannot locate either of `checkUtils` or `predictUtils_two` modules.')
 
-    check_these = itertools.product(samples, [batch_regions])
-    check_results = [checksUtils.check_queries(sample=cq[0], queries=cq[1], output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source) for cq in check_these]
+    # check_these = itertools.product(samples, [batch_regions])
+    # check_results = [checksUtils.check_queries(sample=cq[0], queries=cq[1], output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source) for cq in check_these]
+
+    check_results = {sample: checksUtils.check_queries(sample=sample, queries=batch_regions, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source) for sample in samples}
+
+    filtered_check_result = {k: v for k, v in check_results.items() if k is not None}
+   # print(filtered_check_result)
+
+    #print(filtered_check_result)
 
     # filter out nones
-    filtered_check_result = [r for r in check_results if r is not None]
+    # filtered_check_result = [r for r in check_results if r is not None]
     if not filtered_check_result: # i.e. if the list is empty
         return(1)
     else:
         # unlist the list of dictionaries
-        filtered_check_result = [f for f in filtered_check_result for f in f]
-        filtered_check_result = list({v['query']: v for v in filtered_check_result}.values())
+        # filtered_check_result = [f for f in filtered_check_result for f in f]
+        # filtered_check_result = list({v['query']: v for v in filtered_check_result}.values())
 
-        if filtered_check_result:
+        pqueries = [v for k, v in filtered_check_result.items()]
+        pqueries = [l for l in pqueries for l in l]
+        pqueries = list(set([d['query'] for d in pqueries]))
+        # print(f'{len(pqueries)}')
+        #print(pqueries)
+
+        if pqueries:
+            samples = list(filtered_check_result.keys())
             tic = time.perf_counter()
 
-            reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_regions=filtered_check_result, samples=samples, path_to_vcf = path_to_vcf, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, batch_num=batch_num, sequence_source=sequence_source)
+            reg_prediction = predictUtils_two.enformer_predict_on_batch(batch_regions=pqueries, samples=samples, logging_dictionary=filtered_check_result, path_to_vcf = path_to_vcf, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, batch_num=batch_num, sequence_source=sequence_source)
             
             toc = time.perf_counter()
             print(f'[INFO] (time) to predict on batch {batch_num} is {toc - tic}')
             return(reg_prediction) # returns 0 returned by enformer_predict
         else:
             return(1)
-
 
 def return_prediction_function(use_parsl, fxn=run_batch_predictions):
     '''
