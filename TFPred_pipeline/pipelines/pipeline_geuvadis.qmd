@@ -308,11 +308,11 @@ individual_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{m
 
 
 ```{r}
-merge(
-    subset(individual_linear_eval$HG00096$aggByMean, id %in% common_regions[1:10]),
-    subset(individual_linear_eval$HG00097$aggByMean, id %in% common_regions[1:10]), 
-    by='id'
-)
+# merge(
+#     subset(individual_linear_eval$HG00096$aggByMean, id %in% common_regions[1:10]),
+#     subset(individual_linear_eval$HG00097$aggByMean, id %in% common_regions[1:10]), 
+#     by='id'
+# )
 ```
 
 

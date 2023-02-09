@@ -21,9 +21,7 @@ whereis_script = os.path.dirname(__file__) #os.path.dirname(sys.argv[0]) # or os
 script_path = os.path.abspath(whereis_script)
 batch_utils_path = os.path.join(script_path, 'batch_utils')
 sys.path.append(batch_utils_path)
-print(sys.path)
-
-#import check_input_parameters
+#print(sys.path)
 
 # main 
 def main():
@@ -32,13 +30,17 @@ def main():
 
     with open(f'{params_path}') as f:
         parameters = json.load(f)
+
+        prediction_data_name = parameters['prediction_data_name']
+        transcription_factor = parameters['transcription_factor']
+        run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
+
         if parameters['sub_dir'] == True:
-            project_dir = os.path.join(parameters['project_dir'], 'prediction_folder')
+            project_dir = os.path.join(parameters['project_dir'], 'predictions_folder', f'{prediction_data_name}_{transcription_factor}', f'predictions_{run_date}')
         else:
-            project_dir = parameters['project_dir']
+            project_dir = os.path.join(parameters['project_dir'], f'{prediction_data_name}_{transcription_factor}', f'predictions_{run_date}')
 
         interval_list_file = parameters['interval_list_file']
-        transcription_factor = parameters['transcription_factor']
         predictions_log_dir = os.path.join(project_dir, parameters['predictions_log_dir'])
         log_dir = os.path.join(project_dir, parameters['write_log']['logdir'])
         batch_size = int(parameters['batch_size'])
@@ -47,15 +49,14 @@ def main():
         n_regions = parameters["predict_on_n_regions"]
         parsl_parameters = parameters['parsl_parameters']
         sequence_source = parameters['sequence_source']
-        prediction_data_name = parameters['prediction_data_name']
+        
         create_hdf5_file = parameters["create_hdf5_file"]
-        run_date = parameters['date'] if parameters['date'] is not None else date.today().strftime("%Y-%m-%d")
-
+    
         metadata_dir = parameters['metadata_dir']
         if not os.path.isdir(metadata_dir):
             os.makedirs(metadata_dir)
 
-        output_dir = os.path.join(project_dir, parameters['output_dir'], parameters['prediction_data_name'] + '_' + parameters['transcription_factor'], 'predictions_' + run_date)
+        output_dir = os.path.join(project_dir, parameters['output_dir'])
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
 
@@ -93,6 +94,11 @@ def main():
         print(f'[INFO] Using parsl configuration: {use_parsl}')
         import parslConfiguration
         parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_parameters))
+    elif use_parsl == False:
+        print(f'[INFO] Using parsl configuration: {use_parsl}')
+        import parslConfiguration
+        parsl.load(parslConfiguration.polaris_localParslConfig(params=parsl_parameters))
+
 
     predict_utils_one = f'{script_path}/batch_utils/predictUtils_one.py'
     exec(open(predict_utils_one).read(), globals(), globals())
@@ -127,14 +133,14 @@ def main():
         print(f'[INFO] Predicting on a randomly generated set')
 
     # set log files to be put in a folder and touch the log files per sample
-    prediction_logfiles_folder = f'{predictions_log_dir}/{prediction_data_name}_{transcription_factor}_{run_date}'
+    prediction_logfiles_folder = predictions_log_dir
     if not os.path.isdir(prediction_logfiles_folder):
         os.makedirs(prediction_logfiles_folder)
         
     # list of intervals to be predicted on
     a = pd.read_table(interval_list_file, sep=' ', header=None).dropna(axis=0) #.drop_duplicates(subset=['motif', 'sample', 'status', 'sequence_source'], keep='last')
     list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
-    print(f'[INFO] Predicting on {len(list_of_regions)} regions')
+    print(f'[INFO] Predicting on {len(list_of_regions)} regions with at most {batch_size} regions for, at most, every 20 individuals ')
 
     # filter the list of chromosomes to be compatible with the available regions
     chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
@@ -142,37 +148,44 @@ def main():
 
     # batch the samples too
     # if you have 1000 individuals, it may be too much
-    if len(id_list) > 20:
+    if len(id_list) > 10:
         sample_batches = generate_batch_n_elems(id_list, n = 20) # 5 samples in each batch
     else:
-        sample_batches = id_list
+        sample_batches = [id_list] # put the list in a list
+        print(f'[INFO] There are less than 20 individuals i.e. {sample_batches}')
 
-    for sample_list in sample_batches:
-        # collect all chromosomes
-        sample_app_futures = []
-        for chromosome in chromosomes:
-            chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
+    # to make this fast, pass multiple regions to one parsl app
+    sample_app_futures = []
+    for chromosome in chromosomes:
+        chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
+        if sequence_source == 'personalized':
+            chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
+        elif sequence_source == 'reference':
+            chr_vcf_file = None
 
-            if sequence_source == 'personalized':
-                chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
-            elif sequence_source == 'reference':
-                chr_vcf_file = None
+        if not chr_list_of_regions:
+            print(f'[WARNING] {chromosome} motif sites are not available.')
+            continue
 
-            if not chr_list_of_regions:
-                print(f'[WARNING] {chromosome} motif sites are not available.')
-                continue
+        # I want many regions to be put in a parsl app
+        if len(chr_list_of_regions) > batch_size:
+            region_batches = generate_batch_n_elems(chr_list_of_regions, n=batch_size) # batch_size total batches
+        else:
+            region_batches = [chr_list_of_regions]
 
-            region_batches = generate_n_batches(chr_list_of_regions, batch_n=batch_size) # batch_size total batches
-            count = 0
-            for region_list in region_batches:
+        count = 0
+        for region_list in region_batches:
+            for sample_list in sample_batches:
+                #print(f'{len(region_list)} regions in {chromosome} for {len(sample_list)} samples')
                 sample_app_futures.append(prediction_fxn(batch_regions=region_list, samples=sample_list, path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))
 
-        if use_parsl == True:
-            print(f'[INFO] Executing parsl futures for {len(sample_app_futures)} batches')
-            exec_futures = [q.result() for q in sample_app_futures] 
-            print(f'[INFO] Finished predictions for all')
-        elif use_parsl == False:
-            print(f'[INFO] Finished predictions for: {sample_app_futures} ...')
+    if use_parsl == True:
+        print(f'[INFO] Executing parsl futures for {len(sample_app_futures)} parsl apps')
+        exec_futures = [q.result() for q in sample_app_futures] 
+        #print(sample_app_futures)
+        print(f'[INFO] Finished predictions for all')
+    elif use_parsl == False:
+        print(f'[INFO] Finished predictions for: {sample_app_futures} ...')
         
     # == After predictions are complete, a json file will be written out to help with aggregation
     if sequence_source == 'reference':
@@ -203,7 +216,15 @@ def main():
                     
 if __name__ == '__main__':
     #check_input_parameters.check_inputs(args.param_config)
+
+    # job stats will always be written
+    import time
+    job_start = time.perf_counter()
     main()
+    job_end = time.perf_counter()
+
+    job_runtime = job_end - job_start
+    print(f'[INFO] Completed job in {job_runtime} seconds.')
 
 
 
@@ -282,3 +303,26 @@ if __name__ == '__main__':
     #         for batch_query in batches:
     #             count = count + 1
     #             app_futures.append(prediction_fxn(batch_regions=batch_query, batch_num = count, id=each_id, vcf_func=make_cyvcf_object, script_path=script_path, output_dir=output_dir, logfile=id_logfile, predictions_log_file=logfile_csv))
+    
+
+
+
+    #for sample_list in sample_batches:
+    #     # collect all chromosomes
+    #     sample_app_futures = []
+    #     for chromosome in chromosomes:
+    #         chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
+
+    #         if sequence_source == 'personalized':
+    #             chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
+    #         elif sequence_source == 'reference':
+    #             chr_vcf_file = None
+
+    #         if not chr_list_of_regions:
+    #             print(f'[WARNING] {chromosome} motif sites are not available.')
+    #             continue
+
+    #         region_batches = generate_n_batches(chr_list_of_regions, batch_n=batch_size) # batch_size total batches
+    #         count = 0
+    #         for region_list in region_batches:
+    #             sample_app_futures.append(prediction_fxn(batch_regions=region_list, samples=sample_list, path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))

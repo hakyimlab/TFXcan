@@ -54,25 +54,6 @@ def write_logger(log_msg_type, logfile, message):
     if log_msg_type == 'time' : setup_logger('time_log', logfile) ; logger(message, 'info', 'time')
 
 
-def log_predictions(predictions_log_file, what_to_write):
-    #print('Writing log file')
-
-    import os, csv
-    #logfile_csv = f'{predictions_log_dir}/{id}_predictions_log.csv'
-    open_mode = 'a' if os.path.isfile(predictions_log_file) else 'w'
-
-    #if not query_status: # i.e. if the list is not empty
-    with open(predictions_log_file, open_mode, encoding='UTF8') as running_log_file:
-        logwriter = csv.writer(running_log_file)
-        if open_mode == 'w':
-            logwriter.writerow(['motif', 'sample', 'status', 'sequence_source']) # 
-        logwriter.writerow(what_to_write)
-
-        running_log_file.flush()
-        os.fsync(running_log_file)
-
-    return(0)
-
 
 def save_haplotypes_h5_prediction(haplotype_predictions, metadata, output_dir, sample):
 
@@ -90,10 +71,29 @@ def save_haplotypes_h5_prediction(haplotype_predictions, metadata, output_dir, s
             #print(values[i, :].shape)
             with h5py.File(h5save, 'w') as hf:
                 hf.create_dataset(region, data=values[i, :])
-    
-    if metadata['logtype'] == 'y':
-        output = [metadata['region'], sample, 'completed', metadata['sequence_source']]
-    else:
-        output = None
+
+    output = [metadata['region'], sample, 'completed', metadata['sequence_source']]
 
     return(output)
+
+def log_predictions(predictions_log_file, what_to_write):
+    #print('Writing log file')
+
+    import os, csv
+    #logfile_csv = f'{predictions_log_dir}/{id}_predictions_log.csv'
+    open_mode = 'a' if os.path.isfile(predictions_log_file) else 'w'
+
+    #if not query_status: # i.e. if the list is not empty
+    with open(predictions_log_file, open_mode, encoding='UTF8') as running_log_file:
+        logwriter = csv.writer(running_log_file)
+        if open_mode == 'w':
+            logwriter.writerow(['motif', 'sample', 'status', 'sequence_source', 'predict_time', 'retrieve_time']) # 
+        logwriter.writerow(what_to_write)
+
+        running_log_file.flush()
+        os.fsync(running_log_file)
+
+    return(0)
+
+
+

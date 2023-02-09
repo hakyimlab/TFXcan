@@ -109,10 +109,12 @@ def extract_reference_sequence(region, fasta_func=None, resize_for_enformer=True
         region_start = int(region_split[1])
         region_end = int(region_split[2])
     except ValueError:
+        err_msg = f'[REGION ERROR] {region} input start or end is invalid.'
         if (write_log is not None) and (write_log['logtypes']['error']):
-            err_msg = f'[REGION ERROR] {region} input start or end is invalid.'
             MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
             loggerUtils.write_logger(log_msg_type='error', logfile=MEMORY_ERROR_FILE, message=err_msg)
+        else:
+            raise Exception(err_msg)
         return(None)
     
     if resize_for_enformer == True:
@@ -322,7 +324,7 @@ def replace_variants_in_reference_sequence(query_sequences_encoded, mapping_dict
     return(variant_encoded)
 
 
-def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, hap_type = 'both', resize_for_enformer=True, resize_length=None, write_log=None, sequence_source=None):
+def create_input_for_enformer(query_region, samples, path_to_vcf, fasta_func, hap_type = 'both', resize_for_enformer=True, resize_length=None, write_log=None, sequence_source=None):
     '''
     Given a region in the genome, a reference genome (fasta) and a VCF file, create an individual's sequence for that region
 
@@ -348,8 +350,8 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
     # print(f'path_to_vcf are: {path_to_vcf}')
     # print(f'sequence_source are: {sequence_source}')
 
-    region = region_details['query']
-    logtype = region_details['logtype']
+    # region = region_details['query']
+    # logtype = region_details['logtype']
 
     if sequence_source is None:
         raise Exception(f'[ERROR] Fatal. Please, pass in a genome sequence source e.g. personalized, reference, or random.')
@@ -361,29 +363,30 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
             toc = time.perf_counter()
             time_used = toc - tic
             TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
-            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {query_region} ==> {time_used}'
             loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
-        return({'sequence': {'haplotype0': one_hot_encode(generate_random_sequence_inputs())}, 'metadata': {'sequence_source':'random', 'region':region, 'logtype': logtype}})
+        return({'sequence': {'haplotype0': one_hot_encode(generate_random_sequence_inputs())}, 'metadata': {'sequence_source':'random', 'region':query_region}})
     else:
-        reference_sequence = extract_reference_sequence(region=region, fasta_func=fasta_func, resize_for_enformer=resize_for_enformer, write_log=write_log, resize_length=resize_length)
+        reference_sequence = extract_reference_sequence(region=query_region, fasta_func=fasta_func, resize_for_enformer=resize_for_enformer, write_log=write_log, resize_length=resize_length)
         #print(f'Region {region} sequences successfully created within create input function')
         if np.all(reference_sequence['sequence'] == 0.25): # check if all the sequence are "NNNNNNNNNNN..."
+            err_msg = f'[INPUT] {query_region} is invalid; all nucleotides are N.'
             if (write_log is not None) and (write_log['logtypes']['error']):
-                err_msg = f'[INPUT] {region} is invalid; all nucleotides are N.'
                 MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
                 loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
+            else:
+                print(err_msg)
             return(None)
-
         else:
             if sequence_source == 'reference':
                 if (write_log is not None) and (write_log['logtypes']['time']):
-                            toc = time.perf_counter()
-                            time_used = toc - tic
-                            TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
-                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
-                            loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
+                    toc = time.perf_counter()
+                    time_used = toc - tic
+                    TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
+                    time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {query_region} ==> {time_used}'
+                    loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
 
-                return({'sequence': {'haplotype0': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':region, 'logtype': logtype}})
+                return({'sequence': {'haplotype0': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':query_region}})
             elif sequence_source == 'personalized':
                 # which vcf file
                 vcf_chr = cyvcf2.cyvcf2.VCF(path_to_vcf, samples=samples)
@@ -399,12 +402,12 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
                             toc = time.perf_counter()
                             time_used = toc - tic
                             TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
-                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {query_region} ==> {time_used}'
                             loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
 
-                        return({'sequence': samples_variants_encoded, 'metadata': {'sequence_source':'var', 'region':region, 'logtype': logtype}})
+                        return({'sequence': samples_variants_encoded, 'metadata': {'sequence_source':'var', 'region':query_region}})
                     except Exception as ex:
-                        err_msg = f'[ERROR] Fatal of type {type(ex).__name__} for {region}'
+                        err_msg = f'[ERROR] Fatal of type {type(ex).__name__} for {query_region}'
                         if (write_log is not None) and (write_log['logtypes']['error']):
                             MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
                             loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
@@ -416,7 +419,7 @@ def create_input_for_enformer(region_details, samples, path_to_vcf, fasta_func, 
                             toc = time.perf_counter()
                             time_used = toc - tic
                             TIME_USAGE_FILE = os.path.join(write_log['logdir'], 'time_usage.log')
-                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {region} ==> {time_used}'
+                            time_msg = f'[TIME] Time to create input sequence for {len(samples)}\'s {query_region} ==> {time_used}'
                             loggerUtils.write_logger(log_msg_type = 'time', logfile = TIME_USAGE_FILE, message = time_msg)
 
-                    return({'sequence':{'haplotype1': reference_sequence['sequence'], 'haplotype2': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':region, 'logtype': logtype, 'samples': samples}})
+                    return({'sequence':{'haplotype1': reference_sequence['sequence'], 'haplotype2': reference_sequence['sequence']}, 'metadata': {'sequence_source':'ref', 'region':query_region, 'samples': samples}})
