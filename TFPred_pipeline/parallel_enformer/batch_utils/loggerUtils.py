@@ -39,11 +39,13 @@ def logger(msg, level, logfile):
     if logfile == 'cache'   : log = logging.getLogger('cache_log') 
     if logfile == 'run_error'    : log = logging.getLogger('error_log')
     if logfile == 'time'    : log = logging.getLogger('time_log')
+    if logfile == 'run_summary' : log = logging.getLogger('summary_log')
 
     if level == 'info'    : log.info(msg) 
     if level == 'warning' : log.warning(msg)
     if level == 'error'   : log.error(msg)
     if level == 'time'    : log.info(msg)
+    #if level == 'summary' : log.info(msg)
 
     return None
 
@@ -52,6 +54,8 @@ def write_logger(log_msg_type, logfile, message):
     if log_msg_type == 'cache': setup_logger('cache_log', logfile) ; logger(message, 'info', 'cache')
     if log_msg_type == 'error': setup_logger('error_log', logfile) ; logger(message, 'error', 'run_error')
     if log_msg_type == 'time' : setup_logger('time_log', logfile) ; logger(message, 'info', 'time')
+    if log_msg_type == 'info' : setup_logger('summary_log', logfile) ; logger(message, 'info', 'run_summary')
+    if log_msg_type == 'warning' : setup_logger('summary_log', logfile) ; logger(message, 'warning', 'run_summary')
 
 
 
@@ -94,6 +98,24 @@ def log_predictions(predictions_log_file, what_to_write):
         os.fsync(running_log_file)
 
     return(0)
+
+def log_error_sequences(error_folder, what_to_write):
+    import os, csv
+
+    open_mode = 'a' if os.path.isfile(error_folder) else 'w'
+
+    #if not query_status: # i.e. if the list is not empty
+    with open(error_folder, open_mode, encoding='UTF8') as running_log_file:
+        logwriter = csv.writer(running_log_file)
+        if open_mode == 'w':
+            logwriter.writerow(['motif', 'reason']) # 
+        logwriter.writerow(what_to_write)
+
+        running_log_file.flush()
+        os.fsync(running_log_file)
+
+    return(0)
+
 
 
 

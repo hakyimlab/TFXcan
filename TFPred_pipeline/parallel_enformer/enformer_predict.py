@@ -23,6 +23,8 @@ batch_utils_path = os.path.join(script_path, 'batch_utils')
 sys.path.append(batch_utils_path)
 #print(sys.path)
 
+import loggerUtils
+
 # main 
 def main():
 
@@ -42,13 +44,14 @@ def main():
 
         interval_list_file = parameters['interval_list_file']
         predictions_log_dir = os.path.join(project_dir, parameters['predictions_log_dir'])
-        log_dir = os.path.join(project_dir, parameters['write_log']['logdir'])
+        job_log_dir = os.path.join(project_dir, parameters['write_log']['logdir'])
         batch_size = int(parameters['batch_size'])
         n_individuals = int(parameters['n_individuals'])
         use_parsl = parameters['use_parsl']
         n_regions = parameters["predict_on_n_regions"]
         parsl_parameters = parameters['parsl_parameters']
         sequence_source = parameters['sequence_source']
+        exclude_regions = parameters["exclude_regions"]
         
         create_hdf5_file = parameters["create_hdf5_file"]
     
@@ -87,8 +90,8 @@ def main():
     # modify parsl parameters to add the working directory
     parsl_parameters['working_dir'] = project_dir
 
-    if not os.path.isdir(log_dir):
-        os.makedirs(log_dir)
+    if not os.path.isdir(job_log_dir):
+        os.makedirs(job_log_dir)
 
     if use_parsl == True:
         print(f'[INFO] Using parsl configuration: {use_parsl}')
@@ -98,7 +101,6 @@ def main():
         print(f'[INFO] Using parsl configuration: {use_parsl}')
         import parslConfiguration
         parsl.load(parslConfiguration.polaris_localParslConfig(params=parsl_parameters))
-
 
     predict_utils_one = f'{script_path}/batch_utils/predictUtils_one.py'
     exec(open(predict_utils_one).read(), globals(), globals())
@@ -146,6 +148,16 @@ def main():
     chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
     print(f'[INFO] Chromosomes to predict on are: {chromosomes}')
 
+    # should some regions be excluded?
+    if exclude_regions == True:
+        # seach for the invalid_regions.csv file
+        exclude_file = os.path.join(job_log_dir, 'invalid_queries.csv')
+        if os.path.isfile(exclude_file):
+            exclude_these_regions = pd.read_csv(exclude_file)['motif'].tolist()
+            print(f'[INFO] Excluding these regions {exclude_these_regions} from the input regions.')
+            list_of_regions = [l for l in list_of_regions if l not in exclude_these_regions]  
+            print(f'[INFO] New length of regions to predict on is {len(list_of_regions)}')
+        
     # batch the samples too
     # if you have 1000 individuals, it may be too much
     if len(id_list) > 10:
@@ -186,7 +198,23 @@ def main():
         print(f'[INFO] Finished predictions for all')
     elif use_parsl == False:
         print(f'[INFO] Finished predictions for: {sample_app_futures} ...')
+
+    # write summary
+    # decorate the prediction function with or without parsl
+    if use_parsl:
+        check_fxn = return_check_function(use_parsl)
+
+        SUMMARY_FILE = os.path.join(job_log_dir, f'{prediction_data_name}_{transcription_factor}_{run_date}.summary')
+
+        summary_futures = []
+        for sample in id_list:
+            summary_futures.append(check_fxn(sample=sample, predictions_folder=output_dir, log_folder=prediction_logfiles_folder, interval_list_file=interval_list_file, exclude_csv=exclude_file, sequence_source=sequence_source))
         
+        print(summary_futures)
+        summary_exec = [q.result() for q in summary_futures]
+        final_output = [loggerUtils.write_logger(log_msg_type=so['logtype'], logfile=SUMMARY_FILE, message=so['logmessage']) for so in summary_exec]
+        print(f'[INFO] Check {SUMMARY_FILE} for summary of the entire run.')
+
     # == After predictions are complete, a json file will be written out to help with aggregation
     if sequence_source == 'reference':
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
@@ -200,8 +228,6 @@ def main():
         print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
 
         agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'prediction_logfiles_folder':prediction_logfiles_folder, 'prediction_data_name':prediction_data_name, 'sequence_source': sequence_source, 'run_date':run_date, 'transcription_factor':transcription_factor, 'individuals':individuals, 'n_individuals':n_individuals}
-
-        print(agg_dt)
 
         with(open(f'{metadata_dir}/aggregation_config_{prediction_data_name}_{transcription_factor}.json', mode='w')) as wj:
             json.dump(agg_dt, wj)     
