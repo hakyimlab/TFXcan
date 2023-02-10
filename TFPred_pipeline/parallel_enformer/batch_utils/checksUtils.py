@@ -14,6 +14,7 @@ def return_sample_logging_type(sample, query_region, logging_dictonary):
 
     return(result)
 
+
 def check_queries(sample, queries, output_dir, prediction_logfiles_folder, sequence_source):
     """
     Check whether a given region, for an individual has been predicted and logged.
@@ -49,6 +50,7 @@ def check_queries(sample, queries, output_dir, prediction_logfiles_folder, seque
     else:
         id_logfile = os.path.join(prediction_logfiles_folder, f'{sample}_log.csv')
         if os.path.isfile(id_logfile):
+            #print(f'Logfile found for {sample}')
             try:
                 id_logfile = pd.read_csv(id_logfile) 
                 id_logfile = id_logfile.loc[id_logfile['sample'] == sample, : ]
@@ -67,16 +69,37 @@ def check_queries(sample, queries, output_dir, prediction_logfiles_folder, seque
                     raise Exception("Lengths of queries logged and saved conditions are not the same")
                 queries_condition = queries_saved * queries_logged # true should not be predicted or logged; False should be
                 queries_condition = queries_condition.tolist()
-                # 
-                output = [{'query':queries[i], 'logtype':'y'} for i, qc in enumerate(queries_condition) if qc is False] # assuming all predictions have not been logged hence logtype is y
+                # by default , log type is yes
+                # id = queries.index('chr15_54740749_54740758')
+                # print(queries_saved[id])
+                # print(queries_logged[id])
+                
+                output = [{'query': queries[i], 'logtype':'y'} if qc is False else None for i, qc in enumerate(queries_condition)]
+
+                # get indices that are nones
+                none_ids = [i for i, q in enumerate(output) if q is None]
+
+                # safely filter out the nones 
+                #queries_saved = [q for i, q in enumerate(queries_saved) if i not in none_ids]
+                queries_logged = [q for i, q in enumerate(queries_logged) if i not in none_ids]
+                output = [q for i, q in enumerate(output) if i not in none_ids]
+                #print(output)
+                # assuming all predictions have not been logged hence logtype is y
 
                 # change those regions where queries_logged == True to 'n'
-                refined_output = [q_details.update({'logtype': 'n'}) for i, q_details in enumerate(output) if queries_logged[i] == True]
+                refined_output = [q_details.update({'logtype': 'n'}) if queries_logged[i] == True else q_details.update({'logtype': 'y'}) for i, q_details in enumerate(output)]
+
+                return(output)
 
             except pd.errors.EmptyDataError:
                 id_logfile = None
                 output = [{'query':query, 'logtype':'y'} for query in queries]
+                return(output)
         else:
             output = [{'query':query, 'logtype':'y'} for query in queries]
-              
-        return(output)
+            return(output)
+
+
+
+
+

@@ -43,7 +43,10 @@ if __name__ == 'predictUtils_two':
 # for ltype in ['memory', 'error', 'time', 'cache']:
 #     if write_log['logtypes'][ltype]: os.makedirs
 
+
 if any([write_log['logtypes'][ltype] for ltype in ['memory', 'error', 'time', 'cache']]):
+    write_log['logdir'] = os.path.join(project_dir, write_logdir)
+else:
     write_log['logdir'] = os.path.join(project_dir, write_logdir)
 
 #import checksUtils
@@ -68,12 +71,12 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
     if (not batch_regions) or (batch_regions is None):
         raise Exception(f'[INFO] There are no regions in this batch {batch_num}.')
 
-    print(f'batch_regions are: {batch_regions}')
-    print(f'samples are: {samples}')
-    print(f'path_to_vcf are: {path_to_vcf}')
-    print(f'output_dir are: {output_dir}')
-    print(f'prediction_logfiles_folder are: {prediction_logfiles_folder}')
-    print(f'sequence_source are: {sequence_source}')
+    # print(f'batch_regions are: {batch_regions}')
+    # print(f'samples are: {samples}')
+    # print(f'path_to_vcf are: {path_to_vcf}')
+    # print(f'output_dir are: {output_dir}')
+    # print(f'prediction_logfiles_folder are: {prediction_logfiles_folder}')
+    # print(f'sequence_source are: {sequence_source}')
 
     #print(f'GPU Memory at start of batch {batch_num} predict function is {loggerUtils.get_gpu_memory()}')
 
@@ -98,6 +101,7 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
         dlist = {sample: [elem['query'] for elem in logging_dictionary[sample]] for sample in logging_dictionary.keys()}
 
         for input_region in batch_regions: # input_region is chr1_10_20
+            #print(input_region)
             # sift 
             v_samples = checksUtils.return_samples_to_predict_on(query=input_region, logging_list_per_sample=dlist)
 
@@ -115,7 +119,6 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
             # check that all the samples are accounted for
             #print(sorted(list(samples_enformer_inputs['sequence'].keys())))
             if samples_enformer_inputs is None:
-                print('YYYYYYYaaaaayyyy')
                 logger_output.append(2)
                 continue
 
@@ -139,26 +142,32 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
                     
                     # check that the predictions have the appropriate shapes
                     for hap in sample_predictions.keys():
-                        print(f'Sample {sample} {hap} predictions of shape {sample_predictions[hap].shape} successfully created and saved.')
                         if sample_predictions[hap].shape != (1, 17, 5313):
                             raise Exception(f'[ERROR] {sample}\'s {hap} predictions shape is {sample_predictions[hap].shape} and is not the right shape.')
+                        else:
+                            print(f'Sample {sample} {input_region} {hap} predictions are of the correct shape:  {sample_predictions[hap].shape}')
                         
                     # otherwise, you can save the predictions ; prediction will be reshaped to (17, 5313) here
                     sample_logging_info = loggerUtils.save_haplotypes_h5_prediction(haplotype_predictions=sample_predictions, metadata=samples_enformer_inputs['metadata'], output_dir=output_dir, sample=sample)
 
+                    print(f'Sample {sample} {input_region} haplotypes predictions have been saved.')
+
                     # check logging info/dictionary for the sample and the region
                     logging_type = checksUtils.return_sample_logging_type(sample=sample, query_region=input_region, logging_dictonary=logging_dictionary)
+                    #print(logging_type)
 
                     if logging_type == 'y':
                         if (sample_logging_info is not None) and (len(sample_logging_info) == 4):
                             predictions_log_file = os.path.join(prediction_logfiles_folder, f'{sample}_log.csv')
                             sample_logging_info.extend([predict_time, retrieve_time])
                             logger_output.append(loggerUtils.log_predictions(predictions_log_file=predictions_log_file, what_to_write=sample_logging_info))
-                    else:
+                        print(f'Sample {sample} {input_region} haplotypes predictions have been logged.')
+                    elif logging_type == 'n':
                         logger_output.append(1)
+                        continue
                 
-            mem_use = loggerUtils.get_gpu_memory()
-            msg_mem_log = f"[INFO] GPU memory at the end of prediction batch {batch_num}): free {mem_use[0]} mb, used {mem_use[1]} mb on {loggerUtils.get_gpu_name()}"
+            mem_use = loggerUtils.get_gpu_memory() # [123, 456]#
+            msg_mem_log = f"[MEMORY] (GPU) at the end of batch {batch_num} prediction: free {mem_use[0]} mb, used {mem_use[1]} mb on " 
             if write_log['logtypes']['memory']:
                 if tf.config.list_physical_devices('GPU'):
                     MEMORY_LOG_FILE = os.path.join(write_log['logdir'], "memory_usage.log")
@@ -166,7 +175,7 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
             else:
                 print(msg_mem_log)
 
-            msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}, {loggerUtils.get_gpu_name()}]'
+            msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}]'
             if write_log['logtypes']['cache']:
                 CACHE_LOG_FILE = os.path.join(write_log['logdir'], 'cache_usage.log')
                 loggerUtils.write_logger(log_msg_type = 'cache', logfile = CACHE_LOG_FILE, message = msg_cac_log)

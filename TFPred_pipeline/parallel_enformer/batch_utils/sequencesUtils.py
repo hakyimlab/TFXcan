@@ -370,12 +370,15 @@ def create_input_for_enformer(query_region, samples, path_to_vcf, fasta_func, ha
         reference_sequence = extract_reference_sequence(region=query_region, fasta_func=fasta_func, resize_for_enformer=resize_for_enformer, write_log=write_log, resize_length=resize_length)
         #print(f'Region {region} sequences successfully created within create input function')
         if np.all(reference_sequence['sequence'] == 0.25): # check if all the sequence are "NNNNNNNNNNN..."
-            err_msg = f'[INPUT] {query_region} is invalid; all nucleotides are N.'
-            if (write_log is not None) and (write_log['logtypes']['error']):
-                MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
-                loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
-            else:
-                print(err_msg)
+            error_folder = os.path.join(write_log['logdir'], 'invalid_queries.csv')
+            loggerUtils.log_error_sequences(error_folder=error_folder, what_to_write=[query_region, 'NNN* sequences'])
+
+            # err_msg = f'[INPUT] {query_region} is invalid; all nucleotides are N.'
+            # if (write_log is not None) and (write_log['logtypes']['error']):
+            #     MEMORY_ERROR_FILE = os.path.join(write_log['logdir'], 'error_details.log')
+            #     loggerUtils.write_logger(log_msg_type = 'error', logfile = MEMORY_ERROR_FILE, message = err_msg)
+            # else:
+            #     print(err_msg)
             return(None)
         else:
             if sequence_source == 'reference':
