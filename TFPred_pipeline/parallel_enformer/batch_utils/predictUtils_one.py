@@ -181,7 +181,9 @@ def check_predictions_and_logs(sample, predictions_folder, log_folder, interval_
     if not isinstance(sequence_source, str):
         raise Exception(f'[ERROR] `sequence_source` argument should be a str of a valid sequence source (either `personalized` or `reference`). You supplied a {sequence_source}')
 
-    if os.path.isfile(exclude_csv):
+    if exclude_csv is None:
+        exclude_these_regions = None
+    elif os.path.isfile(exclude_csv):
         exclude_these_regions = pd.read_csv(exclude_csv)['motif'].tolist()
     else:
         exclude_these_regions = None
@@ -192,6 +194,9 @@ def check_predictions_and_logs(sample, predictions_folder, log_folder, interval_
             queries = [q for q in queries if q not in exclude_these_regions]
     else:
         raise Exception(f'[ERROR] Interval list file {interval_list_file} does not exist.')
+
+    # temporary solutions => remove nans
+    queries = [q for q in queries if str(q) != 'nan']
     
     logged_queries = pd.read_csv(os.path.join(log_folder, f'{sample}_log.csv'))['motif'].tolist()
 
@@ -211,10 +216,10 @@ def check_predictions_and_logs(sample, predictions_folder, log_folder, interval_
     queries_condition = queries_condition.tolist()
 
     if all(queries_condition):
-        message = f'[SUCCESS] For {sample}, all predictions match all logged queries in the interval list files minus excluded regions, if any.'
+        message = f'SUCCESS - For {sample}, all predictions match all logged queries in the interval list files minus excluded regions, if any.'
         return({'logtype': 'info', 'logmessage':message})
     else:
-        message = f'[Minor SUCCESS] For {sample}, either all predictions don\'t match all logged queries in the interval list files minus excluded regions or vice versa. So, we recommend re-running the enformer prediction pipeline with the same parameters. You may supply a csv file of regions to exclude if available, but this should not matter.'
+        message = f'WARNING - For {sample}, either all predictions don\'t match all logged queries in the interval list files minus excluded regions or vice versa. So, we recommend re-running the enformer prediction pipeline with the same parameters. You may supply a csv file of regions to exclude if available, but this should not matter.'
         return({'logtype': 'warning', 'logmessage':message})
 
 def return_check_function(use_parsl, fxn=check_predictions_and_logs):

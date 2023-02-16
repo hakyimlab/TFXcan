@@ -4,9 +4,10 @@
   "project_dir": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline",
   "interval_list_file": "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/motif_intervals/freedman/intervals_2023-01-11/predictors/freedman_FOXA1_47000.txt",
   "prediction_data_name": "freedman",
-  "TF": "FOXA1",
+  "transcription_factor": "FOXA1",
   "date": "2023-01-11",
   "create_hdf5_file": false,
+  "exclude_regions": true,
   "vcf_split": true,
   "vcf_files": {
     "folder": "/lus/grand/projects/covid-ct/imlab/data/freedman_vcfs/vcfs_2023-01-25",
@@ -45,20 +46,24 @@
   "sequence_source": "personalized",
   "predictions_log_dir": "predictions_log",
   "log_dir": "cobalt_log",
-  "batch_size": 40,
+  "batch_size": 1000,
+  "batch_individuals": 7,
   "predict_on_n_regions": -1,
   "write_log": {
-    "memory": false,
-    "error": true,
-    "time": false,
-    "cache": false
+    "logdir": "job_logs",
+    "logtypes": {
+      "memory": false,
+      "error": true,
+      "time": false,
+      "cache": false
+    }
   },
   "parsl_parameters": {
     "job_name": "enformer_predict_freedman_FOXA1",
-    "num_of_full_nodes": 10,
+    "num_of_full_nodes": 2,
     "walltime": "06:00:00",
     "min_num_blocks": 0,
-    "max_num_blocks": 10,
+    "max_num_blocks": 5,
     "queue": "preemptable"
   }
 }

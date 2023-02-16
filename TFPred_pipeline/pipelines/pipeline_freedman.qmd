@@ -320,9 +320,10 @@ enformer_parameters_json[['n_individuals']] <- -1
 enformer_parameters_json[['project_dir']] <- as.character(project_dir)
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['prediction_data_name']] <- dataset
-enformer_parameters_json[['TF']] <- TF
+enformer_parameters_json[['transcription_factor']] <- TF
 enformer_parameters_json[['date']] <- data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
+enformer_parameters_json[['exclude_regions']] <- TRUE
 
 enformer_parameters_json[['vcf_split']] <- TRUE
 enformer_parameters_json[['vcf_files']] <- vcf_files
@@ -338,10 +339,10 @@ enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
 enformer_parameters_json[['log_dir']] <- "cobalt_log"
-enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['batch_size']] <- 500
 enformer_parameters_json[['predict_on_n_regions']] <- -1
-enformer_parameters_json[['write_log']] <- list('memory'=T, 'error'=T, 'time'=F, 'cache'=T)
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="06:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable")
+enformer_parameters_json[['write_log']] <- list('logdir' = glue('job_logs'), 'logtypes' = list('memory'=FALSE, 'error'=TRUE, 'time'=FALSE, 'cache'=FALSE))
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=5, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -360,7 +361,7 @@ I can write this into a shell script and call it with `system()`. The problem is
 ```{r}
 # prediction_cmd <- glue('#!/bin/bash\n\nconda activate dl-tools\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
 
-prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/scripts/enformer_predict.py --param_config {param_file}')
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/parallel_enformer/enformer_predict.py --param_config {param_file}')
 prediction_cmd
 ```
 

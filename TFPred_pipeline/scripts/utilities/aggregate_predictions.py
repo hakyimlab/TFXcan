@@ -44,10 +44,11 @@ with open(f'{args.metadata_file}') as f:
     parameters = json.load(f)
 
     enformer_predictions_path = parameters['enformer_prediction_path']
-    log_file = parameters['log_file']
+    #log_file = parameters['log_file']
     sequence_source = parameters['sequence_source']# e.g. "kawakami" or "cistrome"
     todays_date = parameters['run_date']
     base_path = parameters['predictions_folder']
+    prediction_logfiles_folder = parameters['prediction_logfiles_folder']
     TF = parameters['transcription_factor']
     individuals = parameters['individuals']
     n_individuals = parameters['n_individuals']
@@ -70,7 +71,7 @@ agg_types = agg_types[0].split(' ')
 print(f'[INFO] Aggregating these: {agg_types}')
 
 print(f'[INFO] Currently on {prediction_data_name}')
-save_dir = f'{base_path}/aggregated_predictions/{prediction_data_name}_{TF}_{todays_date}'
+save_dir = os.path.join(base_path, 'aggregated_predictions') #, f'{prediction_data_name}_{TF}_{todays_date}')
 if not os.path.isdir(save_dir):
     os.makedirs(save_dir)
 
@@ -81,7 +82,7 @@ elif isinstance(individuals, list):
 
 print(ids_names)
 
-log_data_all = pd.read_csv(log_file)
+# = pd.read_csv(log_file)
 #log_data_all = log_data_all.drop_duplicates(subset=['motif']) #.iloc[1:1000, ]
 
 #fpath = os.path.join(base_path, 'scripts', 'collect_model_data')
@@ -98,19 +99,18 @@ if use_parsl == True:
 
 collection_fxn = return_prediction_function(use_parsl)
 
+# takeout = ['HG00247', 'HG00124']
 
-takeout = ['HG00247', 'HG00124']
-
-for tk in takeout:
-    ids_names.remove(tk)
+# for tk in takeout:
+#     ids_names.remove(tk)
 
 # remove if the files are not avialble
 
-
 app_futures = []
 for each_id in ids_names:
+    log_data = pd.read_csv(os.path.join(prediction_logfiles_folder, f'{each_id}_log.csv'))
     for each_agg in agg_types:
-        log_data = log_data_all.loc[log_data_all['individual'] == each_id, ]
+        log_data = log_data.loc[log_data['sample'] == each_id, ]
         log_data = log_data.drop_duplicates(subset=['motif'])
         #print(log_data.iloc[0:5, ])
         #print(f'[INFO] {each_id}\'s prediction log has {log_data.shape[0]} rows and {log_data.shape[1]} columns.')
@@ -121,7 +121,7 @@ for each_id in ids_names:
         if not os.path.exists(ind_path):
             raise Exception(f'[WARNING] {each_id} does not exist')
         else:
-            app_futures.append(collection_fxn(each_id=each_id, log_data=log_data, predictions_path=ind_path, TF=TF, agg_types=[each_agg], save_dir=save_dir, batch_num=None))
+            app_futures.append(collection_fxn(each_id=each_id, log_data=log_data, predictions_path=ind_path, TF=TF, agg_types=[each_agg], save_dir=save_dir, sequence_source=sequence_source, batch_num=None))
 
 print(f'[INFO] Executing {len(app_futures)} app_futures')
 if use_parsl == True:
