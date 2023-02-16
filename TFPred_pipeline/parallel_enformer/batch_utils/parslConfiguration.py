@@ -65,6 +65,68 @@ def polaris_htParslConfig(params):
     )
     return pbs_htex
 
+def theta_htParslConfig(params):
+
+    import parsl
+    from parsl.config import Config
+    from parsl.providers import CobaltProvider
+    from parsl.launchers import MpiExecLauncher
+    from parsl.executors import HighThroughputExecutor
+    import os
+
+    print(f'Parsl version: {parsl.__version__}')
+
+    # I defined these locations otherwise parsl will use the current directory to output the run informations and log messages
+    workingdir = params['working_dir']
+    rundir = os.path.join(workingdir, 'runinfo')
+    job_name = params['job_name']
+    
+    # I want to put the cobalt directives 
+    sch_options = ['#COBALT --attrs filesystems=theta-fs0,grand:enable_ssh=1',
+                    f'#COBALT --jobname={job_name}'
+    ]
+    sch_options = '\n'.join(sch_options)
+
+    user_opts = {
+        'theta': {
+            # Node setup: activate necessary conda environment and such.
+            'worker_init': 'source /home/temi/.bashrc; conda activate dl-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib; echo Running on host `hostname`; echo Running on nodes `cat $PBS_NODEFILE`',
+            'scheduler_options': f'{sch_options}',
+            # ALCF allocation to use
+            'account': 'covid-ct',
+        }
+    }
+
+    #just in case there is a config loaded already
+    cobalt_htex = Config(
+        executors=[
+            HighThroughputExecutor(
+                label='htex-Cobalt',
+                max_workers=8, # vs max_workers
+                available_accelerators=8,
+                worker_debug=True,
+                cores_per_worker=24, # how many cores per worker #nodes_per_block, 2 is usually enough or 1.
+                working_dir=workingdir,
+                provider=CobaltProvider(
+                    queue='full-node',
+                    account=user_opts['theta']['account'],
+                    launcher=MpiExecLauncher(),
+                    walltime=params['walltime'],
+                    nodes_per_block=params['num_of_full_nodes'], # number of full-nodes - 3 will launch 3 full nodes at a t   ime for one instance for each `cores_per_worker`
+                    min_blocks=params['min_num_blocks'],
+                    max_blocks=params['max_num_blocks'],
+                    worker_init=user_opts['theta']['worker_init'],
+                    cmd_timeout=120,
+                    scheduler_options=user_opts['theta']['scheduler_options']
+                ),
+            )   
+        ],
+        run_dir=rundir,
+        retries=6
+    )
+
+    return(cobalt_htex)
+
 def polaris_localParslConfig(params):
 
     import parsl

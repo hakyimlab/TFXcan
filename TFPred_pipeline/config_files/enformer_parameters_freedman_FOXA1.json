@@ -60,10 +60,11 @@
   },
   "parsl_parameters": {
     "job_name": "enformer_predict_freedman_FOXA1",
-    "num_of_full_nodes": 2,
-    "walltime": "06:00:00",
+    "num_of_full_nodes": 1,
+    "walltime": "00:20:00",
     "min_num_blocks": 0,
     "max_num_blocks": 5,
-    "queue": "preemptable"
+    "queue": "full-node",
+    "hpc": "theta"
   }
 }

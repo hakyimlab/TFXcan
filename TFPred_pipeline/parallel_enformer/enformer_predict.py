@@ -95,9 +95,14 @@ def main():
         os.makedirs(job_log_dir)
 
     if use_parsl == True:
-        print(f'INFO - Using parsl configuration: {use_parsl}')
-        import parslConfiguration
-        parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_parameters))
+        if parsl_parameters['hpc'] == 'polaris':
+            print(f'INFO - Using parsl configuration for polaris: {use_parsl}')
+            import parslConfiguration
+            parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_parameters))
+        elif parsl_parameters['hpc'] == 'theta':
+            print(f'INFO - Using parsl configuration for theta: {use_parsl}')
+            import parslConfiguration
+            parsl.load(parslConfiguration.theta_htParslConfig(params=parsl_parameters))
     elif use_parsl == False:
         print(f'INFO - Using parsl configuration: {use_parsl}')
         import parslConfiguration
@@ -207,13 +212,23 @@ def main():
 
     if use_parsl == True:
         print(f'INFO - Executing parsl futures for {len(sample_app_futures)} parsl apps')
-        exec_futures = [q.result() for q in sample_app_futures] 
+        #exec_futures = [q.result() for q in sample_app_futures] 
         #print(sample_app_futures)
         print(f'INFO - Finished predictions for all')
     elif use_parsl == False:
         print(f'INFO - Finished predictions for: {sample_app_futures} ...')
+    
+    parsl.clear()
 
+    # just so I don't have to deal with having too many resources, I can request a small amount of resource
     if use_parsl:
+        check_parsl_params = {"job_name": "checking_predictions","num_of_full_nodes": 1, "walltime": "00:30:00", "min_num_blocks": 0, "max_num_blocks": 1, "queue": parsl_parameters['queue'], "hpc": parsl_parameters['hpc'], 'working_dir': parsl_parameters['working_dir']}
+
+        if check_parsl_params['hpc'] == 'polaris':
+            parsl.load(parslConfiguration.polaris_htParslConfig(params=check_parsl_params))
+        elif check_parsl_params['hpc'] == 'theta':
+            parsl.load(parslConfiguration.theta_htParslConfig(params=check_parsl_params))
+
         check_fxn = return_check_function(use_parsl)
 
         SUMMARY_FILE = os.path.join(job_log_dir, f'{prediction_data_name}_{transcription_factor}_{run_date}.summary')
@@ -232,14 +247,6 @@ def main():
         for i, qr in enumerate(summary_exec):
             print(i)
             loggerUtils.write_logger(log_msg_type=qr['logtype'], logfile=SUMMARY_FILE, message=qr['logmessage'])
-
-
-        # print(len(summary_exec))
-
-        # print(summary_exec)
-        # final_output = [loggerUtils.write_logger(log_msg_type=so['logtype'], logfile=SUMMARY_FILE, message=so['logmessage']) for so in summary_exec]
-
-        # print(final_output)
 
         print(f'INFO - Check {SUMMARY_FILE} for summary of the entire run.')
 
