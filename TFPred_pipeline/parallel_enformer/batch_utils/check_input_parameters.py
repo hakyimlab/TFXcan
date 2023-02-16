@@ -1,6 +1,5 @@
 # still working on this
 
-
 def check_inputs(params_path):
     import os
     import json
