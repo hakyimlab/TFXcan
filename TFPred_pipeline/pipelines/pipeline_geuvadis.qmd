@@ -28,7 +28,7 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```{r}
 dataset <- 'geuvadis'
 TF <- 'AR'
-todays_date <- data_date <- run_date <- Sys.Date()
+todays_date <- data_date <- run_date <- '2023-02-10' # Sys.Date()
 ```
 
 ```{r}
@@ -123,7 +123,8 @@ enformer_parameters_json[['prediction_data_name']] <- dataset
 enformer_parameters_json[['transcription_factor']] <- TF
 enformer_parameters_json[['date']] <- Sys.Date() #data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
-
+enformer_parameters_json[['exclude_regions']] <- TRUE
+enformer_parameters_json[['batch_individuals']] <- 20
 enformer_parameters_json[['vcf_split']] <- TRUE
 enformer_parameters_json[['vcf_files']] <- vcf_files
 
@@ -138,10 +139,10 @@ enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imla
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
-enformer_parameters_json[['batch_size']] <- 40
+enformer_parameters_json[['batch_size']] <- 500
 enformer_parameters_json[['predict_on_n_regions']] <- -1
-enformer_parameters_json[['write_log']] <- list('logdir' = glue('{dataset}_{run_date}_log'), 'logtypes' = list('memory'=F, 'error'=T, 'time'=F, 'cache'=F))
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=20, "queue"="preemptable")
+enformer_parameters_json[['write_log']] <- list('logdir' = glue('job_logs'), 'logtypes' = list('memory'=F, 'error'=T, 'time'=F, 'cache'=F))
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=5, "queue"="preemptable")
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -155,7 +156,7 @@ param_file
 
 
 ```{r}
-prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\nnohup python3 {project_dir}/scripts/enformer_predict/new_enformer_predict.py --param_config {param_file} > nohup_{TF}_{todays_date}.out &')
+prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\nnohup python3 {project_dir}/parallel_enformer/enformer_predict.py --param_config {param_file} > nohup_{TF}_{todays_date}.out &')
 prediction_cmd
 ```
 
@@ -204,7 +205,7 @@ agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
 agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
-agg_methods
+agg_methods <- agg_meancenter
 ```
 
 
@@ -219,6 +220,12 @@ aggregate_cmd
 system('qstat -u temi')
 ```
 
+```{r}
+hg00096 <- data.table::fread(glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/predictions_folder/geuvadis_AR/predictions_2023-02-10/aggregated_predictions/HG00096_aggByMeanCenter_AR.csv.gz'))
+hg00096 |> dim()
+```
+
+
 
 ### Step 5: Testing models on these individual data
 
@@ -229,8 +236,8 @@ model_date <- '2023-01-24'
 model_dir <- glue('{project_dir}/models')
 model_id <- 'cistrome'
 model_types <- c('linear', 'logistic')
-predict_on <- glue('{project_dir}/metadata/1000_genome_individuals.txt')
-individuals_data_dir <- glue('{project_dir}/prediction_folder/aggregated_predictions/{dataset}_{TF}_{todays_date}')
+predict_on <- glue('{project_dir}/metadata/completed_geuvadis_240.txt')
+individuals_data_dir <- glue('{project_dir}/predictions_folder/{dataset}_{TF}/predictions_{todays_date}/aggregated_predictions')
 
 run_date <- todays_date
 output_dir <- glue('{project_dir}/model_evaluation')
@@ -240,7 +247,7 @@ if(!dir.exists(output_dir)){
     print('Model evaluation directory exists.')
 }
 
-n_individuals <- 99
+n_individuals <- 240
 
 # individuals_ground_truth_file <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{run_date}/ground_truth/{dataset}_{TF}_*.txt')
 # gt_file <- Sys.glob(glue('{individuals_ground_truth_file}'))
@@ -288,8 +295,8 @@ library(ROCR)
 
 ```{r}
 #ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
-individuals <- data.table::fread('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt', header=F)
-ind_names <- individuals$V1[1:99]#[-1]#[1:5
+individuals <- data.table::fread(glue('{project_dir}/metadata/completed_geuvadis_240.txt'), header=F) #'/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt', header=F)
+ind_names <- individuals$V1#[-1]#[1:5
 ind_names
 ```
 
@@ -324,7 +331,7 @@ baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'to
 ```
 
 ```{r}
-baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/{baca_models[6]}/baca_cwas_predict.txt'))
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_240/{baca_models[6]}/baca_cwas_predict.txt'), nrow=240)
 baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
 colnames(baca_predictions) <- baca_predictions[1, ]
 baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
@@ -340,7 +347,6 @@ baca_predictions[1:5, 1:5] |> summary()
 
 ```{r}
 aggm <- 'aggByMeanCenter'
-
 
 ind_names <- names(individual_linear_eval)
 out <- lapply(ind_names, function(each_ind){
@@ -498,7 +504,6 @@ mtext(glue('qqplot of R-squared between \nCWAS scores and TFPred scores for {len
 ```
 
 
-
 ```{r}
 region_correlations_test <- purrr::map(1:length(common_regions), function(i){
     ca <- tfpred_ca[i, ] |> unlist() |> unname()
@@ -526,7 +531,7 @@ mtext(glue('Distribution of correlation test pvalues between CWAS scores and TFP
 ind <- 'HG00096'
 ```
 ```{r}
-lowest_pvalues <- sort(region_correlations_test, decreasing=F)[1:4]
+lowest_pvalues <- sort(region_correlations_test, decreasing=F)[1:8]
 lowest_pvalues_loci <- names(lowest_pvalues)
 ```
 
@@ -538,7 +543,7 @@ cor_values
 
 ```{r}
 
-par(mfrow=c(2,2), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
+par(mfrow=c(4,2), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
 
 for(i in 1:length(lowest_pvalues_loci)){
     x <- tfpred_ca[lowest_pvalues_loci[i], ] |> unlist() |> unname() |> as.numeric()
@@ -555,7 +560,7 @@ for(i in 1:length(lowest_pvalues_loci)){
     #abline(lm(x ~ y), col='red')
 }
 
-mtext(glue('CWAS {baca_models[6]} model scores vs {aggm} TFPred scores \nfor top 4 regions by pvalues across 99 individuals'), side=3, adj=0, cex=1.5, outer=T)
+mtext(glue('CWAS {baca_models[6]} model scores vs {aggm} TFPred scores \nfor top 4 regions by pvalues across {length(ind_names)} individuals'), side=3, adj=0, cex=1.5, outer=T)
 mtext(glue('CWAS predictions'), side=2, adj=0.5, cex=1, outer=T)
 mtext(glue('TFPred scores'), side=1, adj=0.5, cex=1, outer=T)
 ```
@@ -717,12 +722,6 @@ for(i in 1:ncol(permutation_pvalues)){
 for(i in 1:length(plots_list)){
     plots_list[[i]]()
 }
-```
-
-```{r}
-par(mfrow=c(2,1))
-plot(1:20)
-plot(1:20)
 ```
 
 ```{r}

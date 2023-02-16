@@ -48,6 +48,7 @@ agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
 agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods <- c(agg_meancenter)
 
 # read in the models
 # load all the models coefficients

@@ -52,6 +52,7 @@ def main():
         parsl_parameters = parameters['parsl_parameters']
         sequence_source = parameters['sequence_source']
         exclude_regions = parameters["exclude_regions"]
+        batch_individuals = parameters["batch_individuals"]
         
         create_hdf5_file = parameters["create_hdf5_file"]
     
@@ -74,11 +75,11 @@ def main():
 
         if sequence_source == 'personalized':
              # use only the chromosomes that have been made available in the config file vcf params
-            print(f'[INFO] Sequence source is {sequence_source}. Using a reference genome + vcf files.')
+            print(f'INFO - Sequence source is {sequence_source}. Using a reference genome + vcf files.')
             chromosomes = list(vcf_files_dict['files'].keys())
         # list of chromosomes (if the sequence source is reference)
         elif sequence_source == 'reference':
-            print(f'[INFO] Sequence source is {sequence_source}. Using a reference genome.')
+            print(f'INFO - Sequence source is {sequence_source}. Using a reference genome.')
             chromosomes = [f'chr{i}' for i in range(1, 23)]
             chromosomes.extend(['chrX'])
 
@@ -94,11 +95,11 @@ def main():
         os.makedirs(job_log_dir)
 
     if use_parsl == True:
-        print(f'[INFO] Using parsl configuration: {use_parsl}')
+        print(f'INFO - Using parsl configuration: {use_parsl}')
         import parslConfiguration
         parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_parameters))
     elif use_parsl == False:
-        print(f'[INFO] Using parsl configuration: {use_parsl}')
+        print(f'INFO - Using parsl configuration: {use_parsl}')
         import parslConfiguration
         parsl.load(parslConfiguration.polaris_localParslConfig(params=parsl_parameters))
 
@@ -122,17 +123,14 @@ def main():
                     id_list = pd.read_table(individuals, header=None)[0].tolist()[0:(n_individuals)]
             else:
                 id_list = [individuals]
-        if len(id_list) > 10:
-            print(f'[INFO] Predicting on {len(id_list)} individuals.')
-        else:
-            print(f'[INFO] Predicting for these individuals: {id_list}')
+        print(f'INFO - Found {len(id_list)} individuals to predict on')
 
     elif sequence_source == 'reference':
         id_list = [prediction_data_name]
-        print(f'[INFO] Predicting on a reference set')
+        print(f'INFO - Found one reference set named {id_list[0]} to predict on')
     elif sequence_source == 'random':
         id_list = [prediction_data_name]
-        print(f'[INFO] Predicting on a randomly generated set')
+        print(f'INFO - Prediction will be on a randomly generated set')
 
     # set log files to be put in a folder and touch the log files per sample
     prediction_logfiles_folder = predictions_log_dir
@@ -142,11 +140,11 @@ def main():
     # list of intervals to be predicted on
     a = pd.read_table(interval_list_file, sep=' ', header=None).dropna(axis=0) #.drop_duplicates(subset=['motif', 'sample', 'status', 'sequence_source'], keep='last')
     list_of_regions = a[0].tolist()[0:(predict_on_n_regions)] # a list of queries
-    print(f'[INFO] Predicting on {len(list_of_regions)} regions with at most {batch_size} regions for, at most, every 20 individuals ')
+    print(f'INFO - Found {len(list_of_regions)} regions to be split into batches with at most {batch_size} regions in each batch.')
 
     # filter the list of chromosomes to be compatible with the available regions
     chromosomes = list(set([r.split('_')[0] for r in list_of_regions]))
-    print(f'[INFO] Chromosomes to predict on are: {chromosomes}')
+    #print(f'INFO - Chromosomes to predict on are: {chromosomes}')
 
     # should some regions be excluded?
     if exclude_regions == True:
@@ -154,53 +152,67 @@ def main():
         exclude_file = os.path.join(job_log_dir, 'invalid_queries.csv')
         if os.path.isfile(exclude_file):
             exclude_these_regions = pd.read_csv(exclude_file)['motif'].tolist()
-            print(f'[INFO] Excluding these regions {exclude_these_regions} from the input regions.')
+            print(f'INFO - Found regions to be excluded from the input regions.')
             list_of_regions = [l for l in list_of_regions if l not in exclude_these_regions]  
-            print(f'[INFO] New length of regions to predict on is {len(list_of_regions)}')
-        
+            print(f'INFO - Updated number of regions to predict on is {len(list_of_regions)}')
+        else:
+            print(f'INFO - No regions to exclude yet. You either did not supply a file, this is the first run, or there are truly no regions to exclude')
+            exclude_these_regions = None
+    else:
+        exclude_file = None
+    
     # batch the samples too
     # if you have 1000 individuals, it may be too much
     if len(id_list) > 10:
-        sample_batches = generate_batch_n_elems(id_list, n = 20) # 5 samples in each batch
+        if batch_individuals is not None:
+            if isinstance(batch_individuals, int):
+                sample_batches = list(generate_batch_n_elems(id_list, n = batch_individuals)) # 5 samples in each batch
+                print(f'INFO - There are more than 10 individuals. Predictions will be done for every {batch_individuals} individuals.')
+            else:
+                raise Exception(f'ERROR - argument `batch_individuals` is not a str type. You supplied a {type(batch_individuals).__name__}')
+        else:
+            print(f'INFO - You have more than 10 individuals/samples and have not supplied how to batch them. For speed, use the `batch_individuals` argument.') 
     else:
         sample_batches = [id_list] # put the list in a list
-        print(f'[INFO] There are less than 20 individuals i.e. {sample_batches}')
+        print(f'INFO - There are less than 10 individuals i.e. {sample_batches}')
 
     # to make this fast, pass multiple regions to one parsl app
     sample_app_futures = []
-    for chromosome in chromosomes:
-        chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
-        if sequence_source == 'personalized':
-            chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
-        elif sequence_source == 'reference':
-            chr_vcf_file = None
+    for sample_list in sample_batches:
+        for chromosome in chromosomes:
+            #print(chromosome)
+            chr_list_of_regions = [r for r in list_of_regions if r.startswith(f"{chromosome}_")]
+            if sequence_source == 'personalized':
+                chr_vcf_file = os.path.join(vcf_files_dict['folder'], vcf_files_dict['files'][chromosome])
+            elif sequence_source == 'reference':
+                chr_vcf_file = None
 
-        if not chr_list_of_regions:
-            print(f'[WARNING] {chromosome} motif sites are not available.')
-            continue
+            if not chr_list_of_regions:
+                print(f'WARNING - {chromosome} motif sites are not available.')
+                continue
 
-        # I want many regions to be put in a parsl app
-        if len(chr_list_of_regions) > batch_size:
-            region_batches = generate_batch_n_elems(chr_list_of_regions, n=batch_size) # batch_size total batches
-        else:
-            region_batches = [chr_list_of_regions]
-
-        count = 0
-        for region_list in region_batches:
-            for sample_list in sample_batches:
+            # I want many regions to be put in a parsl app
+            if len(chr_list_of_regions) > batch_size:
+                region_batches = generate_batch_n_elems(chr_list_of_regions, n=batch_size) # batch_size total batches
+            else:
+                region_batches = [chr_list_of_regions]
+            
+            count = 0
+            for region_list in region_batches:
+                #print(len(sample_list))
                 #print(f'{len(region_list)} regions in {chromosome} for {len(sample_list)} samples')
-                sample_app_futures.append(prediction_fxn(batch_regions=region_list, samples=sample_list, path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))
+                sample_app_futures.append(prediction_fxn(batch_regions=list(region_list), samples=list(sample_list), path_to_vcf = chr_vcf_file, batch_num = count, script_path=script_path, output_dir=output_dir, prediction_logfiles_folder=prediction_logfiles_folder, sequence_source=sequence_source))   
+
+                count = count + 1 
 
     if use_parsl == True:
-        print(f'[INFO] Executing parsl futures for {len(sample_app_futures)} parsl apps')
+        print(f'INFO - Executing parsl futures for {len(sample_app_futures)} parsl apps')
         exec_futures = [q.result() for q in sample_app_futures] 
         #print(sample_app_futures)
-        print(f'[INFO] Finished predictions for all')
+        print(f'INFO - Finished predictions for all')
     elif use_parsl == False:
-        print(f'[INFO] Finished predictions for: {sample_app_futures} ...')
+        print(f'INFO - Finished predictions for: {sample_app_futures} ...')
 
-    # write summary
-    # decorate the prediction function with or without parsl
     if use_parsl:
         check_fxn = return_check_function(use_parsl)
 
@@ -210,14 +222,30 @@ def main():
         for sample in id_list:
             summary_futures.append(check_fxn(sample=sample, predictions_folder=output_dir, log_folder=prediction_logfiles_folder, interval_list_file=interval_list_file, exclude_csv=exclude_file, sequence_source=sequence_source))
         
-        print(summary_futures)
-        summary_exec = [q.result() for q in summary_futures]
-        final_output = [loggerUtils.write_logger(log_msg_type=so['logtype'], logfile=SUMMARY_FILE, message=so['logmessage']) for so in summary_exec]
-        print(f'[INFO] Check {SUMMARY_FILE} for summary of the entire run.')
+        #print(summary_futures)
+        summary_exec = []
+        for q in summary_futures:
+            summary_exec.append(q.result())
+        
+        parsl.clear()
+
+        for i, qr in enumerate(summary_exec):
+            print(i)
+            loggerUtils.write_logger(log_msg_type=qr['logtype'], logfile=SUMMARY_FILE, message=qr['logmessage'])
+
+
+        # print(len(summary_exec))
+
+        # print(summary_exec)
+        # final_output = [loggerUtils.write_logger(log_msg_type=so['logtype'], logfile=SUMMARY_FILE, message=so['logmessage']) for so in summary_exec]
+
+        # print(final_output)
+
+        print(f'INFO - Check {SUMMARY_FILE} for summary of the entire run.')
 
     # == After predictions are complete, a json file will be written out to help with aggregation
     if sequence_source == 'reference':
-        print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
+        print(f'INFO - Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
 
         agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'prediction_logfiles_folder':prediction_logfiles_folder, 'prediction_data_name':prediction_data_name, 'sequence_source': sequence_source, 'run_date':run_date, 'transcription_factor':transcription_factor, 'individuals':None, 'n_individuals':n_individuals}
 
@@ -225,7 +253,7 @@ def main():
             json.dump(agg_dt, wj) 
 
     elif sequence_source == 'personalized':
-        print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
+        print(f'INFO - Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
 
         agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'prediction_logfiles_folder':prediction_logfiles_folder, 'prediction_data_name':prediction_data_name, 'sequence_source': sequence_source, 'run_date':run_date, 'transcription_factor':transcription_factor, 'individuals':individuals, 'n_individuals':n_individuals}
 
@@ -233,7 +261,7 @@ def main():
             json.dump(agg_dt, wj)     
 
     elif sequence_source == 'random':
-        print(f'[INFO] Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
+        print(f'INFO - Writing `aggregation_config_{prediction_data_name}_{transcription_factor}.json` file to {metadata_dir}')
 
         agg_dt = {'predictions_folder': project_dir, 'enformer_prediction_path': f'{output_dir}', 'prediction_logfiles_folder':prediction_logfiles_folder, 'prediction_data_name':prediction_data_name, 'sequence_source': sequence_source, 'run_date':run_date, 'transcription_factor':transcription_factor, 'individuals':None, 'n_individuals':n_individuals}
 
@@ -250,7 +278,7 @@ if __name__ == '__main__':
     job_end = time.perf_counter()
 
     job_runtime = job_end - job_start
-    print(f'[INFO] Completed job in {job_runtime} seconds.')
+    print(f'INFO - Completed job in {job_runtime} seconds.')
 
 
 

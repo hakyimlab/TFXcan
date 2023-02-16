@@ -6,11 +6,11 @@ import numpy as np
     
 #     return(agg_by_mean(pred_tracks), agg_by_center(pred_tracks), agg_by_mean(pred_tracks, use_bins=upstream), agg_by_mean(pred_tracks, use_bins=downstream), agg_by_mean(pred_tracks, use_bins=upstream + downstream))
 
-def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, save_dir, agg_types, batch_num=None):
+def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, save_dir, agg_types, sequence_source, batch_num=None):
 
     import h5py
     import numpy as np
-    import os, sys, subprocess, tqdm
+    import os, sys
     import pandas as pd
     import multiprocessing
     import itertools
@@ -94,7 +94,7 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, save
 
     if __name__ == '__main__':
 
-        motifs_list = log_data.loc[log_data['sequence_type'] == pred_type, ].motif.values.tolist()
+        motifs_list = log_data.loc[log_data['sequence_source'] == pred_type, ].motif.values.tolist()
         print(len(motifs_list))
 
         pooled_dictionary = {}
@@ -109,7 +109,7 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, TF, save
             # check that the keys match
             match_condition = sorted(list(pooled_dictionary[haplotypes[0]].keys())) == sorted(list(pooled_dictionary[haplotypes[1]].keys()))
             if not match_condition:
-                raise Exception(f'[ERROR] Fatal: Haplotypes 1 and 2 regions are different.Haplotype1 length is {len(list(pooled_dictionary[haplotypes[0]].keys()))} abd Haplotype2 length is {len(list(pooled_dictionary[haplotypes[1]].keys()))}')
+                raise Exception(f'[ERROR] Fatal: Haplotypes 1 and 2 regions are different. Haplotype1 length is {len(list(pooled_dictionary[haplotypes[0]].keys()))} abd Haplotype2 length is {len(list(pooled_dictionary[haplotypes[1]].keys()))}')
             else:
                 # one one of them
                 ids = list(pooled_dictionary[haplotypes[0]].keys())
