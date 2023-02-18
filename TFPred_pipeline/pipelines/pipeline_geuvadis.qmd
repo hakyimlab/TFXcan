@@ -26,9 +26,9 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```
 
 ```{r}
-dataset <- 'geuvadis'
+dataset <- 'subset1KGgenomes'
 TF <- 'AR'
-todays_date <- data_date <- run_date <- '2023-02-10' # Sys.Date()
+todays_date <- data_date <- run_date <- Sys.Date()
 ```
 
 ```{r}
@@ -100,17 +100,16 @@ if(!dir.exists(metadata_dir)){
 ```{r}
 # check that your individuals are present in the vcf
 individuals_1kg <- data.table::fread(glue('{project_dir}/metadata/samples_1KG_vcf.txt'), header=F)$V1
-individuals_geuvadis <- data.table::fread(glue('{project_dir}/metadata/{dataset}_individuals.txt'), header=F)$V1
+#individuals_geuvadis <- data.table::fread(glue('{project_dir}/metadata/{dataset}_individuals.txt'), header=F)$V1
+individuals_99 <- data.table::fread(glue('{project_dir}/metadata/99_individuals.txt'), header=F)$V1
 ```
 
 ```{r}
-valid_individuals <- individuals_geuvadis[individuals_geuvadis %in% individuals_1kg]
+valid_individuals <- individuals_99[individuals_99 %in% individuals_1kg]
 write.table(valid_individuals, file=glue('{project_dir}/metadata/valid_{dataset}_individuals.txt'), quote=F, row.names=F, col.names=F)
 ```
 
 
-
-For now, I will do 4 individuals
 ```{r}
 enformer_parameters_json <- list()
 
@@ -121,28 +120,27 @@ enformer_parameters_json[['project_dir']] <- as.character(project_dir)
 enformer_parameters_json[['interval_list_file']] <- predictor_file
 enformer_parameters_json[['prediction_data_name']] <- dataset
 enformer_parameters_json[['transcription_factor']] <- TF
-enformer_parameters_json[['date']] <- Sys.Date() #data_date
+enformer_parameters_json[['date']] <- data_date
 enformer_parameters_json[['create_hdf5_file']] <- FALSE
 enformer_parameters_json[['exclude_regions']] <- TRUE
 enformer_parameters_json[['batch_individuals']] <- 20
 enformer_parameters_json[['vcf_split']] <- TRUE
 enformer_parameters_json[['vcf_files']] <- vcf_files
 
-
 #enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
 
 enformer_parameters_json[['sub_dir']] <- TRUE
-enformer_parameters_json[['use_parsl']] <- T
+enformer_parameters_json[['use_parsl']] <- TRUE
 enformer_parameters_json[['model_path']] <- "/lus/grand/projects/covid-ct/imlab/data/enformer/raw"
 enformer_parameters_json[['hg38_fasta_file']] <- "/lus/grand/projects/covid-ct/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
 enformer_parameters_json[['metadata_dir']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/config_files"
 enformer_parameters_json[['output_dir']] <- "enformer_predictions"
 enformer_parameters_json[['sequence_source']] <- "personalized"
 enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
-enformer_parameters_json[['batch_size']] <- 500
+enformer_parameters_json[['batch_size']] <- 1000
 enformer_parameters_json[['predict_on_n_regions']] <- -1
 enformer_parameters_json[['write_log']] <- list('logdir' = glue('job_logs'), 'logtypes' = list('memory'=F, 'error'=T, 'time'=F, 'cache'=F))
-enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=10, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=5, "queue"="preemptable")
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_{dataset}_{TF}"), "num_of_full_nodes"=5, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=10, "queue"="preemptable", 'hpc'='polaris')
 
 write(
     jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
@@ -156,7 +154,7 @@ param_file
 
 
 ```{r}
-prediction_cmd <- glue('conda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\nnohup python3 {project_dir}/parallel_enformer/enformer_predict.py --param_config {param_file} > nohup_{TF}_{todays_date}.out &')
+prediction_cmd <- glue('screen\nconda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/parallel_enformer/enformer_predict.py --param_config {param_file}')
 prediction_cmd
 ```
 

@@ -212,7 +212,7 @@ def main():
 
     if use_parsl == True:
         print(f'INFO - Executing parsl futures for {len(sample_app_futures)} parsl apps')
-        #exec_futures = [q.result() for q in sample_app_futures] 
+        exec_futures = [q.result() for q in sample_app_futures] 
         #print(sample_app_futures)
         print(f'INFO - Finished predictions for all')
     elif use_parsl == False:
@@ -243,7 +243,6 @@ def main():
             summary_exec.append(q.result())
         
         parsl.clear()
-
         for i, qr in enumerate(summary_exec):
             print(i)
             loggerUtils.write_logger(log_msg_type=qr['logtype'], logfile=SUMMARY_FILE, message=qr['logmessage'])

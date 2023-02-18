@@ -166,20 +166,23 @@ def enformer_predict_on_batch(batch_regions, samples, logging_dictionary, path_t
                         logger_output.append(1)
                         continue
                 
-            mem_use = loggerUtils.get_gpu_memory() # [123, 456]#
-            msg_mem_log = f"[MEMORY] (GPU) at the end of batch {batch_num} prediction: free {mem_use[0]} mb, used {mem_use[1]} mb on " 
             if write_log['logtypes']['memory']:
+                mem_use = loggerUtils.get_gpu_memory() # [123, 456]#
+                msg_mem_log = f"[MEMORY] (GPU) at the end of batch {batch_num} prediction: free {mem_use[0]} mb, used {mem_use[1]} mb on " 
                 if tf.config.list_physical_devices('GPU'):
                     MEMORY_LOG_FILE = os.path.join(write_log['logdir'], "memory_usage.log")
                     loggerUtils.write_logger(log_msg_type = 'memory', logfile = MEMORY_LOG_FILE, message = msg_mem_log)
             else:
+                mem_use = loggerUtils.get_gpu_memory() # [123, 456]#
+                msg_mem_log = f"[MEMORY] (GPU) at the end of batch {batch_num} prediction: free {mem_use[0]} mb, used {mem_use[1]} mb on " 
                 print(msg_mem_log)
 
-            msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}]'
             if write_log['logtypes']['cache']:
+                msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}]'
                 CACHE_LOG_FILE = os.path.join(write_log['logdir'], 'cache_usage.log')
                 loggerUtils.write_logger(log_msg_type = 'cache', logfile = CACHE_LOG_FILE, message = msg_cac_log)
             else:
+                msg_cac_log = f'[CACHE] (model) at batch {batch_num}: [{predictionUtils.get_model.cache_info()}]'
                 print(msg_cac_log)
 
         return(logger_output)
