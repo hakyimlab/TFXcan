@@ -17,6 +17,8 @@ library(GenomicRanges)
 library(parallel)
 library(tidyverse)
 library(jsonlite)
+library(xlsx)
+library(reticulate)
 ```
 ```{r}
 imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
@@ -28,7 +30,7 @@ homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer'
 ```{r}
 dataset <- 'subset1KGgenomes'
 TF <- 'AR'
-todays_date <- data_date <- run_date <- Sys.Date()
+todays_date <- data_date <- run_date <- "2023-02-17" #Sys.Date()
 ```
 
 ```{r}
@@ -219,7 +221,7 @@ system('qstat -u temi')
 ```
 
 ```{r}
-hg00096 <- data.table::fread(glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/predictions_folder/geuvadis_AR/predictions_2023-02-10/aggregated_predictions/HG00096_aggByMeanCenter_AR.csv.gz'))
+hg00096 <- data.table::fread(glue('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/predictions_folder/subset1KGgenomes_AR/predictions_2023-02-17/aggregated_predictions/HG00096_aggByMeanCenter_AR.csv.gz'))
 hg00096 |> dim()
 ```
 
@@ -234,7 +236,7 @@ model_date <- '2023-01-24'
 model_dir <- glue('{project_dir}/models')
 model_id <- 'cistrome'
 model_types <- c('linear', 'logistic')
-predict_on <- glue('{project_dir}/metadata/completed_geuvadis_240.txt')
+
 individuals_data_dir <- glue('{project_dir}/predictions_folder/{dataset}_{TF}/predictions_{todays_date}/aggregated_predictions')
 
 run_date <- todays_date
@@ -245,7 +247,8 @@ if(!dir.exists(output_dir)){
     print('Model evaluation directory exists.')
 }
 
-n_individuals <- 240
+predict_on <- glue('{project_dir}/metadata/valid_subset1KGgenomes_individuals.txt')
+n_individuals <- length(read.csv(predict_on, header=F)$V1)
 
 # individuals_ground_truth_file <- glue('{project_dir}/motif_intervals/{dataset}/intervals_{run_date}/ground_truth/{dataset}_{TF}_*.txt')
 # gt_file <- Sys.glob(glue('{individuals_ground_truth_file}'))
@@ -266,7 +269,7 @@ if(file.exists(evaluate_pbs_script)){print('enet evaluate pbs script exists.')}
 # go through each model_types and predict_ons
 cmds <- c()
 for(model_type in model_types){
-    pbs_script <- glue('qsub -v evaluate_rscript={evaluate_rscript},model_dir={model_dir},model_id={model_id},model_type={model_type},predict_on={predict_on},individuals_data_dir={individuals_data_dir},n_individuals={n_individuals},TF={TF},run_date={model_date},output_dir={output_dir} {evaluate_pbs_script}')
+    pbs_script <- glue('qsub -v evaluate_rscript={evaluate_rscript},model_dir={model_dir},model_id={model_id},model_type={model_type},predict_on={predict_on},individuals_data_dir={individuals_data_dir},n_individuals={n_individuals},TF={TF},run_date={model_date},output_dir={output_dir},dataset={dataset} {evaluate_pbs_script}')
 
     cmds <- append(pbs_script, cmds)
 }
@@ -293,7 +296,7 @@ library(ROCR)
 
 ```{r}
 #ind_names <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
-individuals <- data.table::fread(glue('{project_dir}/metadata/completed_geuvadis_240.txt'), header=F) #'/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt', header=F)
+individuals <- data.table::fread(glue('{project_dir}/metadata/valid_subset1KGgenomes_individuals.txt'), header=F) #'/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/geuvadis_individuals.txt', header=F)
 ind_names <- individuals$V1#[-1]#[1:5
 ind_names
 ```
@@ -321,22 +324,70 @@ individual_linear_eval <- readRDS(glue('{model_evaluation_dir}/{dataset}_{TF}_{m
 ```
 
 
-## CWAS weights predictions
-
+### CWAS weights predictions
 ```{r}
 predixcan_result_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/prediXcan/output'
 baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'top1')
 ```
 
 ```{r}
-baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_240/{baca_models[6]}/baca_cwas_predict.txt'), nrow=240)
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_99/{baca_models[6]}/baca_cwas_predict.txt'))
 baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
 colnames(baca_predictions) <- baca_predictions[1, ]
 baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
 baca_predictions$region <- gsub('\\:|\\-', '_', baca_predictions[['region']])
 baca_predictions <- baca_predictions %>% dplyr::mutate(across(!region, as.numeric))
-baca_predictions[1:5, 1:5] |> summary()
+baca_predictions[1:5, 1:5] |> summary() ; baca_predictions[1:5, 1:5]
 ```
+
+```{r}
+loci <- read.table('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/predictors/baca_cwas_AR_regions_hg38_2023-01-27.txt', header=F)$V1
+loci <- loci[!is.na(loci)]
+length(loci)
+```
+
+```{r}
+loci[1:20]
+```
+
+```{r}
+which(cwas_top1_loci %in% loci)
+```
+
+```{r}
+# read in cwas supplementary data
+cwas_supp <- readxl::read_xlsx(glue('{project_dir}/metadata/cwas_supplementary_table.xlsx'), sheet=3, skip=1) %>% dplyr::select(ID, MODEL, MODELCV.PV, MODELCV.R2)
+cwas_supp[1:5, ] ; cwas_supp |> dim()
+```
+
+```{r}
+hg38_bed <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/bed_files/baca_cwas_loci_hg38.bed'
+hg38_bed_files <- data.table::fread(hg38_bed, col.names=c('chr', 'hg38_start', 'hg38_end', 'hg19_id'))
+
+hg38_bed_files <- hg38_bed_files %>% tidyr::unite('hg38_id', c('chr', "hg38_start",  "hg38_end" ))
+
+hg38_bed_files[1:5, ]
+
+#cwas_supp[cwas_supp$ID %in% hg38_bed_files$hg19_id, ]
+```
+
+```{r}
+cwas_supp <- cwas_supp %>% dplyr::left_join(hg38_bed_files, by=c('ID' = 'hg19_id'))
+cwas_supp[1:5, ] ; cwas_supp |> dim()
+```
+
+```{r}
+cwas_supp_top1 <- cwas_supp %>%
+    dplyr::filter(MODELCV.PV < 0.01)
+
+cwas_supp_top1[1:5,] ; length(cwas_supp_top1$ID)
+```
+
+```{r}
+cwas_top1_loci <- gsub(':|-', '_', cwas_supp_top1$hg38_id)
+cwas_top1_loci[1:5] ; length(cwas_top1_loci)
+```
+
 
 ```{r}
 # tfpred_result <- individual_linear_eval[[ind]]$aggByMeanCenter
@@ -353,7 +404,6 @@ out <- lapply(ind_names, function(each_ind){
     colnames(a) <- c('region', each_ind)
     return(a)
 })
-
 
 names(out) <- ind_names
 linear_agg_eval <- out %>% purrr::reduce(dplyr::inner_join, by='region')
@@ -387,142 +437,225 @@ tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
 ```
 
 ```{r}
-region_correlations <- purrr::map(1:length(common_regions), function(i){
-    ca <- tfpred_ca[i, ] |> unlist() |> unname()
-    da <- cwas_ca[i, ] |> unlist() |> unname()
-    return(cor(ca, da, method='spearman'))
-}, .progress=T)
-
-region_correlations <- unlist(region_correlations)
-names(region_correlations) <- common_regions
-region_correlations <- region_correlations[!is.na(region_correlations)]
-region_correlations[1:5]
+source(glue('{project_dir}/pipelines/utilities.R'))
 ```
 
-```{r}
-summary(region_correlations)
-```
-
-
-```{r}
-hist(region_correlations, main='', xlab=expression(italic(r) ~ ", correlation"), col='brown')
-mtext(glue('Distribution of correlations between CWAS {baca_models[6]} scores and TFPred scores \nfor {length(region_correlations)} regions'), adj=0, cex=1.5)
-```
-
-```{r}
-qqR2 <- function(corvec,nn,pad_neg_with_0 = FALSE,...)
-{
-## nn is the sample size, number of individuals used to compute correlation.
-## needs correlation vector as input.
-## nullcorvec generates a random sample from correlation distributions, under the null hypothesis of 0 correlation using Fisher's approximation.
-  if(pad_neg_with_0) corvec[corvec < 0 | is.na(corvec) ]=0
-  mm <- length(corvec)
-  nullcorvec = tanh(rnorm(mm)/sqrt(nn-3)) ## null correlation vector
-  qqplot(nullcorvec^2,corvec^2,...); abline(0,1, col='red')#; grid()
-}
-
-qqR <- function(corvec,nn,...)
-{
-## nn is the sample size, number of individuals used to compute correlation.
-## needs correlation vector as input.
-## nullcorvec generates a random sample from correlation distributions, under the null hypothesis of 0 correlation using Fisher's approximation.
-  mm <- length(corvec)
-  nullcorvec = tanh(rnorm(mm)/sqrt(nn-3)) ## null correlation vector
-  qqplot(nullcorvec,corvec,...); abline(0,1)#; grid()
-}
-
-
-qqunif = 
-  function(p,BH=T,CI=T,mlog10_p_thres=30,...)
-  {
-    ## thresholded by default at 1e-30
-    p=na.omit(p)
-    nn = length(p)
-    xx =  -log10((1:nn)/(nn+1))
-    
-    p_thres = 10^{-mlog10_p_thres}
-    if( sum( p < p_thres) )
-    {
-      warning(paste("thresholding p to ",p_thres) )
-      p = pmax(p, p_thres)
-    }
-    plot( xx,  -sort(log10(p)),
-          xlab=expression(Expected~~-log[10](italic(p))),
-          ylab=expression(Observed~~-log[10](italic(p))),
-          cex.lab=1,mgp=c(2,1,0),
-          ... )
-    abline(0,1,col='gray')
-    if(BH)
-    {
-      abline(-log10(0.05),1, col='red',lty=1)
-      abline(-log10(0.10),1, col='green',lty=2)
-      abline(-log10(0.25),1, col='blue',lty=3)
-      legend('topleft', c("FDR = 0.05","FDR = 0.10","FDR = 0.25"),
-             col=c('red','green','blue'),lty=1:3, cex=1)
-      abline(h=-log10(0.05/nn)) ## bonferroni
-    }
-    if(CI)
-    {
-      ## create the confidence intervals
-      c95 <- rep(0,nn)
-      c05 <- rep(0,nn)
-      ## the jth order statistic from a
-      ## uniform(0,1) sample
-      ## has a beta(j,n-j+1) distribution
-      ## (Casella & Berger, 2002,
-      ## 2nd edition, pg 230, Duxbury)
-      ## this portion was posted by anonymous on
-      ## http://gettinggeneticsdone.blogspot.com/2009/11/qq-plots-of-p-values-in-r-using-ggplot2.html
-      
-      for(i in 1:nn)
-      {
-        c95[i] <- qbeta(0.95,i,nn-i+1)
-        c05[i] <- qbeta(0.05,i,nn-i+1)
-      }
-      
-      lines(xx,-log10(c95),col='gray')
-      lines(xx,-log10(c05),col='gray')
-    }
-  }
-
-```
-
-```{r}
-par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
-
-qqR(region_correlations, nn=length(region_correlations), frame.plot=F, pch=21, col='black', bg='black', cex.lab=1)
-qqR2(region_correlations, nn=length(region_correlations), frame.plot=F,pch=21, col='black', bg='black', cex.lab=1)
-
-mtext(glue('qqplot of R & {expression(R^2)} between CWAS scores and TFPred scores for {length(region_correlations)} regions'), side=3, line=-1.5, adj=0.05, cex=1.2, outer=TRUE)
-```
-
-```{r}
-qqR2(region_correlations, nn=length(region_correlations), frame.plot=F,pch=21, col='black', bg='black', cex.lab=1)
-mtext(glue('qqplot of R-squared between \nCWAS scores and TFPred scores for {length(region_correlations)} regions'), side=3, line=-1.5, adj=0.05, cex=1.2)
-```
-
-
+#### Correlation
 ```{r}
 region_correlations_test <- purrr::map(1:length(common_regions), function(i){
     ca <- tfpred_ca[i, ] |> unlist() |> unname()
     da <- cwas_ca[i, ] |> unlist() |> unname() |> as.numeric()
-    return(cor.test(ca, da, method='spearman')$p.value)
+    cor_test <- cor.test(ca, da, method='spearman')
+    return(c(cor_test$p.value, cor_test$estimate))
 }, .progress=T)
 
-region_correlations_test <- unlist(region_correlations_test)
-names(region_correlations_test) <- common_regions
-region_correlations_test <- region_correlations_test[!is.na(region_correlations_test)]
-region_correlations_test[1:5]
+df_cor_test <- do.call('rbind', region_correlations_test)
+colnames(df_cor_test) <- c('p_value', 'r')
+rownames(df_cor_test) <- common_regions
+df_cor_test[1:5, ]
 ```
 
 ```{r}
-par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
-
-hist(region_correlations_test, main='', xlab=expression(italic(p) ~ ", p-value"), cex.lab=1)
-qqunif(region_correlations_test, frame.plot=F, pch=21, bg='black')
-mtext(glue('Distribution of correlation test pvalues between CWAS scores and TFPred scores \nfor {length(region_correlations)} regions'), side=3, line=-1, adj=0.05, cex=1.2, outer=TRUE) 
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(df_cor_test[, 'r']^2, main='', xlab=expression(italic(R^2) ~ ", R-squared"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ R^2 ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
 ```
 
+```{r}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(df_cor_test[, 'r'], main='', xlab=expression(italic(r)[s] ~ ", spearman correlation"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ r[s] ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+# qqunif(df_cor_test[, 'p_value'], frame.plot=F, pch=21, bg='black')
+# mtext(expression("qqplot of" ~ italic(p) ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2)
+# mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+qq_generic(df_cor_test[, 'p_value'], distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p) ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+#### Compare their correlations with ours
+```{r}
+cwas_rsq_table <- cwas_supp %>% 
+    dplyr::filter(!is.na(hg38_id)) %>%
+    tibble::column_to_rownames('hg38_id')
+```
+
+```{r}
+length(unique(cwas_supp$hg38_id)) ; length(cwas_supp$hg38_id)
+```
+
+```{r}
+a <- as.data.frame(df_cor_test)[rownames(cwas_rsq_table), 'r']^2
+b <- cwas_rsq_table$MODELCV.R2
+
+length(a) ; length(b)
+```
+```{r}
+plot(b, a, xlab='TFPred R-squared', ylab='CWAS R-squared')
+abline(lm(a ~ b))
+```
+
+```{r}
+data.frame(a, b) %>%
+    dplyr::filter((is.finite(a) &  is.finite(b))) %>%
+    ggplot(., aes(b, a)) +
+    geom_smooth()
+    #geom_point() 
+    
+```
+```{r}
+summary(df_cor_test[, 'r']^2)
+```
+
+```{r}
+hist(df_cor_test[, 'r']^2, main='', xlab=expression(italic(R^2) ~ ", correlation"), col='brown')
+mtext(glue('Distribution of R^2 between CWAS {baca_models[6]} scores and TFPred scores \nfor {nrow(df_cor_test)} regions'), adj=0, cex=1.5)
+```
+
+
+```{r}
+loci_corr_0.01 <- df_cor_test[which(df_cor_test[, 'p_value'] < 0.01), 'r']#[cwas_top1_loci] |> summary()
+loci_corr_0.01 <- loci_corr_0.01[names(loci_corr_0.01) %in% cwas_top1_loci] #|> summary()
+```
+
+```{r}
+any(is.na(loci_corr_0.01))
+```
+
+```{r}
+hist(loci_corr_0.01 |> unname(), breaks=20, xlab='r, correlation', main='')
+mtext('Histogram of correlation for cwas loci < 0.01 and TFPred loci < 0.01', line=1, side=3)
+```
+
+
+#### Significant AR CWAS associations for response to androgen deprivation therapy
+```{r}
+# read in cwas supplementary data
+cwas_AR_adt <- readxl::read_xlsx(glue('{project_dir}/metadata/cwas_supplementary_table.xlsx'), sheet=10, skip=1) %>% dplyr::select(ID, MODEL, MODELCV.PV)
+cwas_AR_adt[1:5, ] ; cwas_AR_adt |> dim()
+```
+
+```{r}
+cwas_AR_adt <- cwas_AR_adt %>% dplyr::left_join(hg38_bed_files, by=c('ID' = 'hg19_id'))
+cwas_AR_adt[1:5, ] ; cwas_AR_adt |> dim()
+```
+
+```{r}
+cwas_AR_adt <- gsub(':|-', '_', cwas_AR_adt$hg38_id)
+cwas_AR_adt[1:5] ; length(cwas_AR_adt)
+```
+
+```{r}
+cwas_AR_adt_pvalues <- df_cor_test[cwas_AR_adt, ]
+cwas_AR_adt_loci <- cwas_AR_adt
+cor_sq_values <- df_cor_test[cwas_AR_adt_loci, 'r']
+cor_sq_values
+```
+
+
+```{r}
+par(mfrow=c(1,3), oma = c(2, 2, 7, 2), mar=c(3,3,5,2))
+
+for(i in 1:nrow(cwas_AR_adt_pvalues)){
+    x <- tfpred_ca[cwas_AR_adt_loci[i], ] |> unlist() |> unname() |> as.numeric()
+    y <- cwas_ca[cwas_AR_adt_loci[i], ] |> unlist() |> unname() |> as.numeric()
+
+    #txt <- paste(cwas_AR_adt_loci[i], '\n p = ', formatC(cwas_AR_adt_pvalues[i], format = "e", digits = 2), ', ', expression(R^2), ' = ', round(cor_sq_values[i] |> unname(), 2))
+
+    txt_variables <- list(lv = cwas_AR_adt_loci[i], pv=formatC(cwas_AR_adt_pvalues[i], format = "e", digits = 2), cv=round(cor_sq_values[i] |> unname(), 2))
+
+    txt <- bquote(atop(.(txt_variables$lv), italic(p) ~ '=' ~ .(txt_variables$pv) ~ ',' ~ italic(r[s]) ~ ' = ' ~ .(txt_variables$cv)))
+
+    plot(x, y,
+        frame.plot=F, xlab='', ylab='', pch=21, col='black', bg='brown',
+        main=txt
+    )
+    abline(lm(y ~ x), col='red')
+}
+
+mtext(glue('CWAS model scores vs {aggm} TFPred scores \nfor significant AR CWAS associations for response to \nandrogen deprivation therapy'), side=3, adj=0, cex=1.5, outer=T)
+mtext(glue('CWAS predictions'), side=2, adj=0.5, cex=1, outer=T)
+mtext(glue('TFPred scores'), side=1, adj=0.5, cex=1, outer=T)
+```
+
+#### scatterplot of regions
+
+```{r}
+cwas_supp_top1 <- cwas_supp %>%
+    dplyr::arrange(desc(MODELCV.R2)) %>%
+    dplyr::slice_max(MODELCV.R2, n=6)
+
+cwas_supp_top1[1:5,] ; length(cwas_supp_top1$ID)
+```
+
+```{r}
+cwas_top1_loci <- gsub(':|-', '_', cwas_supp_top1$hg38_id)
+cwas_top1_loci[1:5] ; length(cwas_top1_loci)
+```
+```{r}
+tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
+```
+
+```{r}
+cwas_AR_top6_pvalues <- df_cor_test[cwas_top1_loci, ]
+cwas_AR_top6_loci <- cwas_top1_loci
+cor_sq_values <- df_cor_test[cwas_top1_loci, 'r']
+cor_sq_values
+```
+
+```{r}
+par(mar = c(4, 4, 6, 4))
+
+picked_loci <- 'chr4_96092999_96093499'
+picked_loci_i <- which(cwas_AR_top6_loci == picked_loci)
+x <- tfpred_ca[picked_loci, ] |> unlist() |> unname() |> as.numeric()
+y <- cwas_ca[picked_loci, ] |> unlist() |> unname() |> as.numeric()
+
+txt_variables <- list(lv = cwas_AR_top6_loci[picked_loci_i], pv=formatC(cwas_AR_top6_pvalues[picked_loci_i], format = "e", digits = 2), cv=round(cor_sq_values[picked_loci_i] |> unname(), 2))
+
+txt <- bquote(italic(p) ~ '=' ~ .(txt_variables$pv) ~ ',' ~ italic(r[s]) ~ '=' ~ .(txt_variables$cv))
+
+plot(x, y,
+    frame.plot=F, pch=21, col='black', bg='brown', xlab=glue('TFPred scores'), ylab=glue('CWAS scores')
+)
+abline(lm(y ~ x), col='red')
+mtext(glue('CWAS scores vs. TFPred scores for \nloci {picked_loci}'), side=3, adj=0, cex=1.5, line=2)
+mtext(txt, side=3, adj=0, cex=1.5, line=0)
+
+```
+
+```{r}
+par(mfrow=c(3,2), oma = c(2, 2, 7, 2), mar=c(3,3,5,2))
+
+for(i in 1:nrow(cwas_AR_top6_pvalues)){
+    x <- tfpred_ca[cwas_AR_top6_loci[i], ] |> unlist() |> unname() |> as.numeric()
+    y <- cwas_ca[cwas_AR_top6_loci[i], ] |> unlist() |> unname() |> as.numeric()
+
+    #txt <- paste(cwas_AR_adt_loci[i], '\n p = ', formatC(cwas_AR_adt_pvalues[i], format = "e", digits = 2), ', ', expression(R^2), ' = ', round(cor_sq_values[i] |> unname(), 2))
+
+    txt_variables <- list(lv = cwas_AR_top6_loci[i], pv=formatC(cwas_AR_top6_pvalues[i], format = "e", digits = 2), cv=round(cor_sq_values[i] |> unname(), 2))
+
+    txt <- bquote(atop(.(txt_variables$lv), italic(p) ~ '=' ~ .(txt_variables$pv) ~ ',' ~ italic(r[s]) ~ '=' ~ .(txt_variables$cv)))
+
+    plot(x, y,
+        frame.plot=F, xlab='', ylab='', pch=21, col='black', bg='brown',
+        main=txt
+    )
+    abline(lm(y ~ x), col='red')
+}
+
+mtext(glue('CWAS scores vs. TFPred scores for \ntop {nrow(cwas_AR_top6_pvalues)} loci by CWAS R-squared'), side=3, adj=0, cex=1.5, outer=T, line=1)
+mtext(glue('CWAS scores'), side=2, adj=0.5, cex=1, outer=T)
+mtext(glue('TFPred scores'), side=1, adj=0.5, cex=1, outer=T)
+```
 
 ### Scatterplot for one individual
 ```{r}
@@ -537,7 +670,6 @@ lowest_pvalues_loci <- names(lowest_pvalues)
 cor_values <- region_correlations[lowest_pvalues_loci]
 cor_values
 ```
-
 
 ```{r}
 
@@ -563,17 +695,28 @@ mtext(glue('CWAS predictions'), side=2, adj=0.5, cex=1, outer=T)
 mtext(glue('TFPred scores'), side=1, adj=0.5, cex=1, outer=T)
 ```
 
-### correlation across individuals
+#### correlation across individuals
 
+```{r}
+cwas_supp_top1 <- cwas_supp %>%
+    dplyr::arrange(desc(MODELCV.R2)) %>%
+    dplyr::slice_max(MODELCV.R2, n=6)
+
+cwas_supp_top1[1:5,] ; length(cwas_supp_top1$ID)
+```
+
+```{r}
+cwas_top1_loci <- gsub(':|-', '_', cwas_supp_top1$hg38_id)
+cwas_top1_loci[1:5] ; length(cwas_top1_loci)
+```
 ```{r}
 tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
 ```
 
 ```{r}
 ind_cor_loci <- sapply(colnames(tfpred_ca), function(each_ind){
-    cor(tfpred_ca[common_regions, each_ind], cwas_ca[common_regions, each_ind])
+    cor(tfpred_ca[common_regions, each_ind], cwas_ca[common_regions, each_ind], method='spearman')
 })
-
 ```
 
 ```{r}
@@ -604,19 +747,9 @@ with(dt, plot(a, b, xlab='cwas', ylab='TFPred'))
 dt %>% ggplot() + aes(a, b) + geom_point() + geom_smooth()
 ```
 
-
-
-
-```{r}
-plot(a, b, xlab='cwas', ylab='TFPred'
-)
-```
-
 ```{r}
 cor(a, b, method='pearson')
 ```
-
-
 
 ```{r}
 test_loci %in% row.names(cwas_ca)
@@ -633,8 +766,7 @@ mtext(glue('Correlation between CWAS {baca_models[6]} model scores and TFPred sc
 ```
 
 
-### Shuffling individuals in CWAS predictions
-
+#### Shuffling individuals in CWAS predictions
 ```{r}
 # permute the individuals for CWAS prediction
 
@@ -658,27 +790,54 @@ permutation_matrix[1:5, ]
 ```
 
 ```{r}
-permutation_pvalues <- matrix(NA, nrow=nrow(cwas_ca), ncol=1)
-
-for(i in 1:ncol(permutation_pvalues)){
-    pm <- sample(1:ncol(cwas_ca), ncol(cwas_ca))
-    temp_cwas_ca <- cwas_ca[, pm]
-
-    rc <- purrr::map(1:length(common_regions), function(i){
-        ca <- tfpred_ca[i, ] |> unlist() |> unname()
-        da <- temp_cwas_ca[i, ] |> unlist() |> unname()
-        return(cor.test(ca, da, method='spearman')$p.value)
-    }, .progress=T)
-
-    rc <- unlist(rc) |> unname()
-    permutation_pvalues[ , i] <- rc
-}
-
-permutation_pvalues[1:5, ]
+hist(permutation_matrix[, 1])
 ```
 
 ```{r}
-par(mfrow=c(2,2), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
+#permutation_test <- matrix(NA, nrow=nrow(cwas_ca), ncol=2)
+
+pm <- sample(1:ncol(cwas_ca), ncol(cwas_ca))
+temp_cwas_ca <- cwas_ca[, pm] # shuffle the cwas data
+
+permutation_test <- purrr::map(1:length(common_regions), function(i){
+    ca <- tfpred_ca[i, ] |> unlist() |> unname()
+    da <- temp_cwas_ca[i, ] |> unlist() |> unname()
+    cor_test <- cor.test(ca, da, method='spearman', exact=F)
+    return(c(cor_test$p.value, cor_test$estimate))
+}, .progress=T)
+
+permutation_test <- do.call('rbind', permutation_test)
+permutation_test[, 1] <- permutation_test[, 1]
+permutation_test[, 2] <- permutation_test[, 2]
+colnames(permutation_test) <- c('p_value', 'r')
+rownames(permutation_test) <- common_regions
+permutation_test[1:5, ]
+```
+
+
+```{r}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(permutation_test[, 'r']^2, main='', xlab=expression(italic(R^2) ~ ", R-squared"), cex.lab=1, col='brown', xlim=c(0, 1))
+mtext(expression("Histogram of" ~ R^2 ~ "(cor test) - permutation test"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(permutation_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(permutation_test[, 'r'], main='', xlab=expression(italic(r)[s] ~ ", spearman correlation"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ r[s] ~ "(cor test) - permutation test"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(permutation_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+qq_generic(permutation_test[, 'p_value'], distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p) ~ "(cor test) - permutation test"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(permutation_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+
+```{r}
+par(mfrow=c(1,1), oma = c(2, 2, 5, 0), mar=c(4,4,5,2))
 
 for(i in 1:ncol(permutation_matrix)){
     x <- permutation_matrix[, i][!is.na(permutation_matrix[, i])]
@@ -733,12 +892,284 @@ dev.off()
 
 
 
+#### Motifs in CWAS loci
+
+```{r}
+library(GenomicRanges)
+```
+
+```{r}
+training_motifs <- glue('{project_dir}/motif_intervals/cistrome/intervals_2023-01-24/predictors/cistrome_AR_37212.txt')
+training_motifs <- data.table::fread(training_motifs, header=F)$V1
+training_motifs <- do.call('rbind', strsplit(training_motifs, '_')) |> as.data.frame()
+colnames(training_motifs) <- c('chr', 'start', 'end')
+training_motifs <- training_motifs %>% dplyr::mutate(start=as.numeric(start), end=as.numeric(end))
+training_motifs[1:5, ]
+```
+```{r}
+cwas_loci <- do.call('rbind', strsplit(cwas_supp$hg38_id, '_')) |> as.data.frame()
+colnames(cwas_loci) <- c('chr', 'start', 'end')
+cwas_loci <- cwas_loci[!is.na(cwas_loci[,2]) & !is.na(cwas_loci[,3]), ]
+cwas_loci[1:5, ]
+```
+
+```{r}
+training_motifs_granges <- with(training_motifs, GRanges(chr, IRanges(as.numeric(start), as.numeric(end)), strand='*', score=0))
+```
+
+```{r}
+cwas_loci_granges <- with(cwas_loci, GRanges(chr, IRanges(as.numeric(start), as.numeric(end)), strand='*', score=0))
+```
+
+```{r}
+loci_overlaps <- GenomicRanges::findOverlaps(query=training_motifs_granges, subject=cwas_loci_granges, type='any')
+```
+
+```{r}
+cwas_loci_granges[subjectHits(loci_overlaps), ]
+```
+
+```{r}
+training_motifs_granges[queryHits(loci_overlaps), ]
+```
 
 
+### Are the clumpings due to a specific SNP?
+
+Filter out the snps in this region
+```{r}
+test_loci <- 'chr4_96092999_96093499'
+test_loci_split <- strsplit(test_loci, '_') |> unlist()
+```
+
+```{r}
+hg38_snps_file <- glue('{project_dir}/../baca_cwas/snps/hg38_snps.bed')
+cmd <- glue('grep {test_loci_split[1]} {hg38_snps_file} | grep {test_loci_split[2]} | grep {test_loci_split[3]}')
+cmd
+```
+
+```{r}
+snps_dt <- system(cmd, intern = TRUE) %>% strsplit(., '\t') %>% do.call('rbind', .) |> as.data.frame() %>% dplyr::mutate(V2 = as.numeric(V2), V3 = as.numeric(V3))
+colnames(snps_dt) <- c('chr', 'start', 'end', 'snp_id', 'loci')
+snps_dt[1:5, ]
+```
+
+Filter the training motifs
+
+```{r}
+motif_in_loci <- subset(training_motifs, chr=='chr4' & start >= 96092999 & end <= 96093499)
+motif_in_loci
+```
+
+The motif is not in the define peak
+```{r}
+snp_in_motif <- subset(snps_dt, start >= motif_in_loci$start & end <= motif_in_loci$end)
+snp_in_motif
+```
+
+Calculate distance of snps to motifs
+
+```{r}
+snps_dt <- snps_dt %>% dplyr::mutate(snp_dist = motif_in_loci$start - start, query = paste(chr, start, sep=':'))
+snps_dt
+```
+
+```{r}
+write.table(snps_dt, glue('{project_dir}/analysis/test_variants.txt'), sep='\t')
+```
+
+Nominating snps
+
+```{r}
+#library(vcfR)
+# chr4_vcf <- vcfR::read.vcfR('/lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz', verbose=F)
+```
+
+```{r}
+'rs7686416'
+```
+```{r}
+glue('conda activate compbio-tools\nbcftools view -H -r {paste0(snps_dt$bcf_r, collapse=\',\')} -s {paste0(ind_names, collapse=",")} /lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz')
+```
+
+```{python}
+vcf_file = '/lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz'
+```
+
+```{python}
+import cyvcf2
+import pandas as pd
+import os
+import numpy as np
+```
+
+```{python}
+os.getcwd()
+```
+
+```{python}
+test_variants = pd.read_table('../analysis/test_variants.txt')
+test_variants
+```
+
+```{python}
+individuals = pd.read_table('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/valid_subset1KGgenomes_individuals.txt', header=None)[0].to_list()
+individuals[0:5], len(individuals)
+```
+
+```{python}
+vcf_chr = cyvcf2.cyvcf2.VCF(vcf_file, samples=individuals)
+```
 
 
+```{python}
+def find_variants_in_vcf_file(cyvcf2_object, samples, queries):
+
+    """
+    Given a cyvcf2 object and a kipoiseq.Interval object, as well as a list of samples, extract the variants for the samples for the intervals.
+    Parameters:
+        cyvcf2_object: A cyvcf2 object
+        interval_object: a kiposeq.Interval object
+            should have `chrom`, `start`, and `end` attributes
+        samples: list
+            a list of samples: [a, b, c]
+            At least one of these samples should be in the vcf file. 
+    Returns: dict
+        chr: the chromosome
+        position: the list of positions
+        sample: the samples and variants information
+    """
+
+    #n_samples = len(samples)
+
+    # check that samples are in the vcf file
+    # if not set(samples).issubset(cyvcf2_object.samples):
+    #     raise Exception(f'[ERROR] Fatal. Some samples are not in the VCF file.')
+
+    variants_dictionary = {}
+
+    for query in queries:
+        query_dictionary = {}
+        query_dictionary['chr'] = query.split(':')[0]
+        query_dictionary['positions'] = tuple(variant.POS for variant in cyvcf2_object(query))
+
+        if not query_dictionary['positions']:
+            print(f'{query} does not exist in vcf file')
+            continue
+        else:
+            for i, sample in enumerate(samples):
+                try:
+                    if sample in cyvcf2_object.samples:
+                        sample_variants = tuple([variant.genotypes[i][0:2], variant.gt_bases[i].split('|')] for variant in cyvcf2_object(query))
+                        # return(sample_variants)
+                        sample_alleles = ['_'.join(sample_variants[i][1]) for i in range(len(sample_variants))]
+                        query_dictionary[sample] = sample_alleles
+                except UserWarning:
+                    print(f'[WARNING] {sample} is not in the VCF file.')
+                    continue
+        variants_dictionary[query] = pd.DataFrame(query_dictionary)
+
+    output = pd.DataFrame(np.vstack(list(variants_dictionary.values())))
+    colnames = ['chr', 'position']
+    colnames.extend(samples)
+    output.columns = colnames
+    return(output)
+```
 
 
+```{python}
+queries = [f"{test_variants['chr'].tolist()[i]}:{test_variants['start'].tolist()[i]}-{test_variants['end'].tolist()[i]}" for i in range(test_variants.shape[0])]
+queries
+```
+```{python}
+individual_snps = find_variants_in_vcf_file(vcf_chr, samples=individuals, queries=queries)
+```
 
+```{python}
+output_snps = individual_snps.merge(test_variants.loc[:,['chr', 'start', 'snp_id']], left_on=['chr', 'position'], right_on=['chr', 'start'], how='inner')
+output_snps.drop('start', axis=1, inplace=True)
+output_snps = output_snps[['chr', 'position', 'snp_id'] + [c for c in output_snps if c not in ['chr', 'position', 'snp_id']]]
+output_snps.head()
+```
 
+```{python}
+output_snps.to_csv(f'/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/analysis/geuvadis_99_variants.txt', sep='\t', index=False)
+```
 
+Back to R...
+```{r}
+snp_details <- data.table::fread(glue('{project_dir}/analysis/geuvadis_99_variants.txt'))#snp_details <- snp_details %>% tidyr::unite('haps', hap1:hap2, sep='', remove=F)
+snp_details[1:5, ]
+```
+
+```{r}
+individuals <- individuals |> unlist() |> unname()
+unique_snps <- snp_details %>% dplyr::select(.data[[individuals[1]]]) %>% unlist() |> unname() |> unique()
+```
+
+```{r}
+allele_dosage_matrix <- apply(snp_details[, -c(1:3)], 1, function(each_row){
+    unique_snps <- unique(each_row |> unlist() |> unname())
+    dosage_mappings <- strsplit(unique_snps, '_') |> unlist() |> unique()
+    each_row <- sub('_', '', each_row)
+    each_dosage <- ifelse(each_row == strrep(dosage_mappings[1], 2), 0, 
+        ifelse(each_row == strrep(dosage_mappings[2], 2), 2, 
+            1))
+    names(each_dosage) <- each_row
+    return(each_dosage)
+
+}) |> as.data.frame()
+
+rownames(allele_dosage_matrix) <- colnames(snp_details[, -c(1:3)])
+colnames(allele_dosage_matrix) <- snp_details$snp_id
+allele_dosage_matrix <- allele_dosage_matrix %>% tibble::rownames_to_column('sample')
+allele_dosage_matrix[1:5, ]
+```
+
+```{r}
+picked_loci <- 'chr4_96092999_96093499'
+picked_loci_i <- which(cwas_AR_top6_loci == picked_loci)
+x <- tfpred_ca[picked_loci, ] |> unlist() |> as.data.frame() %>% tibble::rownames_to_column('sample')
+colnames(x)[2] <- 'TFPred_score'
+x[1:5,]
+```
+
+```{r}
+xdt <- merge(x, allele_dosage_matrix, by='sample')
+xdt <- xdt[, -1]
+xdt[1:5, ]
+```
+
+```{r}
+lm(TFPred_score ~ ., data=xdt) |> summary()
+```
+
+```{r}
+for(rs in colnames(allele_dosage_matrix)[-1]){
+    print(rs)
+    print(
+        xdt %>% 
+        ggplot(., aes(x=factor(.data[[rs]]), y=TFPred_score, fill=.data[[rs]])) + 
+        geom_boxplot() + 
+        geom_jitter() + 
+        theme_minimal() + 
+        labs(x=rs, y='TFPred score', title='chr4:96093166-96093166')
+    )
+}
+
+```
+
+```{r}
+xdt %>% ggplot(., aes(x=haps, y=TFPred_score, fill=haps)) + geom_boxplot() + geom_jitter() + theme_minimal() + labs(x='rs7686416', y='TFPred score', title='chr4:96093166-96093166')
+```
+
+```{r}
+xdt %>% dplyr::group_by(haps) %>% summarize(mean_TFPred_score = mean(TFPred_score))
+```
+
+```{r}
+x_ <- ifelse(xdt$haps == 'CC', 0, ifelse(xdt$haps == 'TT', 2, 1))
+y_ <- xdt$TFPred_score
+
+lm(y_ ~ x_) |> summary()
+```

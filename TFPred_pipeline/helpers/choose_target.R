@@ -31,19 +31,28 @@ enformer_absent <- cbind(enformer_absent, 0)
 enformer_TF_db <- as.data.frame(rbind(enformer_present, enformer_absent))
 colnames(enformer_TF_db) <- c('TF', 'status')
 
+# # split by -
+sp <- strsplit(homer_db$homer_TF, '-')
+sp <- unlist(sp, recursive=T) |> unique()
+homer_TF_db <- cbind(sp, 1) |> as.data.frame()
+colnames(homer_TF_db) <- c('TF', 'status')
+
 # curate cistrome
 uc <- unique(cistrome_db$Factor)
-cistrome_present <- uc[uc %in% homer_db$homer_TF]
+cistrome_present <- uc[uc %in% homer_TF_db$TF]
 cistrome_present <- cbind(cistrome_present, 1)
-cistrome_absent <- uc[!uc %in% homer_db$homer_TF]
+cistrome_absent <- uc[!uc %in% homer_TF_db$TF]
 cistrome_absent <- cbind(cistrome_absent, 0)
 
 cistrome_TF_db <- as.data.frame(rbind(cistrome_present, cistrome_absent))
 colnames(cistrome_TF_db) <- c('TF', 'status')
 
+cistrome_TF_db[cistrome_TF_db$TF == 'AR', ]
+
 # curate homer_db
-homer_TF_db <- cbind(homer_db, 1) |> as.data.frame()
-colnames(homer_TF_db) <- c('TF', 'status')
+# homer_TF_db <- cbind(homer_db, 1) |> as.data.frame()
+# colnames(homer_TF_db) <- c('TF', 'status')
+
 
 # curate TF database
 #queries <- list(enformer_TF_db, homer_TF_db, cistrome_TF_db)
@@ -67,6 +76,9 @@ cistrome_cnts <- cistrome_db[cistrome_db$Factor %in% TF_db$TF[TF_db$cistrome_db 
 
 TF_db <- merge(TF_db, cistrome_cnts, by.x='TF', by.y='Factor', all=T)
 TF_db[is.na(TF_db)] <- 0
+
+colnames(TF_db)
+TF_db[TF_db$TF == 'AR',]
 
 data.table::fwrite(TF_db, glue('{project_dir}/metadata/transcription_factor_availability_2.txt'), quote=F, sep='\t')
 # ===== 

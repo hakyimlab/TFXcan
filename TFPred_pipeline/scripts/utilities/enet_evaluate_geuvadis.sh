@@ -38,7 +38,7 @@ mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
 #  --hostfile ${PBS_NODEFILE}
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --hostfile ${PBS_NODEFILE} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_dir}" "${model_id}" "${model_type}" "${predict_on}" "${individuals_data_dir}" "${n_individuals}" "${TF}" "${run_date}" "${output_dir}"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --hostfile ${PBS_NODEFILE} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_dir}" "${model_id}" "${model_type}" "${predict_on}" "${individuals_data_dir}" "${n_individuals}" "${TF}" "${run_date}" "${output_dir}" "${dataset}"
 
 status=$?
 echo "Exit status of evaluation run on individuals is: $status"
