@@ -1,0 +1,107 @@
+Working directory is /beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs
+Jobid: 4394310
+Running on host midway3-0072.rcc.local
+Starting to run
+srun --exclusive -N1 -n1 --cpus-per-task 4
+parallel --delay 0.2 -j 2 --joblog /beagle3/haky/users/temi/projects/TFXcan/logs/split_vcf_task.log
+1
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr1
+INFO - Finished with chr1
+2
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr2
+INFO - Finished with chr2
+3
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr3
+INFO - Finished with chr3
+4
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr4
+INFO - Finished with chr4
+5
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr5
+INFO - Finished with chr5
+6
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr6
+INFO - Finished with chr6
+7
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr7
+INFO - Finished with chr7
+8
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr8
+INFO - Finished with chr8
+9
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr9
+INFO - Finished with chr9
+10
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr10
+INFO - Finished with chr10
+11
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr11
+INFO - Finished with chr11
+12
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr12
+INFO - Finished with chr12
+13
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr13
+INFO - Finished with chr13
+14
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr14
+INFO - Finished with chr14
+15
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr15
+INFO - Finished with chr15
+16
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr16
+INFO - Finished with chr16
+17
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr17
+INFO - Finished with chr17
+18
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr18
+INFO - Finished with chr18
+19
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr19
+INFO - Finished with chr19
+21
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr21
+INFO - Finished with chr21
+20
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr20
+INFO - Finished with chr20
+X
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chrX
+INFO - Finished with chrX
+Y
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chrY
+INFO - Finished with chrY
+22
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chr22
+INFO - Finished with chr22
+M
+/beagle3/haky/data/CWAS/merged/merged_cwas_genotypes_chrRenamed.vcf.gz
+INFO - splitting off chrM
+INFO - Finished with chrM
+Finished separating VCF file by chromosomes

@@ -65,4 +65,4 @@ for suf in `echo {01..10}`; do
 done
 wait
 
-printf "Finished separating all chromosome from VCF file\n"
+printf "Finished separating all chromosomes from VCF file\n"
