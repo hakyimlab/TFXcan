@@ -1,16 +1,16 @@
 {
-  "individuals": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_individuals.txt",
+  "individuals": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt",
   "n_individuals": -1,
-  "project_dir": "/beagle3/haky/users/temi/projects/AR_prostate",
-  "interval_list_file": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_intervals.txt",
+  "project_dir": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate",
+  "interval_list_file": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_intervals.txt",
   "prediction_data_name": "cwas",
   "prediction_id": "AR_Prostate",
   "reverse_complement": false,
   "date": null,
   "exclude_regions": true,
-  "batch_individuals": 20,
+  "batch_individuals": 30,
   "vcf_files": {
-    "folder": "/beagle3/haky/data/CWAS/split_vcf",
+    "folder": "/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_vcf",
     "files": {
       "chr1": "chr1_CWAS_SNPs_2023-05-15_phased.vcf.gz",
       "chr2": "chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz",
@@ -38,9 +38,9 @@
   },
   "sub_dir": true,
   "use_parsl": true,
-  "model_path": "/project2/haky/Data/enformer/raw",
-  "fasta_file": "/project2/haky/Data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
-  "metadata_dir": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/",
+  "model_path": "/lus/grand/projects/TFXcan/imlab/data/enformer/raw",
+  "fasta_file": "/lus/grand/projects/TFXcan/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+  "metadata_dir": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/",
   "output_dir": "enformer_predictions",
   "tracks_to_save": -1,
   "bins_to_save": "447,448,449",
@@ -60,14 +60,14 @@
   "parsl_parameters": {
     "job_name": "enformer_predict_AR_Prostate",
     "num_of_full_nodes": 4,
-    "walltime": "12:00:00",
+    "walltime": "06:00:00",
     "min_num_blocks": 0,
-    "max_num_blocks": 4,
-    "queue": "",
+    "max_num_blocks": 8,
+    "queue": "preemptable",
     "init_blocks": 1,
-    "hpc": "beagle3",
-    "account": "pi-haky",
+    "hpc": "polaris",
+    "account": "covid-ct",
     "provider": "highthroughput",
-    "worker_init": "source ~/.bashrc; conda activate /beagle3/haky/users/shared_software/TFXcan-pipeline-tools; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/beagle3/haky/users/shared_software/TFXcan-pipeline-tools/lib"
+    "worker_init": "source ~/.bashrc; conda activate /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools/lib"
   }
 }
