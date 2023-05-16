@@ -1,0 +1,136 @@
+---
+title: "prepare cwas info for TFPred"
+author: "Temi"
+date: 'Tues May 16 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(glue)
+library(rjson)
+library(data.table)
+library(GenomicRanges)
+library(parallel)
+library(tidyverse)
+library(jsonlite)
+```
+```{r}
+imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+data_dir <- glue('{imlab_dir}/data/freedman_data/peaks_liftover')
+project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
+homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
+```
+
+```{r}
+dataset <- 'subset1KGgenomes'
+TF <- 'AR'
+todays_date <- data_date <- run_date <- Sys.Date()
+```
+
+
+```{r}
+valid_chromosomes <- c(paste('chr', 1:22, sep=''))
+valid_chromosomes
+```
+
+```{r}
+pat <- paste0(valid_chromosomes, '_*.*vcf.gz$', collapse='|') # paste0('^', TF_info$DCid, collapse='_*|')
+vcfs_dir <- '/beagle3/haky/data/CWAS/split_vcf' #glue('{imlab_dir}/data/GEUVADIS/vcf_snps_only')
+grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+```
+
+```{r}
+vcf_files <- lapply(valid_chromosomes, function(chr){
+    pat <- paste0(chr, '_.*vcf.gz$', collapse='|')
+    #print(pat)
+    grep(pattern=glue('{pat}'), list.files(vcfs_dir), value=TRUE)
+})
+names(vcf_files) <- valid_chromosomes
+vcf_files
+```
+
+```{r}
+vcf_files <- list(folder=glue('{vcfs_dir}'), files=vcf_files)
+vcf_files
+```
+
+```{r}
+list.files(vcfs_dir, pattern=glue('*.{pat}.*vcf.gz'))
+```
+
+```{r}
+predictor_file <- glue('/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_intervals.txt')
+predictor_file ; file.exists(predictor_file)
+```
+```{r}
+metadata_dir <- '/beagle3/haky/users/temi/projects/AR_prostate/metadata'
+if(!dir.exists(metadata_dir)){
+    dir.create(metadata_dir, recursive=T)
+} else {
+    print('Metadata folder exists')
+}
+```
+
+```{r}
+# check that your individuals are present in the vcf
+all_cwas_individuals <- data.table::fread('/beagle3/haky/data/CWAS/AR_vcf_list.txt', header=F)$V1 %>% strsplit(., '/') %>% sapply(., getElement, 11) %>% gsub('.vcf.gz', '', .)
+all_cwas_individuals %>% write.table('/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_individuals.txt', col.names=F, row.names=F)
+```
+
+
+```{r}
+project_dir <- '/beagle3/haky/users/temi/projects/AR_prostate'
+```
+
+```{r}
+enformer_parameters_json <- list()
+
+# '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFpred_pipeline/metadata/individuals.txt'
+enformer_parameters_json[['individuals']] <- glue('{project_dir}/metadata/cwas_individuals.txt')
+enformer_parameters_json[['n_individuals']] <- -1
+enformer_parameters_json[['project_dir']] <- as.character(project_dir)
+enformer_parameters_json[['interval_list_file']] <- glue('{project_dir}/metadata/cwas_intervals.txt')
+enformer_parameters_json[['prediction_data_name']] <- 'cwas'
+enformer_parameters_json[['prediction_id']] <- 'AR_Prostate'
+enformer_parameters_json[["reverse_complement"]] <- FALSE
+enformer_parameters_json[['date']] <- NA
+enformer_parameters_json[['exclude_regions']] <- TRUE
+enformer_parameters_json[['batch_individuals']] <- 20
+enformer_parameters_json[['vcf_files']] <- vcf_files
+
+#enformer_parameters_json[['vcf_file']] <- "/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/genotypes/prj6_genotypes/merged_phased_SNPs.vcf.gz"
+
+enformer_parameters_json[['sub_dir']] <- TRUE
+enformer_parameters_json[['use_parsl']] <- TRUE
+enformer_parameters_json[['model_path']] <- "/project2/haky/Data/enformer/raw"
+enformer_parameters_json[['fasta_file']] <- "/project2/haky/Data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta"
+enformer_parameters_json[['metadata_dir']] <- glue('{project_dir}/metadata/')
+enformer_parameters_json[['output_dir']] <- "enformer_predictions"
+enformer_parameters_json[['tracks_to_save']] <- -1
+enformer_parameters_json[['bins_to_save']] <- "447,448,449"
+enformer_parameters_json[['sequence_source']] <- "personalized"
+enformer_parameters_json[['predictions_log_dir']] <- "predictions_log"
+enformer_parameters_json[['n_regions']] <- -1
+enformer_parameters_json[['batch_regions']] <- 1000
+enformer_parameters_json[['write_log']] <- list('logdir' = glue('job_logs'), 'logtypes' = list('memory'=F, 'error'=T, 'time'=F, 'cache'=F))
+enformer_parameters_json[['parsl_parameters']] <- list("job_name"=glue("enformer_predict_AR_Prostate"), "num_of_full_nodes"=4, "walltime"="12:00:00", "min_num_blocks"=0, "max_num_blocks"=4, "queue"="", "init_blocks"= 1, 'hpc'='beagle3', 'account'='pi-haky', 'provider'='highthroughput', "worker_init"="source ~/.bashrc; conda activate /beagle3/haky/users/shared_software/TFXcan-pipeline-tools; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/beagle3/haky/users/shared_software/TFXcan-pipeline-tools/lib")
+
+write(
+    jsonlite::toJSON(enformer_parameters_json, na='null', pretty=TRUE, auto_unbox=T),
+    file=glue('{metadata_dir}/cwas_config.json')
+)
+
+# 
+param_file <- glue('{metadata_dir}/cwas_config.json')
+param_file
+```
+
+
+```{r}
+prediction_cmd <- glue('screen\nconda activate dl-tools\nexport LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/temi/miniconda3/envs/dl-tools/lib\npython3 {project_dir}/parallel_enformer/enformer_predict.py --param_config {param_file}')
+prediction_cmd
+```

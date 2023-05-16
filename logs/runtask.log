@@ -1,0 +1,26 @@
+Seq	Host	Starttime	JobRuntime	Send	Receive	Exitval	Signal	Command
+1	:	1684208829.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 1 /beagle3/haky/data/CWAS/split_vcf 
+2	:	1684208830.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 2 /beagle3/haky/data/CWAS/split_vcf 
+3	:	1684208831.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 3 /beagle3/haky/data/CWAS/split_vcf 
+4	:	1684208832.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 4 /beagle3/haky/data/CWAS/split_vcf 
+5	:	1684208833.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 5 /beagle3/haky/data/CWAS/split_vcf 
+6	:	1684208834.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 6 /beagle3/haky/data/CWAS/split_vcf 
+7	:	1684208835.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 7 /beagle3/haky/data/CWAS/split_vcf 
+8	:	1684208836.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 8 /beagle3/haky/data/CWAS/split_vcf 
+9	:	1684208837.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 9 /beagle3/haky/data/CWAS/split_vcf 
+10	:	1684208838.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 10 /beagle3/haky/data/CWAS/split_vcf 
+11	:	1684208839.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 11 /beagle3/haky/data/CWAS/split_vcf 
+12	:	1684208840.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 12 /beagle3/haky/data/CWAS/split_vcf 
+13	:	1684208841.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 13 /beagle3/haky/data/CWAS/split_vcf 
+14	:	1684208842.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 14 /beagle3/haky/data/CWAS/split_vcf 
+15	:	1684208843.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 15 /beagle3/haky/data/CWAS/split_vcf 
+16	:	1684208844.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 16 /beagle3/haky/data/CWAS/split_vcf 
+17	:	1684208845.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 17 /beagle3/haky/data/CWAS/split_vcf 
+18	:	1684208846.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 18 /beagle3/haky/data/CWAS/split_vcf 
+19	:	1684208847.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 19 /beagle3/haky/data/CWAS/split_vcf 
+20	:	1684208848.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 20 /beagle3/haky/data/CWAS/split_vcf 
+21	:	1684208849.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 21 /beagle3/haky/data/CWAS/split_vcf 
+22	:	1684208850.000	     0.000	0	81	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome 22 /beagle3/haky/data/CWAS/split_vcf 
+23	:	1684208851.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome X /beagle3/haky/data/CWAS/split_vcf 
+24	:	1684208852.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome Y /beagle3/haky/data/CWAS/split_vcf 
+25	:	1684208853.000	     0.000	0	79	0	0	srun --exclusive -N1 -n1 --cpus-per-task 4 /beagle3/haky/users/temi/projects/TFXcan/scripts/srun.sh split_vcf_per_chromosome M /beagle3/haky/data/CWAS/split_vcf 
