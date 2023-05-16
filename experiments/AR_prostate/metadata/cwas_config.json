@@ -1,0 +1,73 @@
+{
+  "individuals": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_individuals.txt",
+  "n_individuals": -1,
+  "project_dir": "/beagle3/haky/users/temi/projects/AR_prostate",
+  "interval_list_file": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/cwas_intervals.txt",
+  "prediction_data_name": "cwas",
+  "prediction_id": "AR_Prostate",
+  "reverse_complement": false,
+  "date": null,
+  "exclude_regions": true,
+  "batch_individuals": 20,
+  "vcf_files": {
+    "folder": "/beagle3/haky/data/CWAS/split_vcf",
+    "files": {
+      "chr1": "chr1_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr2": "chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr3": "chr3_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr4": "chr4_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr5": "chr5_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr6": "chr6_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr7": "chr7_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr8": "chr8_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr9": "chr9_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr10": "chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr11": "chr11_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr12": "chr12_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr13": "chr13_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr14": "chr14_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr15": "chr15_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr16": "chr16_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr17": "chr17_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr18": "chr18_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr19": "chr19_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr20": "chr20_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr21": "chr21_CWAS_SNPs_2023-05-15_phased.vcf.gz",
+      "chr22": "chr22_CWAS_SNPs_2023-05-15_phased.vcf.gz"
+    }
+  },
+  "sub_dir": true,
+  "use_parsl": true,
+  "model_path": "/project2/haky/Data/enformer/raw",
+  "fasta_file": "/project2/haky/Data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+  "metadata_dir": "/beagle3/haky/users/temi/projects/AR_prostate/metadata/",
+  "output_dir": "enformer_predictions",
+  "tracks_to_save": -1,
+  "bins_to_save": "447,448,449",
+  "sequence_source": "personalized",
+  "predictions_log_dir": "predictions_log",
+  "n_regions": -1,
+  "batch_regions": 1000,
+  "write_log": {
+    "logdir": "job_logs",
+    "logtypes": {
+      "memory": false,
+      "error": true,
+      "time": false,
+      "cache": false
+    }
+  },
+  "parsl_parameters": {
+    "job_name": "enformer_predict_AR_Prostate",
+    "num_of_full_nodes": 4,
+    "walltime": "12:00:00",
+    "min_num_blocks": 0,
+    "max_num_blocks": 4,
+    "queue": "",
+    "init_blocks": 1,
+    "hpc": "beagle3",
+    "account": "pi-haky",
+    "provider": "highthroughput",
+    "worker_init": "source ~/.bashrc; conda activate /beagle3/haky/users/shared_software/TFXcan-pipeline-tools; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/beagle3/haky/users/shared_software/TFXcan-pipeline-tools/lib"
+  }
+}

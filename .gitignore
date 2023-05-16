@@ -13,6 +13,8 @@ TFPred_pipeline/*
 baca_cwas/*
 enformer_test/*
 geuvadis_individuals/*
+**/predictions_folder/
+**/cmd_parsl.*
 
 
 .*
@@ -36,6 +38,7 @@ geuvadis_individuals/*
 !TFPred_pipeline/parallel_enformer
 !TFPred_pipeline/config_files
 !TFPred_pipeline/helpers
+!experiments/
 
 
 
