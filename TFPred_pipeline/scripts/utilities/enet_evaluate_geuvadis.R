@@ -16,11 +16,11 @@ n_individuals <- as.numeric(arguments[6])
 TF <- arguments[7]
 run_date <- arguments[8]
 output_dir <- arguments[9]
-
+dataset <- arguments[10]
 
 print(glue("[INFO] Found {parallel::detectCores()} cores."))
 
-print(glue('model dir is {model_dir}\nTF is {TF}\nmodel_id is {model_id}\noutput directory is {output_dir}\nrun date is {run_date}\nmodel type is {model_type}\nnumber of individuals is {n_individuals}\n\n'))
+print(glue('model dir is {model_dir}\nTF is {TF}\ndataset is {dataset}\nmodel_id is {model_id}\noutput directory is {output_dir}\nrun date is {run_date}\nmodel type is {model_type}\nnumber of individuals is {n_individuals}\n\n'))
 
 # individuals
 #individuals <- c('LuCaP_136', 'LuCaP_141', 'LuCaP_167', 'LuCaP_145')
@@ -124,6 +124,6 @@ names(predictions_list) <- individuals
 
 
 # save the object to be read later
-print(glue('[INFO] Saving `geuvadis_{TF}_{model_type}_evaluation_{run_date}.rds` to {output_dir}'))
-rds_file <- glue('{output_dir}/geuvadis_{TF}_{model_type}_evaluation_{run_date}.rds')
+print(glue('[INFO] Saving `{dataset}_{TF}_{model_type}_evaluation_{run_date}.rds` to {output_dir}'))
+rds_file <- glue('{output_dir}/{dataset}_{TF}_{model_type}_evaluation_{run_date}.rds')
 saveRDS(predictions_list, file=rds_file)

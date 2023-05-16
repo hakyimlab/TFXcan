@@ -63,8 +63,8 @@ if(!dir.exists(run_utils)){
 
 ```{r}
 dataset <- 'cistrome' # change this variable name 
-TF <- 'PR' #FOXA1' #HOXB13' #'PPARG' #PR
-todays_date <- data_date <- run_date <- '2023-01-18' #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
+TF <- 'FOXA1' #FOXA1' #HOXB13' #'PPARG' #PR
+todays_date <- data_date <- run_date <- '2023-01-11' #'2023-01-11' #Sys.Date() #2023-01-06' #Sys.Date()
 #TF <- 'GATA3'
 ```
 
@@ -869,6 +869,7 @@ agg_downstream <- 'aggByDownstream'
 agg_upstream_downstream <- 'aggByUpstreamDownstream'
 
 agg_methods <- c(agg_postcenter, agg_meancenter, agg_mean, agg_upstream, agg_center, agg_downstream, agg_upstream_downstream, agg_precenter)
+agg_methods <- c(agg_meancenter)
 ```
 
 ```{r}
@@ -936,7 +937,7 @@ model_dir <- glue('{project_dir}/models')
 model_type <- 'linear'
 
 # load all the models
-agg_methods <- agg_methods[!agg_methods == 'aggByMeanCenter']
+#agg_methods <- agg_methods[!agg_methods == 'aggByMeanCenter']
 linear_models_list <- purrr::map(.x=agg_methods, function(each_method){
 
     agg_rds <- glue('{model_dir}/{dataset}_{TF}_{each_method}_{model_type}_{todays_date}.rds')
@@ -996,6 +997,36 @@ test_logistic_auc <- lapply(agg_methods, function(each_agg){
     return(perf@y.values[[1]])
 })
 names(test_logistic_auc) <- agg_methods
+```
+
+```{r}
+pred_ROCR <- with(train_logistic_eval[[1]], ROCR::prediction(prediction_response, class))
+roc_ROCR <- performance(pred_ROCR, measure = "tpr", x.measure = "fpr")
+
+perf <- ROCR::performance(pred_ROCR, "auc")
+auroc <- round(perf@y.values[[1]], 2)
+
+base::plot(roc_ROCR@x.values[[1]], roc_ROCR@y.values[[1]], frame.plot=F, type='l', xlab='false positive rate', ylab='true positive rate')
+abline(a=0,b=1, col='red')
+mtext(glue('ROC curve of {TF} Cistrome models on the training set\nAUROC: {auroc}'), adj=0, line=0, cex=1.2)
+```
+
+```{r}
+pred_ROCR <- with(test_logistic_eval[[1]], ROCR::prediction(prediction_response, class))
+roc_ROCR <- performance(pred_ROCR, measure = "tpr", x.measure = "fpr")
+
+perf <- ROCR::performance(pred_ROCR, "auc")
+auroc <- round(perf@y.values[[1]], 2)
+
+base::plot(roc_ROCR@x.values[[1]], roc_ROCR@y.values[[1]], frame.plot=F, type='l', xlab='false positive rate', ylab='true positive rate')
+abline(a=0,b=1, col='red')
+mtext(glue('ROC curve of {TF} Cistrome models on the test set\nAUROC: {auroc}'), adj=0, line=0, cex=1.2)
+```
+
+```{r}
+base::plot(roc_ROCR@x.values[[1]], roc_ROCR@y.values[[1]], frame.plot=F, type='l', xlab='false positive rate', ylab='true positive rate')
+abline(a=0,b=1, col='red')
+mtext(glue('AUROC plot of {TF} Cistrome models on the training set'), adj=0, line=0)
 ```
 
 matthews correlation coefficient
@@ -1080,6 +1111,23 @@ boxplot(prediction_link ~ class, data=test_linear_eval[[aggm]], frame.plot=F, yl
 mtext(glue('Distribution of {aggm} {TF}-linear 
 scores'), adj=0, cex=1.5)
 mtext(report_label, adj = 0, line=-3, cex=1.0)
+```
+ or 
+```{r}
+with(test_linear_eval[[aggm]], data.frame(prediction_link, class)) %>%
+    ggplot(.) + aes(x=factor(class), y=prediction_link, fill='orange') + geom_violin() + geom_boxplot(width=0.1, color="black", alpha=0.2) + labs(x='class (binding or no binding)', y=expression(omega * X ~ "/ TFPred scores")) + theme_minimal() + theme(legend.position = "none", axis.title=element_text(size=18), axis.text=element_text(size=12)) + annotate('text', label=report_label, x=1.5, y = 1)
+```
+
+```{r}
+set.seed(2023)
+fake_label <- 'each point is an individual'
+with(test_linear_eval[[aggm]], data.frame(prediction_link, class)) %>% dplyr::group_by(class) %>% slice_sample(n=50) %>%
+    ggplot(., aes(x=factor(class), y=prediction_link, fill='green')) + 
+    geom_violin() + ggplot2::scale_fill_manual(values = 'lightblue') + geom_boxplot(width=0.1, color="black", alpha=0.2) + geom_jitter() + 
+    labs(x='class (binding or no binding)', y=expression(omega * X ~ "/ TFPred scores"), title='an arbitrary loci') + 
+    theme_minimal() + 
+    theme(legend.position = "none", axis.title=element_text(size=18), axis.text=element_text(size=12)) + 
+    annotate('text', label=fake_label, x=1.5, y = 1, size=8)
 ```
 
 ```{r}

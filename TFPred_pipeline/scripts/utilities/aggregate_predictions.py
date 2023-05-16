@@ -53,6 +53,7 @@ with open(f'{args.metadata_file}') as f:
     individuals = parameters['individuals']
     n_individuals = parameters['n_individuals']
     prediction_data_name = parameters['prediction_data_name']
+    hpc = parameters["hpc"]
 
 # determine what individuals to predict on and all that
 if sequence_source == 'personalized':
@@ -92,10 +93,17 @@ exec(open(predict_utils_one).read(), globals(), globals())
 if use_parsl == True:
     #bpath = os.path.join(base_path, 'modeling_pipeline')
     print(f'[INFO] Using parsl.')
-    parsl_params = {'working_dir':base_path, 'job_name':'aggregate_predictions', 'queue':"preemptable", 'walltime':"06:00:00", 'num_of_full_nodes':10, 'min_num_blocks':0, 'max_num_blocks':10}
+    parsl_params = {'working_dir':base_path, 'job_name':'aggregate_predictions', 'queue':"full-node", 'walltime':"06:00:00", 'num_of_full_nodes':2, 'min_num_blocks':0, 'max_num_blocks':10}
     #parsl.load(parslConfiguration.localParslConfig_htpool(parsl_params))
     #parsl.load(parslConfiguration.localParslConfig_htpool(parsl_params))
-    parsl.load(parslConfiguration.polaris_htParslConfig(parsl_params))
+    #parsl.load(parslConfiguration.polaris_htParslConfig(parsl_params))
+
+    if hpc == 'polaris':
+        print(f'INFO - Using parsl configuration for polaris: {use_parsl}')
+        parsl.load(parslConfiguration.polaris_htParslConfig(params=parsl_params))
+    elif hpc == 'theta':
+        print(f'INFO - Using parsl configuration for theta: {use_parsl}')
+        parsl.load(parslConfiguration.theta_htParslConfig(params=parsl_params))
 
 collection_fxn = return_prediction_function(use_parsl)
 

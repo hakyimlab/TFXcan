@@ -16,9 +16,7 @@ BiocManager::install("GEOquery")
 library(GEOquery)
 
 IMPACT_REPRO_DIR <- '../../../projects-reproduce/IMPACT-repro/reproducing'
-
 FEATURES_RDATA <- '/Volumes/im-lab/nas40t2/temi/projects-reproduce/IMPACT-repro/reproducing/Rdata/Features.Rdata'
-
 DATA_DIR <- '../data'
 # this file also contains the betas for each mark
 
