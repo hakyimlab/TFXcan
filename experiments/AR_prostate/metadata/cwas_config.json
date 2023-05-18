@@ -6,7 +6,7 @@
   "prediction_data_name": "cwas",
   "prediction_id": "AR_Prostate",
   "reverse_complement": false,
-  "date": null,
+  "date": "2023-05-16",
   "exclude_regions": true,
   "batch_individuals": 30,
   "vcf_files": {

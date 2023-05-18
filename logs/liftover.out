@@ -1,0 +1,529 @@
+Working directory is /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/manipulate_bed
+/lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P509T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_13_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P309T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_23_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P252T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P730T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_25_AR_Healthy_rep2.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P593T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P618T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P779T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P297T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P433T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_4024T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_189_4.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P462T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P328T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P257T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P268T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_29_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P291T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P710T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P427T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P300T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P230T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P449T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_5_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P506T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P540T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P747T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P355T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P342T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P294T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_7_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P265T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P305T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1853T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P349T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_7_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P500T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1798T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P464T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P680T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1730T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P301T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P310T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_27_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P336T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P223T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P544T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P695T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P475T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P832T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_167.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P313T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_136.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1239T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P531T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P227T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P450T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P279T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P254T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_1_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P327T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P555T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P272T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1636T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_141.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P352T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P431T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P262T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_27_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P295T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P737T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P511T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P266T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P255T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P280T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P324T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_35.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P536T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1592T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_86_2.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_1816T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P560T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P603T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_25_AR_Healthy_rep1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_92.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P343T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_170_3.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P444T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_77.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P452T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P426T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P534T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P263T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_2815T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_81.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_189_3.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P456T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P717T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_58.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P249T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P276T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P261T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P507T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P348T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_170_2.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P674T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_29_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_19_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_70.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P274T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P513T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_13_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P643T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_5_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P466T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P416T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_78.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P298T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P527T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P552T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/DF_AR_2752T.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P229T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P559T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P533T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P811T_AR_1.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_1_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_23_AR_Healthy.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/NKI_19_AR_Tumor.sorted.bed /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/P228T_AR_1.sorted.bed
+
+INFO - started with P433T_AR_1.sorted.bed
+
+INFO - finished with P433T_AR_1.sorted.bed
+
+INFO - started with P779T_AR_1.sorted.bed
+
+INFO - finished with P779T_AR_1.sorted.bed
+
+INFO - started with NKI_13_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_13_AR_Healthy.sorted.bed
+
+INFO - started with P309T_AR_1.sorted.bed
+
+INFO - finished with P309T_AR_1.sorted.bed
+
+INFO - started with P730T_AR_1.sorted.bed
+
+INFO - finished with P730T_AR_1.sorted.bed
+
+INFO - started with P593T_AR_1.sorted.bed
+
+INFO - finished with P593T_AR_1.sorted.bed
+
+INFO - started with P252T_AR_1.sorted.bed
+
+INFO - finished with P252T_AR_1.sorted.bed
+
+INFO - started with P297T_AR_1.sorted.bed
+
+INFO - finished with P297T_AR_1.sorted.bed
+
+INFO - started with P328T_AR_1.sorted.bed
+
+INFO - finished with P328T_AR_1.sorted.bed
+
+INFO - started with P509T_AR_1.sorted.bed
+
+INFO - finished with P509T_AR_1.sorted.bed
+
+INFO - started with NKI_29_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_29_AR_Healthy.sorted.bed
+
+INFO - started with P257T_AR_1.sorted.bed
+
+INFO - finished with P257T_AR_1.sorted.bed
+
+INFO - started with P291T_AR_1.sorted.bed
+
+INFO - finished with P291T_AR_1.sorted.bed
+
+INFO - started with P710T_AR_1.sorted.bed
+
+INFO - finished with P710T_AR_1.sorted.bed
+
+INFO - started with P618T_AR_1.sorted.bed
+
+INFO - finished with P618T_AR_1.sorted.bed
+
+INFO - started with P268T_AR_1.sorted.bed
+
+INFO - finished with P268T_AR_1.sorted.bed
+
+INFO - started with NKI_25_AR_Healthy_rep2.sorted.bed
+
+INFO - finished with NKI_25_AR_Healthy_rep2.sorted.bed
+
+INFO - started with P462T_AR_1.sorted.bed
+
+INFO - finished with P462T_AR_1.sorted.bed
+
+INFO - started with P449T_AR_1.sorted.bed
+
+INFO - finished with P449T_AR_1.sorted.bed
+
+INFO - started with P300T_AR_1.sorted.bed
+
+INFO - finished with P300T_AR_1.sorted.bed
+
+INFO - started with NKI_5_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_5_AR_Healthy.sorted.bed
+
+INFO - started with P506T_AR_1.sorted.bed
+
+INFO - finished with P506T_AR_1.sorted.bed
+
+INFO - started with NKI_23_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_23_AR_Tumor.sorted.bed
+
+INFO - started with P747T_AR_1.sorted.bed
+
+INFO - finished with P747T_AR_1.sorted.bed
+
+INFO - started with P355T_AR_1.sorted.bed
+
+INFO - finished with P355T_AR_1.sorted.bed
+
+INFO - started with P230T_AR_1.sorted.bed
+
+INFO - finished with P230T_AR_1.sorted.bed
+
+INFO - started with P342T_AR_1.sorted.bed
+
+INFO - finished with P342T_AR_1.sorted.bed
+
+INFO - started with P540T_AR_1.sorted.bed
+
+INFO - finished with P540T_AR_1.sorted.bed
+
+INFO - started with P265T_AR_1.sorted.bed
+
+INFO - finished with P265T_AR_1.sorted.bed
+
+INFO - started with P294T_AR_1.sorted.bed
+
+INFO - finished with P294T_AR_1.sorted.bed
+
+INFO - started with P349T_AR_1.sorted.bed
+
+INFO - finished with P349T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_189_4.sorted.bed
+
+INFO - finished with AR_PDX_189_4.sorted.bed
+
+INFO - started with NKI_7_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_7_AR_Healthy.sorted.bed
+
+INFO - started with P305T_AR_1.sorted.bed
+
+INFO - finished with P305T_AR_1.sorted.bed
+
+INFO - started with P500T_AR_1.sorted.bed
+
+INFO - finished with P500T_AR_1.sorted.bed
+
+INFO - started with P464T_AR_1.sorted.bed
+
+INFO - finished with P464T_AR_1.sorted.bed
+
+INFO - started with P680T_AR_1.sorted.bed
+
+INFO - finished with P680T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1853T.sorted.bed
+
+INFO - finished with DF_AR_1853T.sorted.bed
+
+INFO - started with P427T_AR_1.sorted.bed
+
+INFO - finished with P427T_AR_1.sorted.bed
+
+INFO - started with DF_AR_4024T.sorted.bed
+
+INFO - finished with DF_AR_4024T.sorted.bed
+
+INFO - started with NKI_7_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_7_AR_Tumor.sorted.bed
+
+INFO - started with P544T_AR_1.sorted.bed
+
+INFO - finished with P544T_AR_1.sorted.bed
+
+INFO - started with P336T_AR_1.sorted.bed
+
+INFO - finished with P336T_AR_1.sorted.bed
+
+INFO - started with P475T_AR_1.sorted.bed
+
+INFO - finished with P475T_AR_1.sorted.bed
+
+INFO - started with P223T_AR_1.sorted.bed
+
+INFO - finished with P223T_AR_1.sorted.bed
+
+INFO - started with P301T_AR_1.sorted.bed
+
+INFO - finished with P301T_AR_1.sorted.bed
+
+INFO - started with P832T_AR_1.sorted.bed
+
+INFO - finished with P832T_AR_1.sorted.bed
+
+INFO - started with P531T_AR_1.sorted.bed
+
+INFO - finished with P531T_AR_1.sorted.bed
+
+INFO - started with NKI_27_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_27_AR_Healthy.sorted.bed
+
+INFO - started with P695T_AR_1.sorted.bed
+
+INFO - finished with P695T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_136.sorted.bed
+
+INFO - finished with AR_PDX_136.sorted.bed
+
+INFO - started with P450T_AR_1.sorted.bed
+
+INFO - finished with P450T_AR_1.sorted.bed
+
+INFO - started with P313T_AR_1.sorted.bed
+
+INFO - finished with P313T_AR_1.sorted.bed
+
+INFO - started with P310T_AR_1.sorted.bed
+
+INFO - finished with P310T_AR_1.sorted.bed
+
+INFO - started with P279T_AR_1.sorted.bed
+
+INFO - finished with P279T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1730T.sorted.bed
+
+INFO - finished with DF_AR_1730T.sorted.bed
+
+INFO - started with P227T_AR_1.sorted.bed
+
+INFO - finished with P227T_AR_1.sorted.bed
+
+INFO - started with P254T_AR_1.sorted.bed
+
+INFO - finished with P254T_AR_1.sorted.bed
+
+INFO - started with P327T_AR_1.sorted.bed
+
+INFO - finished with P327T_AR_1.sorted.bed
+
+INFO - started with P555T_AR_1.sorted.bed
+
+INFO - finished with P555T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1798T.sorted.bed
+
+INFO - finished with DF_AR_1798T.sorted.bed
+
+INFO - started with P272T_AR_1.sorted.bed
+
+INFO - finished with P272T_AR_1.sorted.bed
+
+INFO - started with NKI_1_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_1_AR_Healthy.sorted.bed
+
+INFO - started with P295T_AR_1.sorted.bed
+
+INFO - finished with P295T_AR_1.sorted.bed
+
+INFO - started with P431T_AR_1.sorted.bed
+
+INFO - finished with P431T_AR_1.sorted.bed
+
+INFO - started with P737T_AR_1.sorted.bed
+
+INFO - finished with P737T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_167.sorted.bed
+
+INFO - finished with AR_PDX_167.sorted.bed
+
+INFO - started with DF_AR_1239T.sorted.bed
+
+INFO - finished with DF_AR_1239T.sorted.bed
+
+INFO - started with P262T_AR_1.sorted.bed
+
+INFO - finished with P262T_AR_1.sorted.bed
+
+INFO - started with P511T_AR_1.sorted.bed
+
+INFO - finished with P511T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_141.sorted.bed
+
+INFO - finished with AR_PDX_141.sorted.bed
+
+INFO - started with P352T_AR_1.sorted.bed
+
+INFO - finished with P352T_AR_1.sorted.bed
+
+INFO - started with P280T_AR_1.sorted.bed
+
+INFO - finished with P280T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1636T.sorted.bed
+
+INFO - finished with DF_AR_1636T.sorted.bed
+
+INFO - started with P560T_AR_1.sorted.bed
+
+INFO - finished with P560T_AR_1.sorted.bed
+
+INFO - started with P603T_AR_1.sorted.bed
+
+INFO - finished with P603T_AR_1.sorted.bed
+
+INFO - started with NKI_27_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_27_AR_Tumor.sorted.bed
+
+INFO - started with P324T_AR_1.sorted.bed
+
+INFO - finished with P324T_AR_1.sorted.bed
+
+INFO - started with P266T_AR_1.sorted.bed
+
+INFO - finished with P266T_AR_1.sorted.bed
+
+INFO - started with P536T_AR_1.sorted.bed
+
+INFO - finished with P536T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_35.sorted.bed
+
+INFO - finished with AR_PDX_35.sorted.bed
+
+INFO - started with P444T_AR_1.sorted.bed
+
+INFO - finished with P444T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1592T.sorted.bed
+
+INFO - finished with DF_AR_1592T.sorted.bed
+
+INFO - started with AR_PDX_86_2.sorted.bed
+
+INFO - finished with AR_PDX_86_2.sorted.bed
+
+INFO - started with P255T_AR_1.sorted.bed
+
+INFO - finished with P255T_AR_1.sorted.bed
+
+INFO - started with P452T_AR_1.sorted.bed
+
+INFO - finished with P452T_AR_1.sorted.bed
+
+INFO - started with NKI_25_AR_Healthy_rep1.sorted.bed
+
+INFO - finished with NKI_25_AR_Healthy_rep1.sorted.bed
+
+INFO - started with P263T_AR_1.sorted.bed
+
+INFO - finished with P263T_AR_1.sorted.bed
+
+INFO - started with P534T_AR_1.sorted.bed
+
+INFO - finished with P534T_AR_1.sorted.bed
+
+INFO - started with P426T_AR_1.sorted.bed
+
+INFO - finished with P426T_AR_1.sorted.bed
+
+INFO - started with P717T_AR_1.sorted.bed
+
+INFO - finished with P717T_AR_1.sorted.bed
+
+INFO - started with P456T_AR_1.sorted.bed
+
+INFO - finished with P456T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_170_3.sorted.bed
+
+INFO - finished with AR_PDX_170_3.sorted.bed
+
+INFO - started with P343T_AR_1.sorted.bed
+
+INFO - finished with P343T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_81.sorted.bed
+
+INFO - finished with AR_PDX_81.sorted.bed
+
+INFO - started with P348T_AR_1.sorted.bed
+
+INFO - finished with P348T_AR_1.sorted.bed
+
+INFO - started with P261T_AR_1.sorted.bed
+
+INFO - finished with P261T_AR_1.sorted.bed
+
+INFO - started with P276T_AR_1.sorted.bed
+
+INFO - finished with P276T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_92.sorted.bed
+
+INFO - finished with AR_PDX_92.sorted.bed
+
+INFO - started with P249T_AR_1.sorted.bed
+
+INFO - finished with P249T_AR_1.sorted.bed
+
+INFO - started with P507T_AR_1.sorted.bed
+
+INFO - finished with P507T_AR_1.sorted.bed
+
+INFO - started with DF_AR_1816T.sorted.bed
+
+INFO - finished with DF_AR_1816T.sorted.bed
+
+INFO - started with NKI_19_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_19_AR_Healthy.sorted.bed
+
+INFO - started with AR_PDX_58.sorted.bed
+
+INFO - finished with AR_PDX_58.sorted.bed
+
+INFO - started with P274T_AR_1.sorted.bed
+
+INFO - finished with P274T_AR_1.sorted.bed
+
+INFO - started with DF_AR_2815T.sorted.bed
+
+INFO - finished with DF_AR_2815T.sorted.bed
+
+INFO - started with P513T_AR_1.sorted.bed
+
+INFO - finished with P513T_AR_1.sorted.bed
+
+INFO - started with NKI_29_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_29_AR_Tumor.sorted.bed
+
+INFO - started with P466T_AR_1.sorted.bed
+
+INFO - finished with P466T_AR_1.sorted.bed
+
+INFO - started with P643T_AR_1.sorted.bed
+
+INFO - finished with P643T_AR_1.sorted.bed
+
+INFO - started with P674T_AR_1.sorted.bed
+
+INFO - finished with P674T_AR_1.sorted.bed
+
+INFO - started with NKI_5_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_5_AR_Tumor.sorted.bed
+
+INFO - started with AR_PDX_70.sorted.bed
+
+INFO - finished with AR_PDX_70.sorted.bed
+
+INFO - started with NKI_13_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_13_AR_Tumor.sorted.bed
+
+INFO - started with P298T_AR_1.sorted.bed
+
+INFO - finished with P298T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_170_2.sorted.bed
+
+INFO - finished with AR_PDX_170_2.sorted.bed
+
+INFO - started with P559T_AR_1.sorted.bed
+
+INFO - finished with P559T_AR_1.sorted.bed
+
+INFO - started with P416T_AR_1.sorted.bed
+
+INFO - finished with P416T_AR_1.sorted.bed
+
+INFO - started with P533T_AR_1.sorted.bed
+
+INFO - finished with P533T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_77.sorted.bed
+
+INFO - finished with AR_PDX_77.sorted.bed
+
+INFO - started with P527T_AR_1.sorted.bed
+
+INFO - finished with P527T_AR_1.sorted.bed
+
+INFO - started with P811T_AR_1.sorted.bed
+
+INFO - finished with P811T_AR_1.sorted.bed
+
+INFO - started with NKI_23_AR_Healthy.sorted.bed
+
+INFO - finished with NKI_23_AR_Healthy.sorted.bed
+
+INFO - started with AR_PDX_189_3.sorted.bed
+
+INFO - finished with AR_PDX_189_3.sorted.bed
+
+INFO - started with P552T_AR_1.sorted.bed
+
+INFO - finished with P552T_AR_1.sorted.bed
+
+INFO - started with NKI_19_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_19_AR_Tumor.sorted.bed
+
+INFO - started with P229T_AR_1.sorted.bed
+
+INFO - finished with P229T_AR_1.sorted.bed
+
+INFO - started with AR_PDX_78.sorted.bed
+
+INFO - finished with AR_PDX_78.sorted.bed
+
+INFO - started with P228T_AR_1.sorted.bed
+
+INFO - finished with P228T_AR_1.sorted.bed
+
+INFO - started with NKI_1_AR_Tumor.sorted.bed
+
+INFO - finished with NKI_1_AR_Tumor.sorted.bed
+
+INFO - started with DF_AR_2752T.sorted.bed
+
+INFO - finished with DF_AR_2752T.sorted.bed
+
+INFO - Finished lifting over all files
+Exit status of lifting over is: 0
