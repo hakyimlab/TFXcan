@@ -1,0 +1,21 @@
+#!/bin/bash
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00,filesystems=grand
+#PBS -A covid-ct
+#PBS -q preemptable    
+#PBS -N liftover_snps
+#PBS -k doe
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.err
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+module load gnu-parallel
+
+liftover_chain='/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+from_bedfiles=( `find /lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed -type f` )
+to_folder='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/liftover_hg38'
+mkdir -p ${to_folder}
+
+parallel -j 12 --joblog '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/sortbed_task.log' " {} ${sorted_dir}" ::: ${bedfiles[@]}

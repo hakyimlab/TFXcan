@@ -1,0 +1,25 @@
+#!/bin/bash
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00,filesystems=home:grand
+#PBS -A covid-ct
+#PBS -q debug   
+#PBS -N intersect_bedfiles
+#PBS -k doe
+#PBS -o /grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/intersect_bedfiles.out
+#PBS -e /grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/intersect_bedfiles.err
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+module load gnu-parallel
+
+bedtools='/home/temi/miniconda3/envs/compbio-tools/bin/bedtools'
+sorted_bed_dir=/lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed_hg38
+#bedfiles=( `find /lus/grand/projects/TFXcan/imlab/data/baca_cwas/bed -type f` )
+intersected_bed_dir=/lus/grand/projects/TFXcan/imlab/data/baca_cwas/intersected_bed
+mkdir -p ${intersected_bed_dir}
+intersected_bed_file="${intersected_bed_dir}/cwas_intersected_hg38.txt"
+
+${bedtools} multiinter -header -i `find ${sorted_bed_dir} -not -name 'unmapped_*.bed' -type f` > ${intersected_bed_file}
+
+#find ./liftover_hg38 -not -name 'unmapped_*.bed' -type f

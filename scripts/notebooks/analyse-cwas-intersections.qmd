@@ -1,0 +1,166 @@
+---
+title: "Analyse Kawakami and Freedman's intersections and create train, test, validation splits for both datasets"
+author: "Temi"
+date: 'Wednesday September 28 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+
+```{r import libraries}
+setwd('/grand/TFXcan/imlab/users/temi/projects/TFXcan/scripts/')
+
+rm(list=ls())
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+```
+
+```{r}
+intersection_dir <- '/lus/grand/projects/TFXcan/imlab/data/baca_cwas/intersected_bed'
+```
+
+```{r}
+intersection_dt <- data.table::fread(glue('{intersection_dir}/cwas_intersected_hg38.txt'))
+dim(intersection_dt)
+```
+
+```{r}
+colnames(intersection_dt)[6:ncol(intersection_dt)] <- colnames(intersection_dt)[6:ncol(intersection_dt)] %>% strsplit(., '/') %>% sapply(., getElement, 10) %>% strsplit(., '\\.') %>% sapply(., getElement, 1)
+
+intersection_dt[1:5, 1:8]
+```
+
+```{r}
+intersection_granges <- with(intersection_dt, GRanges(chrom, IRanges(start, end), strand='+', score=0))
+intersection_granges <- GenomicRanges::reduce(intersection_granges)
+intersection_granges
+```
+
+```{r}
+int_dt_granges <- with(intersection_dt, GRanges(chrom, IRanges(start, end), strand='+', score=0))
+int_dt_granges
+```
+
+Find overlaps
+```{r}
+overlaps <- GenomicRanges::findOverlaps(query=int_dt_granges, subject=intersection_granges, type='within')
+overlaps
+```
+
+```{r}
+test <- (intersection_dt[subjectHits(overlaps), ] %>% distinct(chrom, start, end, .keep_all=T))[1:10, 1:10]
+test
+```
+
+```{r}
+# 
+int_overlaps <- cbind(as.data.frame(overlaps), intersection_dt)
+int_overlaps[1:5, 1:5]
+
+```
+
+Groupby subjectHits
+
+```{r}
+squish <- function(grp){
+    chrom <- unique(grp['chrom']) |> unlist() |> unname()
+    start <- min(grp['start'])
+    end <- max(grp['end'])
+    info <- grp %>% dplyr::select(-c(queryHits, chrom, start, end, num, list)) %>% group_map(~ colSums(.x))
+    out <- c(chrom, start, end, info[[1]]) #|> as.data.frame()
+    return(out)
+}
+```
+
+```{r}
+squish(test2)
+```
+
+```{r}
+test3 <- int_overlaps %>% dplyr::group_by(subjectHits) %>% group_map(~ squish(.x))
+test3 <- do.call('rbind', test3) |> data.frame()
+colnames(test3)[1:3] <- c('chr', 'start', 'end')
+test3[1:5, 1:10]
+```
+
+
+```{r}
+data.table::fwrite(test3, file = '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/info/cwas_ground_truth.txt', quote=F, row.names=F, sep='\t')
+```
+
+
+```{r}
+colnames(intersection_dt)[6:ncol(intersection_dt)] %>% as.data.frame() %>% data.table::fwrite(file = '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/info/cwas_individuals.txt', quote=F, row.names=F)
+```
+
+
+```{r}
+list.files('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_AR_Prostate/predictions_2023-05-16/aggregated_predictions') %>% strsplit('_')
+```
+
+
+### TFPred scores on the ground truth
+
+```{r}
+experiment_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate'
+```
+
+```{r}
+# for some reason, fread isn't working right
+#ground_truth <- data.table:fread(glue('{experiment_dir}/info/cwas_ground_truth.txt'), sep='\t')
+ground_truth <- read.table(glue('{experiment_dir}/info/cwas_ground_truth.txt'), header=TRUE)
+cwas_individuals <- data.table::fread(glue('{experiment_dir}/metadata/cwas_individuals.txt'), header=FALSE)$V1
+cwas_loci <- data.table::fread(glue('{experiment_dir}/metadata/cwas_intervals.txt'), header=FALSE)$V1
+```
+
+```{r}
+ground_truth[1:5, 1:10]
+```
+
+```{r}
+cwas_loci_dt <- cwas_loci %>% strsplit('_') %>% do.call('rbind', .) %>% as.data.frame()
+colnames(cwas_loci_dt) <- c('chr', 'start', 'end')
+cwas_loci_dt <- cwas_loci_dt[!(is.na(cwas_loci_dt$start) | is.na(cwas_loci_dt$end)), ]
+cwas_loci_dt <- cwas_loci_dt %>% dplyr::mutate(start=as.numeric(start), end=as.numeric(end))
+cwas_loci_granges <- with(cwas_loci_dt, GRanges(chr, IRanges(start, end), strand='+', score=0))
+cwas_loci_granges
+```
+
+Plot the distribution of peak widths
+```{r}
+GenomicRanges::width(cwas_loci_granges) %>% hist(main='distribution of peak widths for AR chip-seq', xlab='width', breaks = seq(1, max(.), length.out=100))
+```
+
+```{r}
+gt_granges <- with(ground_truth, GRanges(chr, IRanges(start, end), strand='+', score=0))
+gt_granges
+```
+
+```{r}
+gt_in_cwas_loci <- GenomicRanges::findOverlaps(query=cwas_loci_granges, subject=gt_granges, type='any')
+gt_in_cwas_loci
+```
+
+```{r}
+gt_in_cwas <- ground_truth[subjectHits(gt_in_cwas_loci), ]
+gt_not_in_cwas <- ground_truth[-subjectHits(gt_in_cwas_loci), ]
+gt_in_cwas[1:5, 1:10]; gt_not_in_cwas[1:5, 1:10]
+```
+
+
+```{r}
+gt_not_in_cwas[1:5, 1:10] 
+```
+
+
+```{r}
+bd <- data.table::fread('/lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed/AR_PDX_136.sorted.bed')
+```

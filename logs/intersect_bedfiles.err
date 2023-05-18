@@ -1,0 +1,4 @@
+ERROR: input file: (/lus/grand/projects/TFXcan/imlab/data/baca_cwas/liftover_hg38/P223T_AR_1.sorted.bed) is not sorted by chrom then start.
+       The start coordinate at line 2 is less than the start at line 1
+ERROR: input file: (/lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed_hg38/AR_PDX_189_4.sorted.bed) is not sorted by chrom then start.
+       The start coordinate at line 2 is less than the start at line 1

@@ -5,8 +5,8 @@
 #PBS -q preemptable    
 #PBS -N liftover_snps
 #PBS -k doe
-#PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.out
-#PBS -e /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.err
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover_snps.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
