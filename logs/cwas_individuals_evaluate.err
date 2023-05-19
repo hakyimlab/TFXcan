@@ -15,6 +15,3 @@ Loaded glmnet 4.1-2
 ✖ tidyr::pack()      masks Matrix::pack()
 ✖ purrr::transpose() masks data.table::transpose()
 ✖ tidyr::unpack()    masks Matrix::unpack()
-Warning message:
-In parallel::mclapply(individuals, function(each_ind) { :
-  all scheduled cores encountered errors in user code

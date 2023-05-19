@@ -15,6 +15,7 @@ enformer_test/*
 geuvadis_individuals/*
 **/predictions_folder/
 **/cmd_parsl.*
+prediXcan/*
 
 
 .*
@@ -39,6 +40,9 @@ geuvadis_individuals/*
 !TFPred_pipeline/config_files
 !TFPred_pipeline/helpers
 !experiments/
+!prediXcan/config
+!prediXcan/scripts
+!prediXcan/metadata
 
 
 

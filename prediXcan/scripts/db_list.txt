@@ -1,0 +1,6 @@
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.qtl.db
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.as.db
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.plasma.db
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.db
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.as.db
+/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.db

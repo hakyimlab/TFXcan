@@ -39,7 +39,17 @@ names(models_list) <- agg_methods
 # read in the individual's training data & merge with the ground truth and get the pscores
 #ground_truth_file <- data.table::fread(individuals_ground_truth_file) |> as.data.frame()
 
-predictions_list <- parallel::mclapply(individuals, function(each_ind){
+# first gather valid
+valid_names <- c()
+for(name in individuals){
+    ind_gt <- glue('{individuals_data_dir}/{name}_aggByMeanCenter_AR_Prostate.csv')
+    if(file.exists(ind_gt)){
+        valid_names <- append(valid_names, name)
+    }
+}
+print(glue('INFO - Found {length(valid_names)} valid individuals'))
+
+predictions_list <- parallel::mclapply(valid_names, function(each_ind){
 
     #ind_gt <- ground_truth_file[, c('region', each_ind)]
     print(each_ind)
@@ -71,21 +81,18 @@ predictions_list <- parallel::mclapply(individuals, function(each_ind){
             df <- cbind(regions, link_pred, response_pred) |> as.data.frame()
             colnames(df) <- c('regions', 'prediction_link', 'prediction_response')
         }
-
-        # pdt <- cbind(new_dt[, c(1:2)], prediction_scores) |> as.data.frame()
-        # colnames(pdt) <- c('region', 'class', each_method)
         return(df)
-
     })
 
     # merge by region, and class => they should all be the same but this provides a sanity check
-    #out <- out %>% purrr::reduce(dplyr::full_join, by = c('region', 'class'))]
     names(out) <- agg_methods
     return(out)
 
 }, mc.cores=16)
 
-names(predictions_list) <- individuals
+names(predictions_list) <- valid_names
+
+print(glue('INFO - Length of predictions list is {length(predictions_list)}'))
 
 # save the object to be read later
 print(glue('INFO - Saving `cwas_AR_Prostate_linear.rds` to {output_dir}'))
