@@ -1,0 +1,54 @@
+#!/bin/bash
+#PBS -l select=2:system=polaris
+#PBS -l walltime=01:00:00,filesystems=home:grand
+#PBS -A TFXcan
+#PBS -q debug   
+#PBS -N predixcan_cwas_individuals
+#PBS -k doe
+#PBS -o /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predixcan_cwas_individuals.out
+#PBS -e /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predixcan_cwas_individuals.err
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+echo Jobid: $PBS_JOBID
+echo Running on host `hostname`
+echo Running on nodes `cat $PBS_NODEFILE`
+
+NNODES=`wc -l < $PBS_NODEFILE`
+NRANKS=1
+NDEPTH=48
+NTHREADS=2
+
+#NTOTRANKS=$(( NNODES * NRANKS ))
+NTOTRANKS=$(( NNODES * NRANKS_PER_NODE ))
+echo "NUM_OF_NODES=${NNODES}  TOTAL_NUM_RANKS=${NTOTRANKS}  RANKS_PER_NODE=${NRANKS}  THREADS_PER_RANK=${NTHREADS}"
+echo "PBS_JOBID = " $PBS_JOBID
+printf "Starting to run\n"
+
+source ~/.bashrc
+temi_dir="/grand/projects/TFXcan/imlab/users/temi"
+predixcan_dir="/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan"
+conda activate imlabtools
+module load gnu-parallel
+
+# a list of the databases
+#weights_dbs=( `find ${temi_dir}/projects/TFXcan/baca_cwas/db_folder/ -type f` )
+#echo ${weights_dbs[*]}
+#weights_dbs=( $weights_dbs )
+#IFS=' ' read -a weights_dbs <<< "$weights_dbs"
+# echo ${weights_dbs[*]}
+# for db in ${weights_dbs[@]}; do
+#     echo ${db} >> db_list.txt
+# done
+
+db_list="/lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/scripts/db_list.txt"
+
+#vcf_file_pattern="/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_vcf/chr\*_CWAS_SNPs_2023-05-15_phased.vcf.gz"
+
+mpiexec="mpiexec -n 1 --ppn 1"
+parallel="parallel --delay 0.2 -j ${NNODES} --joblog /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predict_cwas_task.log --resume"
+
+${parallel} "${mpiexec} /lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/scripts/predict_utils.sh predict_cwas_weights {1} ${predixcan_dir}" ::: < ${db_list}
+
+printf "\nINFO - Finished with all models."
