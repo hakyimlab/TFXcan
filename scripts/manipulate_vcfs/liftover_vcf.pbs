@@ -1,0 +1,65 @@
+#!/bin/bash
+#PBS -l select=1:system=polaris:mem=400GB
+#PBS -l walltime=01:00:00,filesystems=home:grand
+#PBS -A covid-ct
+#PBS -q debug   
+#PBS -N liftover_vcf
+#PBS -k doe
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/liftover_vcf.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/liftover_vcf.err
+
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+source ~/.bashrc
+#conda activate compbio-tools
+conda activate /lus/grand/projects/TFXcan/imlab/users/temi/software/conda_envs/compbio-tools
+module load gnu-parallel
+
+chain_file='/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+output_folder='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf'
+rejected_folder='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/rejected_liftover_records'
+joblog='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/liftover_vcf_task.log'
+hg38_fasta_file='/lus/grand/projects/TFXcan/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta'
+
+mkdir -p ${output_folder}
+mkdir -p ${rejected_folder}
+
+# vcf files to lift over
+input_folder='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_vcf'
+input_vcfs=( `find ${input_folder} -name '*.vcf.gz' -type f` )
+
+function liftover_vcf(){
+
+    basename=$( echo ${1} | rev | cut -d '/' -f 1 | rev )
+    printf "\nINFO - lifting over ${basename}\n"
+
+    output_file=${2}/${basename}
+    rejected_file=${4}/${basename}
+
+    java -jar /lus/grand/projects/TFXcan/imlab/users/temi/software/picard/build/libs/picard.jar LiftoverVcf \
+        I=${1} \
+        O=${output_file} \
+        CHAIN=${3}\
+        REJECT=${rejected_file} \
+        R=${5} \
+        MAX_RECORDS_IN_RAM=100000
+}
+
+export -f liftover_vcf
+
+parallel -j 4 --joblog ${joblog} "liftover_vcf {} ${output_folder} ${chain_file} ${rejected_folder} ${hg38_fasta_file}" ::: ${input_vcfs[@]}
+
+printf "\nINFO - Finished lifting over all vcf files from hg19 to hg38."
+
+# conda activate /lus/grand/projects/TFXcan/imlab/users/temi/software/conda_envs/compbio-tools
+
+# try with one file
+# java -jar /lus/grand/projects/TFXcan/imlab/users/temi/software/picard/build/libs/picard.jar LiftoverVcf \
+#         I=${input_folder}/chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz \
+#         O=${output_folder}/chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz \
+#         CHAIN=${chain_file} \
+#         REJECT=${rejected_folder}/chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz \
+#         R=${hg38_fasta_file} \
+#         MAX_RECORDS_IN_RAM=100000

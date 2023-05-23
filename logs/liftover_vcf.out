@@ -1,0 +1,53 @@
+Working directory is /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/manipulate_vcfs
+
+INFO - lifting over chrY_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr18_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr22_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr3_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr9_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr19_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr6_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr5_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr17_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr8_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr15_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr11_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr20_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr4_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr21_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr1_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr16_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr7_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr12_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr14_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr13_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chrX_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chrM_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - lifting over chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz
+
+INFO - Finished lifting over all vcf files from hg19 to hg38.

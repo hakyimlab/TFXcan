@@ -5,8 +5,8 @@
 #PBS -q debug   
 #PBS -N predixcan_cwas_individuals
 #PBS -k doe
-#PBS -o /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predixcan_cwas_individuals.out
-#PBS -e /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predixcan_cwas_individuals.err
+#PBS -o /grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/log/predixcan_cwas_individuals.out
+#PBS -e /grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/log/predixcan_cwas_individuals.err
 
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
@@ -28,27 +28,17 @@ printf "Starting to run\n"
 
 source ~/.bashrc
 temi_dir="/grand/projects/TFXcan/imlab/users/temi"
-predixcan_dir="/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan"
+predixcan_dir="/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan"
 conda activate imlabtools
 module load gnu-parallel
 
-# a list of the databases
-#weights_dbs=( `find ${temi_dir}/projects/TFXcan/baca_cwas/db_folder/ -type f` )
-#echo ${weights_dbs[*]}
-#weights_dbs=( $weights_dbs )
-#IFS=' ' read -a weights_dbs <<< "$weights_dbs"
-# echo ${weights_dbs[*]}
-# for db in ${weights_dbs[@]}; do
-#     echo ${db} >> db_list.txt
-# done
-
-db_list="/lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/scripts/db_list.txt"
+db_list="/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/scripts/db_list.txt"
 
 #vcf_file_pattern="/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_vcf/chr\*_CWAS_SNPs_2023-05-15_phased.vcf.gz"
 
 mpiexec="mpiexec -n 1 --ppn 1"
-parallel="parallel --delay 0.2 -j ${NNODES} --joblog /grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/log/predict_cwas_task.log --resume"
+parallel="parallel --delay 0.2 -j ${NNODES} --joblog /grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/log/predict_cwas_task.log"
 
-${parallel} "${mpiexec} /lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/scripts/predict_utils.sh predict_cwas_weights {1} ${predixcan_dir}" ::: < ${db_list}
+${parallel} "${mpiexec} /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/scripts/predict_utils.sh predict_cwas_weights {1} ${predixcan_dir}" ::: < ${db_list}
 
 printf "\nINFO - Finished with all models."
