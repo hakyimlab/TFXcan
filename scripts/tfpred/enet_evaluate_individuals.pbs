@@ -41,9 +41,9 @@ model_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pi
 predict_on='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt'
 model_type='linear'
 individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_AR_Prostate/predictions_2023-05-16/aggregated_predictions'
-output_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output'
+output_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output/cwas_AR_Prostate.linear.rds'
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_type}" "${individuals_data_dir}" "${output_dir}"
+${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_type}" "${individuals_data_dir}" "${output_rds}"
 
 status=$?
 echo "Exit status of evaluation run on individuals is: $status"

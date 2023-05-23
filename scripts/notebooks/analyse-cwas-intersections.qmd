@@ -283,15 +283,6 @@ gt_one$loci <- with(gt_one, paste(chr, start, end, sep='_'))
 
 
 ```{r}
-
-```
-
-```{r}
-names(gt_in_cwas)
-```
-
-
-```{r}
 gt_in_cwas_merged <- gt_in_cwas %>% tidyr::unite('loci', chr:end) %>% dplyr::inner_join(loci_dt, by = c('loci' = 'ground_truth_loci')) %>% dplyr::relocate(loci, cwas_loci)
 gt_in_cwas_merged[1:5,1:5]
 ```
@@ -353,6 +344,9 @@ for(cc in 1:nrow(obs) ) {
 names(pvec) <- names(nbou > 0 & nbou < 121)
 ```
 
+```{r}
+obs[1:5, 1:5] ; pred[1:5, 1:5]
+```
 
 ```{r}
 hist(pvec, xlab='pvalue', main='')
@@ -398,16 +392,29 @@ pscores_top_regions %>%
 ### CWAS weights predictions
 
 ```{r}
+predict_summary <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/output/cwas_individuals/top1.qtl/baca_cwas_summary.txt')
+predict_summary[1:5, ]
+```
+
+```{r}
+predict_summary %>% dplyr::filter(!is.na(pred_perf_r2)) %>% dim()
+```
+
+```{r}
+predict_summary %>% dplyr::filter(!is.na(n_snps_used))# %>% dim()
+```
+
+```{r}
 imlab_dir <- '/lus/grand/projects/TFXcan/imlab'
 project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
 ```
 ```{r}
-predixcan_result_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/output'
+predixcan_result_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/prediXcan/output'
 baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'top1')
 ```
 
 ```{r}
-baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_99/{baca_models[1]}/baca_cwas_predict.txt'))
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/cwas_individuals/{baca_models[6]}/baca_cwas_predict.txt'))
 baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
 colnames(baca_predictions) <- baca_predictions[1, ]
 baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
@@ -499,7 +506,14 @@ df_cor_test[1:5, ]
 ```{r}
 #par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
 hist(df_cor_test[, 'r']^2, main='', xlab=expression(italic(R^2) ~ ", R-squared"), cex.lab=1, col='brown')
-mtext(expression("Histogram of" ~ R^2 ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(expression("Histogram of" ~ rho ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(df_cor_test[, 'r'], main='', xlab=expression(italic(R^2) ~ ", R-squared"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ rho ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2) 
 mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
 ```
 
@@ -517,7 +531,7 @@ mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), sid
 ```
 
 ```{r}
-qq_generic(df_cor_test[, 'p_value'], distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+qq_generic(pvec, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
 mtext(expression("qqplot of" ~ italic(p) ~ "(cor test)"), side=3, line=2, adj=0.05, cex=1.2)
 mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
 ```
@@ -574,4 +588,26 @@ any(is.na(loci_corr_0.01))
 ```{r}
 hist(loci_corr_0.01 |> unname(), breaks=20, xlab='r, correlation', main='')
 mtext('Histogram of correlation for cwas loci < 0.01 and TFPred loci < 0.01', line=1, side=3)
+```
+
+
+```{r}
+cwas_wgts <- list.files('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/data/AR')
+cwas_wgts[1:5]
+```
+
+```{r}
+out <- cwas_wgts %>% strsplit(':|-|\\.') %>% sapply(., function(each_row){
+  paste(each_row[1:3], collapse='_')
+}, simplify=TRUE)
+out[1:5]
+```
+
+```{r}
+hg38_bed_files[1:5, ]
+```
+
+
+```{r}
+'chr1:100037994_100038294.wgt.RDat' %in% cwas_wgts
 ```

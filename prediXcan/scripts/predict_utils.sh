@@ -8,7 +8,7 @@ function predict_cwas_weights () {
      # full path to the weights db
     predixcan_dir=${2} # full path to the predixcan dir
     predict_exe=/lus/grand/projects/TFXcan/imlab/users/temi/software/MetaXcan/software/Predict.py
-    vcf_file_pattern='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_vcf/chr*_CWAS_SNPs_2023-05-15_phased.vcf.gz'
+    vcf_file_pattern='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr*_CWAS_SNPs_2023-05-15_phased.vcf.gz'
 
     m_name=$( echo ${weights_db} | rev | cut -d '_' -f 1 | rev )
     m_name=${m_name%.*}

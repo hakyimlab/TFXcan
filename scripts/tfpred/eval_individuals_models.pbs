@@ -1,0 +1,20 @@
+#!/bin/bash
+
+models_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/models'
+
+transcription_factors=( 'AR' 'FOXA1' )
+tissues=( 'Prostate' 'Breast' )
+model_types=( 'linear' 'logistic' )
+
+for tf in "${transcription_factors[@]}"; do
+    for tissue in "${tissues[@]}"; do
+        for model_type in "${model_types[@]}"; do
+            tf_tissue_model=${models_dir}/*${tf}_${tissue}_*/*.${model_type}.rds
+            if [ -f ${tf_tissue_model} ]; then 
+                echo ${tf_tissue_model} exists
+            else
+                echo ${tf_tissue_model} does not exist
+            fi
+        done
+    done
+done

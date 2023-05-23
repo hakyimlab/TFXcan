@@ -11,7 +11,7 @@ model_rds <- arguments[1] # /lus/grand/projects/TFXcan/imlab/users/temi/projects
 predict_on <- arguments[2] # /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/info/cwas_individuals.txt
 model_type <- arguments[3] # linear
 individuals_data_dir <- arguments[4] #'/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_AR_Prostate/predictions_2023-05-16/aggregated_predictions'
-output_dir <- arguments[5] # /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output
+output_rds <- arguments[5] # /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output
 
 # model_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/models/cistrome_AR_aggByMeanCenter_linear_2023-01-24.rds'
 # predict_on='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt'
@@ -95,6 +95,13 @@ names(predictions_list) <- valid_names
 print(glue('INFO - Length of predictions list is {length(predictions_list)}'))
 
 # save the object to be read later
-print(glue('INFO - Saving `cwas_AR_Prostate_linear.rds` to {output_dir}'))
-rds_file <- glue('{output_dir}/cwas_AR_Prostate_linear.rds')
-saveRDS(predictions_list, file=rds_file)
+
+if(!dir.exists(dirname(output_rds))){
+    dir.create(dirname(output_rds))
+} else {
+    print(glue('INFO - {dirname(output_rds)} already exists'))
+}
+
+print(glue('INFO - Saving to {output_rds}'))
+#rds_file <- glue('{output_dir}/cwas_AR_Prostate_linear.rds')
+saveRDS(predictions_list, file=output_rds)
