@@ -1,0 +1,26 @@
+#!/bin/bash
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00,filesystems=home:grand
+#PBS -A covid-ct
+#PBS -q debug   
+#PBS -N compare_vcfs
+#PBS -k doe
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/compare_vcfs.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/compare_vcfs.err
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+source ~/.bashrc
+conda activate /lus/grand/projects/TFXcan/imlab/users/temi/software/conda_envs/compbio-tools
+module load gnu-parallel
+
+
+# seq 1 22 | parallel -j 22 "tabix -p vcf /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr{}_99_individuals.vcf.gz"
+
+seq 1 22 | parallel -j 22 "bcftools stats /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr{}_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr{}_CWAS_SNPs_2023-05-15_phased.vcf.gz > /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/misc/compare_vcfs/summary_chr{}.stats"
+
+
+# bcftools stats /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr10_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz > summary.txt
+
+# bcftools view -v snps /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr10_99_individuals.vcf.gz | grep -v "^#" | wc -l

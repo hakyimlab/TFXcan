@@ -110,7 +110,7 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, predicti
             # check that the keys match
             match_condition = sorted(list(pooled_dictionary[haplotypes[0]].keys())) == sorted(list(pooled_dictionary[haplotypes[1]].keys()))
             if not match_condition:
-                raise Exception(f'ERROR - Fatal: Haplotypes 1 and 2 regions are different. Haplotype1 length is {len(list(pooled_dictionary[haplotypes[0]].keys()))} abd Haplotype2 length is {len(list(pooled_dictionary[haplotypes[1]].keys()))}')
+                raise Exception(f'ERROR - Fatal: Haplotypes 1 and 2 regions are different. Haplotype1 length is {len(list(pooled_dictionary[haplotypes[0]].keys()))} and Haplotype2 length is {len(list(pooled_dictionary[haplotypes[1]].keys()))}')
             else:
                 # one one of them
                 ids = list(pooled_dictionary[haplotypes[0]].keys())
