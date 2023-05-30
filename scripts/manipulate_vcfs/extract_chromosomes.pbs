@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -l select=1:system=polaris
+#PBS -l walltime=01:00:00,filesystems=home:grand
+#PBS -A covid-ct
+#PBS -q debug   
+#PBS -N extract_chromosomes
+#PBS -k doe
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/extract_chromosomes.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/extract_chromosomes.err
+
+echo Working directory is $PBS_O_WORKDIR
+cd $PBS_O_WORKDIR
+
+source ~/.bashrc
+conda activate /lus/grand/projects/TFXcan/imlab/users/temi/software/conda_envs/compbio-tools
+module load gnu-parallel
+
+input_dir=/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf
+output_dir=/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38
+mkdir -p ${output_dir}
+
+# seq 1 22 | parallel -j 22 "tabix -p vcf /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr{}_99_individuals.vcf.gz"
+seq 1 22 | parallel -j 22 "bcftools view -r chr{} --output-type z --output ${output_dir}/chr{}_CWAS_SNPs_2023-05-30_phased.vcf.gz ${input_dir}/chr{}_CWAS_SNPs_2023-05-15_phased.vcf.gz && tabix -p vcf ${output_dir}/chr{}_CWAS_SNPs_2023-05-30_phased.vcf.gz"
+
+
+# (echo 'chr{} ===' & gunzip -c /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr1_CWAS_SNPs_2023-05-15_phased.vcf.gz | grep -v "#" | cut -f1 | uniq -c | echo) >> chromosome_counts_cwas_vcfs.txt
+
+# bcftools view -r chr1 /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr1_CWAS_SNPs_2023-05-15_phased.vcf.gz --output-type z --output chr1_only.vcf.gz
+# gunzip -c /lus/grand/projects/TFXcan/imlab/data/baca_cwas/chr1_only.vcf.gz | grep -v "#" | cut -f1 | uniq -c
