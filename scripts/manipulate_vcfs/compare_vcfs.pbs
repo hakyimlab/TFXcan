@@ -15,10 +15,12 @@ source ~/.bashrc
 conda activate /lus/grand/projects/TFXcan/imlab/users/temi/software/conda_envs/compbio-tools
 module load gnu-parallel
 
+first_dir=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files
+second_dir=/lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38
 
-# seq 1 22 | parallel -j 22 "tabix -p vcf /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr{}_99_individuals.vcf.gz"
+# seq 1 22 | parallel -j 22 "tabix -p vcf chr{}.dose.vcf.gz"
 
-seq 1 22 | parallel -j 22 "bcftools stats /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr{}_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr{}_CWAS_SNPs_2023-05-15_phased.vcf.gz > /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/misc/compare_vcfs/summary_chr{}.stats"
+seq 1 22 | parallel -j 22 "bcftools stats ${first_dir}/chr{}_99_individuals.vcf.gz ${second_dir}/chr{}.dose.vcf.gz > /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/misc/compare_vcfs/summary_chr{}_imputed.stats"
 
 
 # bcftools stats /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr10_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr10_CWAS_SNPs_2023-05-15_phased.vcf.gz > summary.txt

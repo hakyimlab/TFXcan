@@ -1,0 +1,339 @@
+# This file was produced by bcftools stats (1.17+htslib-1.17) and can be plotted using plot-vcfstats.
+# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr17_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38/chr17.dose.vcf.gz
+#
+# Definition of sets:
+# ID	[2]id	[3]tab-separated file names
+ID	0	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr17_99_individuals.vcf.gz
+ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38/chr17.dose.vcf.gz
+ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr17_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38/chr17.dose.vcf.gz
+# SN, Summary numbers:
+#   number of records   .. number of data rows in the VCF
+#   number of no-ALTs   .. reference-only sites, ALT is either "." or identical to REF
+#   number of SNPs      .. number of rows with a SNP
+#   number of MNPs      .. number of rows with a MNP, such as CC>TT
+#   number of indels    .. number of rows with an indel
+#   number of others    .. number of rows with other type, for example a symbolic allele or
+#                          a complex substitution, such as ACT>TCGA
+#   number of multiallelic sites     .. number of rows with multiple alternate alleles
+#   number of multiallelic SNP sites .. number of rows with multiple alternate alleles, all SNPs
+# 
+#   Note that rows containing multiple types will be counted multiple times, in each
+#   counter. For example, a row with a SNP and an indel increments both the SNP and
+#   the indel counter.
+# 
+# SN	[2]id	[3]key	[4]value
+SN	0	number of samples:	99
+SN	1	number of samples:	122
+SN	0	number of records:	896189
+SN	0	number of no-ALTs:	0
+SN	0	number of SNPs:	896189
+SN	0	number of MNPs:	0
+SN	0	number of indels:	0
+SN	0	number of others:	0
+SN	0	number of multiallelic sites:	0
+SN	0	number of multiallelic SNP sites:	0
+SN	1	number of records:	109456
+SN	1	number of no-ALTs:	0
+SN	1	number of SNPs:	3504
+SN	1	number of MNPs:	0
+SN	1	number of indels:	105952
+SN	1	number of others:	0
+SN	1	number of multiallelic sites:	0
+SN	1	number of multiallelic SNP sites:	0
+SN	2	number of records:	1170495
+SN	2	number of no-ALTs:	0
+SN	2	number of SNPs:	1170495
+SN	2	number of MNPs:	0
+SN	2	number of indels:	0
+SN	2	number of others:	0
+SN	2	number of multiallelic sites:	0
+SN	2	number of multiallelic SNP sites:	0
+# TSTV, transitions/transversions:
+# TSTV	[2]id	[3]ts	[4]tv	[5]ts/tv	[6]ts (1st ALT)	[7]tv (1st ALT)	[8]ts/tv (1st ALT)
+TSTV	0	621014	275175	2.26	621014	275175	2.26
+TSTV	1	2410	1094	2.20	2410	1094	2.20
+TSTV	2	831363	339132	2.45	831363	339132	2.45
+# SiS, Singleton stats:
+# SiS	[2]id	[3]allele count	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
+SiS	0	1	20360	14022	6338	0	0	0	0
+SiS	1	1	3504	2410	1094	105952	0	0	105952
+SiS	2	1	55539	39540	15999	0	0	0	0
+# AF, Stats by non-reference allele frequency:
+# AF	[2]id	[3]allele frequency	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
+AF	0	0.000000	895641	620670	274971	0	0	0	0
+AF	0	0.983607	3	3	0	0	0	0	0
+AF	0	0.991803	545	341	204	0	0	0	0
+AF	1	0.000000	3504	2410	1094	105952	0	0	105952
+AF	2	0.000000	923949	658182	265767	0	0	0	0
+AF	2	0.008197	40041	28171	11870	0	0	0	0
+AF	2	0.016393	10171	7168	3003	0	0	0	0
+AF	2	0.024590	14813	10540	4273	0	0	0	0
+AF	2	0.032787	10436	7390	3046	0	0	0	0
+AF	2	0.040984	4162	2874	1288	0	0	0	0
+AF	2	0.049180	7935	5533	2402	0	0	0	0
+AF	2	0.057377	6797	4806	1991	0	0	0	0
+AF	2	0.065574	3379	2344	1035	0	0	0	0
+AF	2	0.073770	5832	4082	1750	0	0	0	0
+AF	2	0.081967	2659	1849	810	0	0	0	0
+AF	2	0.090164	4732	3336	1396	0	0	0	0
+AF	2	0.098361	4410	3107	1303	0	0	0	0
+AF	2	0.106557	1897	1329	568	0	0	0	0
+AF	2	0.114754	3608	2534	1074	0	0	0	0
+AF	2	0.122951	3329	2294	1035	0	0	0	0
+AF	2	0.131148	1469	1005	464	0	0	0	0
+AF	2	0.139344	2850	1997	853	0	0	0	0
+AF	2	0.147541	3296	2254	1042	0	0	0	0
+AF	2	0.155738	1721	1194	527	0	0	0	0
+AF	2	0.163934	3389	2353	1036	0	0	0	0
+AF	2	0.172131	1542	1068	474	0	0	0	0
+AF	2	0.180328	3235	2264	971	0	0	0	0
+AF	2	0.188525	2767	1989	778	0	0	0	0
+AF	2	0.196721	1510	1053	457	0	0	0	0
+AF	2	0.204918	2346	1643	703	0	0	0	0
+AF	2	0.213115	2544	1797	747	0	0	0	0
+AF	2	0.221311	1324	927	397	0	0	0	0
+AF	2	0.229508	2573	1775	798	0	0	0	0
+AF	2	0.237705	2363	1617	746	0	0	0	0
+AF	2	0.245902	1436	994	442	0	0	0	0
+AF	2	0.254098	2143	1495	648	0	0	0	0
+AF	2	0.262295	1102	765	337	0	0	0	0
+AF	2	0.270492	2128	1503	625	0	0	0	0
+AF	2	0.278689	1892	1329	563	0	0	0	0
+AF	2	0.286885	867	629	238	0	0	0	0
+AF	2	0.295082	1881	1310	571	0	0	0	0
+AF	2	0.303279	2182	1492	690	0	0	0	0
+AF	2	0.311475	784	548	236	0	0	0	0
+AF	2	0.319672	2060	1444	616	0	0	0	0
+AF	2	0.327869	1946	1393	553	0	0	0	0
+AF	2	0.336066	747	537	210	0	0	0	0
+AF	2	0.344262	1838	1272	566	0	0	0	0
+AF	2	0.352459	798	556	242	0	0	0	0
+AF	2	0.360656	1592	1126	466	0	0	0	0
+AF	2	0.368852	1141	813	328	0	0	0	0
+AF	2	0.377049	643	440	203	0	0	0	0
+AF	2	0.385246	1417	1009	408	0	0	0	0
+AF	2	0.393443	1473	993	480	0	0	0	0
+AF	2	0.401639	898	609	289	0	0	0	0
+AF	2	0.409836	1441	1052	389	0	0	0	0
+AF	2	0.418033	1352	951	401	0	0	0	0
+AF	2	0.426230	938	671	267	0	0	0	0
+AF	2	0.434426	1633	1139	494	0	0	0	0
+AF	2	0.442623	756	535	221	0	0	0	0
+AF	2	0.450820	1572	1117	455	0	0	0	0
+AF	2	0.459016	1382	969	413	0	0	0	0
+AF	2	0.467213	709	520	189	0	0	0	0
+AF	2	0.475410	1738	1219	519	0	0	0	0
+AF	2	0.483607	1604	1131	473	0	0	0	0
+AF	2	0.491803	566	404	162	0	0	0	0
+AF	2	0.500000	1257	885	372	0	0	0	0
+AF	2	0.508197	1345	960	385	0	0	0	0
+AF	2	0.516393	657	452	205	0	0	0	0
+AF	2	0.524590	1276	892	384	0	0	0	0
+AF	2	0.532787	667	450	217	0	0	0	0
+AF	2	0.540984	1398	994	404	0	0	0	0
+AF	2	0.549180	1216	846	370	0	0	0	0
+AF	2	0.557377	628	444	184	0	0	0	0
+AF	2	0.565574	1062	769	293	0	0	0	0
+AF	2	0.573770	1084	770	314	0	0	0	0
+AF	2	0.581967	489	336	153	0	0	0	0
+AF	2	0.590164	1264	877	387	0	0	0	0
+AF	2	0.598361	1121	820	301	0	0	0	0
+AF	2	0.606557	602	427	175	0	0	0	0
+AF	2	0.614754	1166	822	344	0	0	0	0
+AF	2	0.622951	464	322	142	0	0	0	0
+AF	2	0.631148	1130	803	327	0	0	0	0
+AF	2	0.639344	864	627	237	0	0	0	0
+AF	2	0.647541	459	339	120	0	0	0	0
+AF	2	0.655738	1051	714	337	0	0	0	0
+AF	2	0.663934	889	617	272	0	0	0	0
+AF	2	0.672131	431	292	139	0	0	0	0
+AF	2	0.680328	1017	727	290	0	0	0	0
+AF	2	0.688525	957	646	311	0	0	0	0
+AF	2	0.696721	372	264	108	0	0	0	0
+AF	2	0.704918	781	546	235	0	0	0	0
+AF	2	0.713115	421	294	127	0	0	0	0
+AF	2	0.721311	1068	735	333	0	0	0	0
+AF	2	0.729508	916	641	275	0	0	0	0
+AF	2	0.737705	476	344	132	0	0	0	0
+AF	2	0.745902	730	518	212	0	0	0	0
+AF	2	0.754098	874	609	265	0	0	0	0
+AF	2	0.762295	442	304	138	0	0	0	0
+AF	2	0.770492	862	594	268	0	0	0	0
+AF	2	0.778689	862	595	267	0	0	0	0
+AF	2	0.786885	399	290	109	0	0	0	0
+AF	2	0.795082	779	561	218	0	0	0	0
+AF	2	0.803279	305	204	101	0	0	0	0
+AF	2	0.811475	803	554	249	0	0	0	0
+AF	2	0.819672	655	467	188	0	0	0	0
+AF	2	0.827869	350	249	101	0	0	0	0
+AF	2	0.836066	573	403	170	0	0	0	0
+AF	2	0.844262	533	367	166	0	0	0	0
+AF	2	0.852459	348	256	92	0	0	0	0
+AF	2	0.860656	825	580	245	0	0	0	0
+AF	2	0.868852	491	340	151	0	0	0	0
+AF	2	0.877049	308	216	92	0	0	0	0
+AF	2	0.885246	657	455	202	0	0	0	0
+AF	2	0.893443	248	170	78	0	0	0	0
+AF	2	0.901639	443	310	133	0	0	0	0
+AF	2	0.909836	518	360	158	0	0	0	0
+AF	2	0.918033	372	256	116	0	0	0	0
+AF	2	0.926230	449	335	114	0	0	0	0
+AF	2	0.934426	447	320	127	0	0	0	0
+AF	2	0.942623	268	198	70	0	0	0	0
+AF	2	0.950820	507	367	140	0	0	0	0
+AF	2	0.959016	583	412	171	0	0	0	0
+AF	2	0.967213	193	135	58	0	0	0	0
+AF	2	0.975410	669	453	216	0	0	0	0
+AF	2	0.983607	563	384	179	0	0	0	0
+AF	2	0.991803	4173	3006	1167	0	0	0	0
+# QUAL, Stats by quality
+# QUAL	[2]id	[3]Quality	[4]number of SNPs	[5]number of transitions (1st ALT)	[6]number of transversions (1st ALT)	[7]number of indels
+QUAL	0	.	896189	621014	275175	0
+QUAL	1	.	3504	2410	1094	105952
+QUAL	2	.	1170495	831363	339132	0
+# IDD, InDel distribution:
+# IDD	[2]id	[3]length (deletions negative)	[4]number of sites	[5]number of genotypes	[6]mean VAF
+IDD	1	-60	3	0	.
+IDD	1	-57	1	0	.
+IDD	1	-55	1	0	.
+IDD	1	-50	1	0	.
+IDD	1	-46	3	0	.
+IDD	1	-43	1	0	.
+IDD	1	-42	2	0	.
+IDD	1	-41	2	0	.
+IDD	1	-40	4	0	.
+IDD	1	-39	4	0	.
+IDD	1	-38	6	0	.
+IDD	1	-37	6	0	.
+IDD	1	-36	5	0	.
+IDD	1	-35	5	0	.
+IDD	1	-34	8	0	.
+IDD	1	-33	12	0	.
+IDD	1	-32	16	0	.
+IDD	1	-31	12	0	.
+IDD	1	-30	24	0	.
+IDD	1	-29	18	0	.
+IDD	1	-28	29	0	.
+IDD	1	-27	46	0	.
+IDD	1	-26	59	0	.
+IDD	1	-25	70	0	.
+IDD	1	-24	92	0	.
+IDD	1	-23	54	0	.
+IDD	1	-22	102	0	.
+IDD	1	-21	85	0	.
+IDD	1	-20	176	0	.
+IDD	1	-19	115	0	.
+IDD	1	-18	182	0	.
+IDD	1	-17	173	0	.
+IDD	1	-16	327	0	.
+IDD	1	-15	313	0	.
+IDD	1	-14	366	0	.
+IDD	1	-13	364	0	.
+IDD	1	-12	597	0	.
+IDD	1	-11	489	0	.
+IDD	1	-10	680	0	.
+IDD	1	-9	625	0	.
+IDD	1	-8	928	0	.
+IDD	1	-7	862	0	.
+IDD	1	-6	1619	0	.
+IDD	1	-5	3060	0	.
+IDD	1	-4	9423	0	.
+IDD	1	-3	8005	0	.
+IDD	1	-2	13780	0	.
+IDD	1	-1	30612	0	.
+IDD	1	1	20988	0	.
+IDD	1	2	4028	0	.
+IDD	1	3	1936	0	.
+IDD	1	4	2440	0	.
+IDD	1	5	987	0	.
+IDD	1	6	579	0	.
+IDD	1	7	304	0	.
+IDD	1	8	340	0	.
+IDD	1	9	198	0	.
+IDD	1	10	159	0	.
+IDD	1	11	86	0	.
+IDD	1	12	118	0	.
+IDD	1	13	69	0	.
+IDD	1	14	61	0	.
+IDD	1	15	53	0	.
+IDD	1	16	67	0	.
+IDD	1	17	33	0	.
+IDD	1	18	36	0	.
+IDD	1	19	17	0	.
+IDD	1	20	21	0	.
+IDD	1	21	9	0	.
+IDD	1	22	13	0	.
+IDD	1	23	7	0	.
+IDD	1	24	13	0	.
+IDD	1	25	4	0	.
+IDD	1	26	3	0	.
+IDD	1	27	3	0	.
+IDD	1	28	1	0	.
+IDD	1	31	2	0	.
+IDD	1	32	1	0	.
+IDD	1	34	1	0	.
+IDD	1	35	2	0	.
+IDD	1	38	1	0	.
+IDD	1	40	1	0	.
+IDD	1	41	2	0	.
+IDD	1	45	1	0	.
+IDD	1	52	1	0	.
+# ST, Substitution types:
+# ST	[2]id	[3]type	[4]count
+ST	0	A>C	28794
+ST	0	A>G	107848
+ST	0	A>T	25443
+ST	0	C>A	41844
+ST	0	C>G	41387
+ST	0	C>T	203241
+ST	0	G>A	203779
+ST	0	G>C	41491
+ST	0	G>T	41947
+ST	0	T>A	25602
+ST	0	T>C	106146
+ST	0	T>G	28667
+ST	1	A>C	130
+ST	1	A>G	571
+ST	1	A>T	84
+ST	1	C>A	156
+ST	1	C>G	174
+ST	1	C>T	608
+ST	1	G>A	681
+ST	1	G>C	209
+ST	1	G>T	141
+ST	1	T>A	73
+ST	1	T>C	550
+ST	1	T>G	127
+ST	2	A>C	36598
+ST	2	A>G	144070
+ST	2	A>T	33949
+ST	2	C>A	49286
+ST	2	C>G	48971
+ST	2	C>T	272217
+ST	2	G>A	272813
+ST	2	G>C	49340
+ST	2	G>T	50052
+ST	2	T>A	33879
+ST	2	T>C	142263
+ST	2	T>G	37057
+# DP, Depth distribution
+# DP	[2]id	[3]bin	[4]number of genotypes	[5]fraction of genotypes (%)	[6]number of sites	[7]fraction of sites (%)
+DP	0	>500	0	0.000000	896189	100.000000
+DP	2	4	0	0.000000	1	0.000085
+DP	2	29	0	0.000000	1	0.000085
+DP	2	199	0	0.000000	1	0.000085
+DP	2	215	0	0.000000	1	0.000085
+DP	2	246	0	0.000000	1	0.000085
+DP	2	282	0	0.000000	1	0.000085
+DP	2	291	0	0.000000	1	0.000085
+DP	2	296	0	0.000000	1	0.000085
+DP	2	315	0	0.000000	2	0.000171
+DP	2	320	0	0.000000	1	0.000085
+DP	2	439	0	0.000000	1	0.000085
+DP	2	442	0	0.000000	1	0.000085
+DP	2	454	0	0.000000	1	0.000085
+DP	2	476	0	0.000000	1	0.000085
+DP	2	479	0	0.000000	1	0.000085
+DP	2	483	0	0.000000	1	0.000085
+DP	2	485	0	0.000000	1	0.000085
+DP	2	>500	0	0.000000	1170477	99.998462
