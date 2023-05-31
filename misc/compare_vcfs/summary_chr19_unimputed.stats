@@ -1,11 +1,11 @@
 # This file was produced by bcftools stats (1.17+htslib-1.17) and can be plotted using plot-vcfstats.
-# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr19_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr19_CWAS_SNPs_2023-05-15_phased.vcf.gz
+# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr19_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr19_CWAS_SNPs_2023-05-30_phased.vcf.gz
 #
 # Definition of sets:
 # ID	[2]id	[3]tab-separated file names
 ID	0	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr19_99_individuals.vcf.gz
-ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr19_CWAS_SNPs_2023-05-15_phased.vcf.gz
-ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr19_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr19_CWAS_SNPs_2023-05-15_phased.vcf.gz
+ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr19_CWAS_SNPs_2023-05-30_phased.vcf.gz
+ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr19_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr19_CWAS_SNPs_2023-05-30_phased.vcf.gz
 # SN, Summary numbers:
 #   number of records   .. number of data rows in the VCF
 #   number of no-ALTs   .. reference-only sites, ALT is either "." or identical to REF
@@ -32,9 +32,9 @@ SN	0	number of indels:	0
 SN	0	number of others:	0
 SN	0	number of multiallelic sites:	0
 SN	0	number of multiallelic SNP sites:	0
-SN	1	number of records:	1330
+SN	1	number of records:	1306
 SN	1	number of no-ALTs:	0
-SN	1	number of SNPs:	1330
+SN	1	number of SNPs:	1306
 SN	1	number of MNPs:	0
 SN	1	number of indels:	0
 SN	1	number of others:	0
@@ -51,12 +51,12 @@ SN	2	number of multiallelic SNP sites:	0
 # TSTV, transitions/transversions:
 # TSTV	[2]id	[3]ts	[4]tv	[5]ts/tv	[6]ts (1st ALT)	[7]tv (1st ALT)	[8]ts/tv (1st ALT)
 TSTV	0	1054713	450271	2.34	1054713	450271	2.34
-TSTV	1	721	609	1.18	721	609	1.18
+TSTV	1	703	603	1.17	703	603	1.17
 TSTV	2	85826	34888	2.46	85826	34888	2.46
 # SiS, Singleton stats:
 # SiS	[2]id	[3]allele count	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
 SiS	0	1	57220	40439	16781	0	0	0	0
-SiS	1	1	5	4	1	0	0	0	0
+SiS	1	1	3	2	1	0	0	0	0
 SiS	2	1	3	2	1	0	0	0	0
 # AF, Stats by non-reference allele frequency:
 # AF	[2]id	[3]allele frequency	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
@@ -182,14 +182,14 @@ AF	0	0.967213	21	12	9	0	0	0	0
 AF	0	0.975410	135	96	39	0	0	0	0
 AF	0	0.983607	168	125	43	0	0	0	0
 AF	0	0.991803	2184	1464	720	0	0	0	0
-AF	1	0.000000	302	159	143	0	0	0	0
-AF	1	0.008197	11	8	3	0	0	0	0
-AF	1	0.016393	16	11	5	0	0	0	0
-AF	1	0.024590	11	6	5	0	0	0	0
-AF	1	0.032787	22	12	10	0	0	0	0
-AF	1	0.040984	32	17	15	0	0	0	0
-AF	1	0.049180	25	10	15	0	0	0	0
-AF	1	0.057377	29	14	15	0	0	0	0
+AF	1	0.000000	296	153	143	0	0	0	0
+AF	1	0.008197	9	6	3	0	0	0	0
+AF	1	0.016393	14	9	5	0	0	0	0
+AF	1	0.024590	10	6	4	0	0	0	0
+AF	1	0.032787	21	11	10	0	0	0	0
+AF	1	0.040984	28	15	13	0	0	0	0
+AF	1	0.049180	24	9	15	0	0	0	0
+AF	1	0.057377	27	14	13	0	0	0	0
 AF	1	0.065574	21	12	9	0	0	0	0
 AF	1	0.073770	20	13	7	0	0	0	0
 AF	1	0.081967	21	13	8	0	0	0	0
@@ -197,7 +197,7 @@ AF	1	0.090164	15	9	6	0	0	0	0
 AF	1	0.098361	18	8	10	0	0	0	0
 AF	1	0.106557	22	11	11	0	0	0	0
 AF	1	0.114754	15	5	10	0	0	0	0
-AF	1	0.122951	19	11	8	0	0	0	0
+AF	1	0.122951	17	10	7	0	0	0	0
 AF	1	0.131148	15	9	6	0	0	0	0
 AF	1	0.139344	19	11	8	0	0	0	0
 AF	1	0.147541	14	6	8	0	0	0	0
@@ -210,7 +210,7 @@ AF	1	0.196721	14	7	7	0	0	0	0
 AF	1	0.204918	12	7	5	0	0	0	0
 AF	1	0.213115	14	5	9	0	0	0	0
 AF	1	0.221311	11	5	6	0	0	0	0
-AF	1	0.229508	12	6	6	0	0	0	0
+AF	1	0.229508	11	5	6	0	0	0	0
 AF	1	0.237705	9	6	3	0	0	0	0
 AF	1	0.245902	7	2	5	0	0	0	0
 AF	1	0.254098	9	3	6	0	0	0	0
@@ -286,7 +286,7 @@ AF	1	0.827869	5	3	2	0	0	0	0
 AF	1	0.836066	4	3	1	0	0	0	0
 AF	1	0.844262	9	6	3	0	0	0	0
 AF	1	0.852459	5	5	0	0	0	0	0
-AF	1	0.860656	2	2	0	0	0	0	0
+AF	1	0.860656	1	1	0	0	0	0	0
 AF	1	0.868852	4	3	1	0	0	0	0
 AF	1	0.877049	4	3	1	0	0	0	0
 AF	1	0.885246	1	0	1	0	0	0	0
@@ -294,7 +294,7 @@ AF	1	0.893443	1	1	0	0	0	0	0
 AF	1	0.901639	1	0	1	0	0	0	0
 AF	1	0.909836	3	1	2	0	0	0	0
 AF	1	0.918033	2	1	1	0	0	0	0
-AF	1	0.926230	4	3	1	0	0	0	0
+AF	1	0.926230	3	2	1	0	0	0	0
 AF	1	0.942623	3	3	0	0	0	0	0
 AF	1	0.950820	5	2	3	0	0	0	0
 AF	1	0.959016	2	1	1	0	0	0	0
@@ -425,7 +425,7 @@ AF	2	0.991803	69	46	23	0	0	0	0
 # QUAL, Stats by quality
 # QUAL	[2]id	[3]Quality	[4]number of SNPs	[5]number of transitions (1st ALT)	[6]number of transversions (1st ALT)	[7]number of indels
 QUAL	0	.	1504984	1054713	450271	0
-QUAL	1	.	1330	721	609	0
+QUAL	1	.	1306	703	603	0
 QUAL	2	.	120714	85826	34888	0
 # IDD, InDel distribution:
 # IDD	[2]id	[3]length (deletions negative)	[4]number of sites	[5]number of genotypes	[6]mean VAF
@@ -443,17 +443,17 @@ ST	0	G>T	70272
 ST	0	T>A	40671
 ST	0	T>C	157090
 ST	0	T>G	45043
-ST	1	A>C	69
-ST	1	A>G	146
+ST	1	A>C	68
+ST	1	A>G	141
 ST	1	A>T	41
 ST	1	C>A	71
 ST	1	C>G	115
-ST	1	C>T	221
-ST	1	G>A	199
-ST	1	G>C	123
-ST	1	G>T	83
+ST	1	C>T	214
+ST	1	G>A	196
+ST	1	G>C	120
+ST	1	G>T	81
 ST	1	T>A	42
-ST	1	T>C	155
+ST	1	T>C	152
 ST	1	T>G	65
 ST	2	A>C	4136
 ST	2	A>G	18796

@@ -8,7 +8,7 @@ function predict_cwas_weights () {
      # full path to the weights db
     predixcan_dir=${2} # full path to the predixcan dir
     predict_exe=/lus/grand/projects/TFXcan/imlab/users/temi/software/MetaXcan/software/Predict.py
-    vcf_file_pattern='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr*_CWAS_SNPs_2023-05-15_phased.vcf.gz'
+    vcf_file_pattern='/lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38_snps_only/chr*.dose.vcf.gz'
 
     m_name=$( echo ${weights_db} | rev | cut -d '_' -f 1 | rev )
     m_name=${m_name%.*}
@@ -25,8 +25,8 @@ function predict_cwas_weights () {
     --vcf_mode genotyped \
     --on_the_fly_mapping METADATA "{}_{}_{}_{}_b38" \
     --variant_mapping "${predixcan_dir}/tutorial/data/gtex_v8_eur_filtered_maf0.01_monoallelic_variants.txt.gz" id rsid \
-    --prediction_output "${predixcan_dir}/output/cwas_individuals/${m_name}/baca_cwas_predict.txt" \
-    --prediction_summary_output "${predixcan_dir}/output/cwas_individuals/${m_name}/baca_cwas_summary.txt" \
+    --prediction_output "${predixcan_dir}/output/cwas_individuals_imputed/${m_name}/baca_cwas_predict.txt" \
+    --prediction_summary_output "${predixcan_dir}/output/cwas_individuals_imputed/${m_name}/baca_cwas_summary.txt" \
     --verbosity 9 \
     --throw
 

@@ -54,4 +54,4 @@ for model_db in `ls ${temi_dir}/projects/TFXcan/baca_cwas/db_folder/`; do
 done
 wait
 
-printf "[INFO] Finished with all models."
+printf "INFO - Finished with all models."
