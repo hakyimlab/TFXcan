@@ -1,0 +1,73 @@
+{
+  "individuals": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt",
+  "n_individuals": -1,
+  "project_dir": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate",
+  "interval_list_file": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_intervals.txt",
+  "prediction_data_name": "cwas_imputed",
+  "prediction_id": "AR_Prostate",
+  "reverse_complement": false,
+  "date": null,
+  "exclude_regions": true,
+  "batch_individuals": 30,
+  "vcf_files": {
+    "folder": "/lus/grand/projects/TFXcan/imlab/data/baca_cwas/imputed_vcf_hg38_snps_only",
+    "files": {
+      "chr1": "chr1.dose.vcf.gz",
+      "chr2": "chr2.dose.vcf.gz",
+      "chr3": "chr3.dose.vcf.gz",
+      "chr4": "chr4.dose.vcf.gz",
+      "chr5": "chr5.dose.vcf.gz",
+      "chr6": "chr6.dose.vcf.gz",
+      "chr7": "chr7.dose.vcf.gz",
+      "chr8": "chr8.dose.vcf.gz",
+      "chr9": "chr9.dose.vcf.gz",
+      "chr10": "chr10.dose.vcf.gz",
+      "chr11": "chr11.dose.vcf.gz",
+      "chr12": "chr12.dose.vcf.gz",
+      "chr13": "chr13.dose.vcf.gz",
+      "chr14": "chr14.dose.vcf.gz",
+      "chr15": "chr15.dose.vcf.gz",
+      "chr16": "chr16.dose.vcf.gz",
+      "chr17": "chr17.dose.vcf.gz",
+      "chr18": "chr18.dose.vcf.gz",
+      "chr19": "chr19.dose.vcf.gz",
+      "chr20": "chr20.dose.vcf.gz",
+      "chr21": "chr21.dose.vcf.gz",
+      "chr22": "chr22.dose.vcf.gz"
+    }
+  },
+  "sub_dir": true,
+  "use_parsl": true,
+  "model_path": "/lus/grand/projects/TFXcan/imlab/data/enformer/raw",
+  "fasta_file": "/lus/grand/projects/TFXcan/imlab/data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta",
+  "metadata_dir": "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/",
+  "output_dir": "enformer_predictions",
+  "tracks_to_save": -1,
+  "bins_to_save": "447,448,449",
+  "sequence_source": "personalized",
+  "predictions_log_dir": "predictions_log",
+  "n_regions": -1,
+  "batch_regions": 1000,
+  "write_log": {
+    "logdir": "job_logs",
+    "logtypes": {
+      "memory": false,
+      "error": true,
+      "time": false,
+      "cache": false
+    }
+  },
+  "parsl_parameters": {
+    "job_name": "enformer_predict_AR_Prostate",
+    "num_of_full_nodes": 4,
+    "walltime": "06:00:00",
+    "min_num_blocks": 0,
+    "max_num_blocks": 8,
+    "queue": "preemptable",
+    "init_blocks": 1,
+    "hpc": "polaris",
+    "account": "covid-ct",
+    "provider": "highthroughput",
+    "worker_init": "source ~/.bashrc; conda activate /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools; which python; export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools/lib"
+  }
+}

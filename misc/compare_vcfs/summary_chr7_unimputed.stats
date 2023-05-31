@@ -1,11 +1,11 @@
 # This file was produced by bcftools stats (1.17+htslib-1.17) and can be plotted using plot-vcfstats.
-# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr7_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr7_CWAS_SNPs_2023-05-15_phased.vcf.gz
+# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr7_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr7_CWAS_SNPs_2023-05-30_phased.vcf.gz
 #
 # Definition of sets:
 # ID	[2]id	[3]tab-separated file names
 ID	0	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr7_99_individuals.vcf.gz
-ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr7_CWAS_SNPs_2023-05-15_phased.vcf.gz
-ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr7_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr7_CWAS_SNPs_2023-05-15_phased.vcf.gz
+ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr7_CWAS_SNPs_2023-05-30_phased.vcf.gz
+ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr7_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr7_CWAS_SNPs_2023-05-30_phased.vcf.gz
 # SN, Summary numbers:
 #   number of records   .. number of data rows in the VCF
 #   number of no-ALTs   .. reference-only sites, ALT is either "." or identical to REF
@@ -32,9 +32,9 @@ SN	0	number of indels:	0
 SN	0	number of others:	0
 SN	0	number of multiallelic sites:	0
 SN	0	number of multiallelic SNP sites:	0
-SN	1	number of records:	3010
+SN	1	number of records:	2528
 SN	1	number of no-ALTs:	0
-SN	1	number of SNPs:	3010
+SN	1	number of SNPs:	2528
 SN	1	number of MNPs:	0
 SN	1	number of indels:	0
 SN	1	number of others:	0
@@ -51,7 +51,7 @@ SN	2	number of multiallelic SNP sites:	0
 # TSTV, transitions/transversions:
 # TSTV	[2]id	[3]ts	[4]tv	[5]ts/tv	[6]ts (1st ALT)	[7]tv (1st ALT)	[8]ts/tv (1st ALT)
 TSTV	0	2634067	1269141	2.08	2634067	1269141	2.08
-TSTV	1	1699	1311	1.30	1699	1311	1.30
+TSTV	1	1377	1151	1.20	1377	1151	1.20
 TSTV	2	219493	100230	2.19	219493	100230	2.19
 # SiS, Singleton stats:
 # SiS	[2]id	[3]allele count	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
@@ -182,99 +182,99 @@ AF	0	0.967213	128	83	45	0	0	0	0
 AF	0	0.975410	413	280	133	0	0	0	0
 AF	0	0.983607	657	446	211	0	0	0	0
 AF	0	0.991803	8244	5583	2661	0	0	0	0
-AF	1	0.000000	679	390	289	0	0	0	0
+AF	1	0.000000	677	389	288	0	0	0	0
 AF	1	0.008197	22	14	8	0	0	0	0
 AF	1	0.016393	13	6	7	0	0	0	0
-AF	1	0.024590	30	13	17	0	0	0	0
-AF	1	0.032787	39	24	15	0	0	0	0
-AF	1	0.040984	32	16	16	0	0	0	0
-AF	1	0.049180	51	30	21	0	0	0	0
+AF	1	0.024590	28	12	16	0	0	0	0
+AF	1	0.032787	31	18	13	0	0	0	0
+AF	1	0.040984	28	13	15	0	0	0	0
+AF	1	0.049180	43	26	17	0	0	0	0
 AF	1	0.057377	45	28	17	0	0	0	0
 AF	1	0.065574	43	29	14	0	0	0	0
-AF	1	0.073770	41	20	21	0	0	0	0
-AF	1	0.081967	53	27	26	0	0	0	0
-AF	1	0.090164	42	20	22	0	0	0	0
-AF	1	0.098361	42	28	14	0	0	0	0
-AF	1	0.106557	25	13	12	0	0	0	0
-AF	1	0.114754	42	23	19	0	0	0	0
-AF	1	0.122951	44	34	10	0	0	0	0
-AF	1	0.131148	87	52	35	0	0	0	0
-AF	1	0.139344	48	31	17	0	0	0	0
-AF	1	0.147541	43	29	14	0	0	0	0
-AF	1	0.155738	40	23	17	0	0	0	0
-AF	1	0.163934	25	12	13	0	0	0	0
-AF	1	0.172131	32	17	15	0	0	0	0
-AF	1	0.180328	35	23	12	0	0	0	0
-AF	1	0.188525	30	16	14	0	0	0	0
-AF	1	0.196721	30	15	15	0	0	0	0
-AF	1	0.204918	31	14	17	0	0	0	0
+AF	1	0.073770	36	17	19	0	0	0	0
+AF	1	0.081967	41	21	20	0	0	0	0
+AF	1	0.090164	40	19	21	0	0	0	0
+AF	1	0.098361	41	27	14	0	0	0	0
+AF	1	0.106557	24	12	12	0	0	0	0
+AF	1	0.114754	36	19	17	0	0	0	0
+AF	1	0.122951	23	15	8	0	0	0	0
+AF	1	0.131148	34	22	12	0	0	0	0
+AF	1	0.139344	32	18	14	0	0	0	0
+AF	1	0.147541	34	23	11	0	0	0	0
+AF	1	0.155738	34	21	13	0	0	0	0
+AF	1	0.163934	21	8	13	0	0	0	0
+AF	1	0.172131	30	15	15	0	0	0	0
+AF	1	0.180328	32	21	11	0	0	0	0
+AF	1	0.188525	23	12	11	0	0	0	0
+AF	1	0.196721	24	11	13	0	0	0	0
+AF	1	0.204918	30	14	16	0	0	0	0
 AF	1	0.213115	23	12	11	0	0	0	0
-AF	1	0.221311	34	18	16	0	0	0	0
-AF	1	0.229508	30	17	13	0	0	0	0
-AF	1	0.237705	29	21	8	0	0	0	0
-AF	1	0.245902	23	11	12	0	0	0	0
-AF	1	0.254098	20	11	9	0	0	0	0
-AF	1	0.262295	23	11	12	0	0	0	0
-AF	1	0.270492	19	10	9	0	0	0	0
-AF	1	0.278689	36	21	15	0	0	0	0
-AF	1	0.286885	39	26	13	0	0	0	0
-AF	1	0.295082	28	13	15	0	0	0	0
-AF	1	0.303279	27	10	17	0	0	0	0
-AF	1	0.311475	27	13	14	0	0	0	0
-AF	1	0.319672	24	14	10	0	0	0	0
-AF	1	0.327869	35	20	15	0	0	0	0
-AF	1	0.336066	25	17	8	0	0	0	0
-AF	1	0.344262	16	9	7	0	0	0	0
+AF	1	0.221311	29	14	15	0	0	0	0
+AF	1	0.229508	28	15	13	0	0	0	0
+AF	1	0.237705	26	18	8	0	0	0	0
+AF	1	0.245902	20	9	11	0	0	0	0
+AF	1	0.254098	18	9	9	0	0	0	0
+AF	1	0.262295	18	9	9	0	0	0	0
+AF	1	0.270492	9	4	5	0	0	0	0
+AF	1	0.278689	21	13	8	0	0	0	0
+AF	1	0.286885	15	9	6	0	0	0	0
+AF	1	0.295082	14	4	10	0	0	0	0
+AF	1	0.303279	19	7	12	0	0	0	0
+AF	1	0.311475	23	11	12	0	0	0	0
+AF	1	0.319672	18	8	10	0	0	0	0
+AF	1	0.327869	24	14	10	0	0	0	0
+AF	1	0.336066	14	8	6	0	0	0	0
+AF	1	0.344262	14	8	6	0	0	0	0
 AF	1	0.352459	16	13	3	0	0	0	0
 AF	1	0.360656	14	7	7	0	0	0	0
-AF	1	0.368852	17	6	11	0	0	0	0
-AF	1	0.377049	16	8	8	0	0	0	0
-AF	1	0.385246	16	13	3	0	0	0	0
+AF	1	0.368852	15	5	10	0	0	0	0
+AF	1	0.377049	14	7	7	0	0	0	0
+AF	1	0.385246	15	12	3	0	0	0	0
 AF	1	0.393443	25	13	12	0	0	0	0
-AF	1	0.401639	17	5	12	0	0	0	0
-AF	1	0.409836	25	13	12	0	0	0	0
-AF	1	0.418033	21	10	11	0	0	0	0
-AF	1	0.426230	19	14	5	0	0	0	0
-AF	1	0.434426	20	11	9	0	0	0	0
-AF	1	0.442623	25	16	9	0	0	0	0
-AF	1	0.450820	14	7	7	0	0	0	0
-AF	1	0.459016	16	11	5	0	0	0	0
+AF	1	0.401639	14	4	10	0	0	0	0
+AF	1	0.409836	16	8	8	0	0	0	0
+AF	1	0.418033	16	7	9	0	0	0	0
+AF	1	0.426230	14	10	4	0	0	0	0
+AF	1	0.434426	12	6	6	0	0	0	0
+AF	1	0.442623	19	12	7	0	0	0	0
+AF	1	0.450820	9	4	5	0	0	0	0
+AF	1	0.459016	15	10	5	0	0	0	0
 AF	1	0.467213	14	3	11	0	0	0	0
-AF	1	0.475410	15	10	5	0	0	0	0
-AF	1	0.483607	12	7	5	0	0	0	0
-AF	1	0.491803	19	12	7	0	0	0	0
-AF	1	0.500000	12	9	3	0	0	0	0
+AF	1	0.475410	14	9	5	0	0	0	0
+AF	1	0.483607	11	7	4	0	0	0	0
+AF	1	0.491803	14	7	7	0	0	0	0
+AF	1	0.500000	10	7	3	0	0	0	0
 AF	1	0.508197	14	8	6	0	0	0	0
 AF	1	0.516393	6	2	4	0	0	0	0
 AF	1	0.524590	19	9	10	0	0	0	0
 AF	1	0.532787	6	2	4	0	0	0	0
-AF	1	0.540984	14	7	7	0	0	0	0
+AF	1	0.540984	13	6	7	0	0	0	0
 AF	1	0.549180	8	4	4	0	0	0	0
 AF	1	0.557377	15	9	6	0	0	0	0
-AF	1	0.565574	18	10	8	0	0	0	0
+AF	1	0.565574	17	9	8	0	0	0	0
 AF	1	0.573770	15	8	7	0	0	0	0
-AF	1	0.581967	11	7	4	0	0	0	0
-AF	1	0.590164	14	7	7	0	0	0	0
+AF	1	0.581967	9	6	3	0	0	0	0
+AF	1	0.590164	12	5	7	0	0	0	0
 AF	1	0.598361	12	6	6	0	0	0	0
-AF	1	0.606557	11	9	2	0	0	0	0
+AF	1	0.606557	9	7	2	0	0	0	0
 AF	1	0.614754	9	4	5	0	0	0	0
 AF	1	0.622951	6	3	3	0	0	0	0
 AF	1	0.631148	11	6	5	0	0	0	0
 AF	1	0.639344	6	3	3	0	0	0	0
-AF	1	0.647541	12	4	8	0	0	0	0
-AF	1	0.655738	12	7	5	0	0	0	0
-AF	1	0.663934	10	5	5	0	0	0	0
-AF	1	0.672131	10	4	6	0	0	0	0
+AF	1	0.647541	10	2	8	0	0	0	0
+AF	1	0.655738	10	6	4	0	0	0	0
+AF	1	0.663934	8	3	5	0	0	0	0
+AF	1	0.672131	9	3	6	0	0	0	0
 AF	1	0.680328	11	7	4	0	0	0	0
-AF	1	0.688525	20	10	10	0	0	0	0
-AF	1	0.696721	20	13	7	0	0	0	0
-AF	1	0.704918	30	22	8	0	0	0	0
-AF	1	0.713115	22	13	9	0	0	0	0
-AF	1	0.721311	7	5	2	0	0	0	0
-AF	1	0.729508	18	9	9	0	0	0	0
-AF	1	0.737705	13	7	6	0	0	0	0
+AF	1	0.688525	10	5	5	0	0	0	0
+AF	1	0.696721	9	7	2	0	0	0	0
+AF	1	0.704918	7	3	4	0	0	0	0
+AF	1	0.713115	7	4	3	0	0	0	0
+AF	1	0.721311	4	3	1	0	0	0	0
+AF	1	0.729508	16	7	9	0	0	0	0
+AF	1	0.737705	11	5	6	0	0	0	0
 AF	1	0.745902	8	4	4	0	0	0	0
-AF	1	0.754098	8	5	3	0	0	0	0
+AF	1	0.754098	7	4	3	0	0	0	0
 AF	1	0.762295	7	5	2	0	0	0	0
 AF	1	0.770492	4	3	1	0	0	0	0
 AF	1	0.778689	6	2	4	0	0	0	0
@@ -284,26 +284,26 @@ AF	1	0.803279	6	2	4	0	0	0	0
 AF	1	0.811475	5	2	3	0	0	0	0
 AF	1	0.819672	9	2	7	0	0	0	0
 AF	1	0.827869	8	2	6	0	0	0	0
-AF	1	0.836066	5	1	4	0	0	0	0
-AF	1	0.844262	9	7	2	0	0	0	0
-AF	1	0.852459	6	3	3	0	0	0	0
+AF	1	0.836066	4	0	4	0	0	0	0
+AF	1	0.844262	4	2	2	0	0	0	0
+AF	1	0.852459	3	2	1	0	0	0	0
 AF	1	0.860656	6	4	2	0	0	0	0
 AF	1	0.868852	3	3	0	0	0	0	0
 AF	1	0.877049	11	5	6	0	0	0	0
 AF	1	0.885246	3	2	1	0	0	0	0
-AF	1	0.893443	24	17	7	0	0	0	0
-AF	1	0.901639	10	6	4	0	0	0	0
-AF	1	0.909836	5	1	4	0	0	0	0
-AF	1	0.918033	4	3	1	0	0	0	0
+AF	1	0.893443	6	5	1	0	0	0	0
+AF	1	0.901639	4	2	2	0	0	0	0
+AF	1	0.909836	4	0	4	0	0	0	0
+AF	1	0.918033	3	2	1	0	0	0	0
 AF	1	0.926230	4	1	3	0	0	0	0
-AF	1	0.934426	4	2	2	0	0	0	0
+AF	1	0.934426	1	0	1	0	0	0	0
 AF	1	0.942623	7	3	4	0	0	0	0
-AF	1	0.950820	6	4	2	0	0	0	0
+AF	1	0.950820	5	4	1	0	0	0	0
 AF	1	0.959016	2	1	1	0	0	0	0
 AF	1	0.967213	6	0	6	0	0	0	0
 AF	1	0.975410	2	1	1	0	0	0	0
 AF	1	0.983607	3	3	0	0	0	0	0
-AF	1	0.991803	2	0	2	0	0	0	0
+AF	1	0.991803	1	0	1	0	0	0	0
 AF	2	0.000000	82	53	29	0	0	0	0
 AF	2	0.008197	514	369	145	0	0	0	0
 AF	2	0.016393	423	301	122	0	0	0	0
@@ -429,7 +429,7 @@ AF	2	0.991803	162	102	60	0	0	0	0
 # QUAL, Stats by quality
 # QUAL	[2]id	[3]Quality	[4]number of SNPs	[5]number of transitions (1st ALT)	[6]number of transversions (1st ALT)	[7]number of indels
 QUAL	0	.	3903208	2634067	1269141	0
-QUAL	1	.	3010	1699	1311	0
+QUAL	1	.	2528	1377	1151	0
 QUAL	2	.	319723	219493	100230	0
 # IDD, InDel distribution:
 # IDD	[2]id	[3]length (deletions negative)	[4]number of sites	[5]number of genotypes	[6]mean VAF
@@ -447,18 +447,18 @@ ST	0	G>T	181832
 ST	0	T>A	138619
 ST	0	T>C	531249
 ST	0	T>G	143498
-ST	1	A>C	131
-ST	1	A>G	340
-ST	1	A>T	88
-ST	1	C>A	181
-ST	1	C>G	250
-ST	1	C>T	469
-ST	1	G>A	503
-ST	1	G>C	235
-ST	1	G>T	191
-ST	1	T>A	99
-ST	1	T>C	387
-ST	1	T>G	136
+ST	1	A>C	114
+ST	1	A>G	283
+ST	1	A>T	71
+ST	1	C>A	155
+ST	1	C>G	235
+ST	1	C>T	369
+ST	1	G>A	407
+ST	1	G>C	216
+ST	1	G>T	161
+ST	1	T>A	82
+ST	1	T>C	318
+ST	1	T>G	117
 ST	2	A>C	12340
 ST	2	A>G	50980
 ST	2	A>T	10694

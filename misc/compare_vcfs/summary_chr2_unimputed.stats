@@ -1,11 +1,11 @@
 # This file was produced by bcftools stats (1.17+htslib-1.17) and can be plotted using plot-vcfstats.
-# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr2_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz
+# The command line was:	bcftools stats  /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr2_99_individuals.vcf.gz /lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr2_CWAS_SNPs_2023-05-30_phased.vcf.gz
 #
 # Definition of sets:
 # ID	[2]id	[3]tab-separated file names
 ID	0	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr2_99_individuals.vcf.gz
-ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz
-ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr2_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/split_hg38_vcf/chr2_CWAS_SNPs_2023-05-15_phased.vcf.gz
+ID	1	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr2_CWAS_SNPs_2023-05-30_phased.vcf.gz
+ID	2	/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/geuvadis_individuals/vcf_files/chr2_99_individuals.vcf.gz	/lus/grand/projects/TFXcan/imlab/data/baca_cwas/vcf_chr_only_hg38/chr2_CWAS_SNPs_2023-05-30_phased.vcf.gz
 # SN, Summary numbers:
 #   number of records   .. number of data rows in the VCF
 #   number of no-ALTs   .. reference-only sites, ALT is either "." or identical to REF
@@ -32,9 +32,9 @@ SN	0	number of indels:	0
 SN	0	number of others:	0
 SN	0	number of multiallelic sites:	0
 SN	0	number of multiallelic SNP sites:	0
-SN	1	number of records:	3065
+SN	1	number of records:	3059
 SN	1	number of no-ALTs:	0
-SN	1	number of SNPs:	3065
+SN	1	number of SNPs:	3059
 SN	1	number of MNPs:	0
 SN	1	number of indels:	0
 SN	1	number of others:	0
@@ -51,7 +51,7 @@ SN	2	number of multiallelic SNP sites:	0
 # TSTV, transitions/transversions:
 # TSTV	[2]id	[3]ts	[4]tv	[5]ts/tv	[6]ts (1st ALT)	[7]tv (1st ALT)	[8]ts/tv (1st ALT)
 TSTV	0	3974872	1926216	2.06	3974872	1926216	2.06
-TSTV	1	1517	1548	0.98	1517	1548	0.98
+TSTV	1	1513	1546	0.98	1513	1546	0.98
 TSTV	2	311995	143732	2.17	311995	143732	2.17
 # SiS, Singleton stats:
 # SiS	[2]id	[3]allele count	[4]number of SNPs	[5]number of transitions	[6]number of transversions	[7]number of indels	[8]repeat-consistent	[9]repeat-inconsistent	[10]not applicable
@@ -183,15 +183,15 @@ AF	0	0.975410	700	449	251	0	0	0	0
 AF	0	0.983607	1347	880	467	0	0	0	0
 AF	0	0.991803	17733	12113	5620	0	0	0	0
 AF	1	0.000000	648	323	325	0	0	0	0
-AF	1	0.008197	19	11	8	0	0	0	0
+AF	1	0.008197	18	10	8	0	0	0	0
 AF	1	0.016393	19	8	11	0	0	0	0
 AF	1	0.024590	25	12	13	0	0	0	0
-AF	1	0.032787	35	25	10	0	0	0	0
-AF	1	0.040984	35	19	16	0	0	0	0
+AF	1	0.032787	34	24	10	0	0	0	0
+AF	1	0.040984	34	19	15	0	0	0	0
 AF	1	0.049180	33	16	17	0	0	0	0
 AF	1	0.057377	47	15	32	0	0	0	0
-AF	1	0.065574	46	17	29	0	0	0	0
-AF	1	0.073770	47	22	25	0	0	0	0
+AF	1	0.065574	45	16	29	0	0	0	0
+AF	1	0.073770	46	21	25	0	0	0	0
 AF	1	0.081967	54	30	24	0	0	0	0
 AF	1	0.090164	48	25	23	0	0	0	0
 AF	1	0.098361	43	26	17	0	0	0	0
@@ -283,7 +283,7 @@ AF	1	0.795082	11	5	6	0	0	0	0
 AF	1	0.803279	5	2	3	0	0	0	0
 AF	1	0.811475	6	4	2	0	0	0	0
 AF	1	0.819672	8	4	4	0	0	0	0
-AF	1	0.827869	10	3	7	0	0	0	0
+AF	1	0.827869	9	3	6	0	0	0	0
 AF	1	0.836066	9	7	2	0	0	0	0
 AF	1	0.844262	6	2	4	0	0	0	0
 AF	1	0.852459	6	3	3	0	0	0	0
@@ -429,7 +429,7 @@ AF	2	0.991803	343	238	105	0	0	0	0
 # QUAL, Stats by quality
 # QUAL	[2]id	[3]Quality	[4]number of SNPs	[5]number of transitions (1st ALT)	[6]number of transversions (1st ALT)	[7]number of indels
 QUAL	0	.	5901088	3974872	1926216	0
-QUAL	1	.	3065	1517	1548	0
+QUAL	1	.	3059	1513	1546	0
 QUAL	2	.	455727	311995	143732	0
 # IDD, InDel distribution:
 # IDD	[2]id	[3]length (deletions negative)	[4]number of sites	[5]number of genotypes	[6]mean VAF
@@ -447,14 +447,14 @@ ST	0	G>T	276441
 ST	0	T>A	212104
 ST	0	T>C	822804
 ST	0	T>G	219128
-ST	1	A>C	158
+ST	1	A>C	157
 ST	1	A>G	299
 ST	1	A>T	119
 ST	1	C>A	225
 ST	1	C>G	299
-ST	1	C>T	435
+ST	1	C>T	431
 ST	1	G>A	447
-ST	1	G>C	295
+ST	1	G>C	294
 ST	1	G>T	231
 ST	1	T>A	84
 ST	1	T>C	336
