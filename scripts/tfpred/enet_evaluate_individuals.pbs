@@ -1,6 +1,6 @@
 #!/bin/bash
-#PBS -l select=1:system=polaris
-#PBS -l walltime=01:00:00,filesystems=grand
+#PBS -l select=2:system=polaris
+#PBS -l walltime=00:30:00,filesystems=grand
 #PBS -A covid-ct
 #PBS -q debug    
 #PBS -N cwas_individuals_evaluate
@@ -36,17 +36,53 @@ echo "PBS_JOBID = " $PBS_JOBID
 #Rscript="~/miniconda3/envs/r-env/bin/Rscript"
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
-evaluate_rscript='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/enet_evaluate_individuals.R'
-model_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/models/cistrome_AR_aggByMeanCenter_linear_2023-01-24.rds'
+individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_imputed_AR_Prostate/predictions_2023-05-30/aggregated_predictions'
 predict_on='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt'
-model_type='linear'
-individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_AR_Prostate/predictions_2023-05-16/aggregated_predictions'
-output_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output/cwas_AR_Prostate.linear.rds'
+evaluate_rscript='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/enet_evaluate_individuals.R'
+output_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output/imputed_cwas_predictions'
+mkdir -p "${output_dir}"
 
-${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_type}" "${individuals_data_dir}" "${output_rds}"
+model_dir="/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/models/cistrome_AR_Prostate_2023-05-16"
+model_types=("linear" "logistic")
+
+# split node files into 2 files
+NUM_NODES_PER_MPI=1
+split --lines=${NUM_NODES_PER_MPI} --numeric-suffixes=0 --suffix-length=1 $PBS_NODEFILE local_hostfile.
+
+for i in ${!model_types[@]}; do 
+    model_rds="${model_dir}/aggByMeanCenter_AR_Prostate.${model_types[i]}.rds"
+    (
+        if [ -f "${model_rds}" ]; then
+            output_rds="${output_dir}/aggByMeanCenter_AR_Prostate_cwas.${model_types[i]}.rds"
+            echo "INFO - Model file exists for ${model_types[i]}"
+
+            ${mpiexec} --hostfile local_hostfile.${i} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_types[i]}" "${individuals_data_dir}" "${output_rds}"
+        else
+            echo "INFO - Model file does not exist for ${model_types[i]}"
+            exit 1
+        fi
+    ) & sleep 1
+done
+wait
 
 status=$?
-echo "Exit status of evaluation run on individuals is: $status"
+if [ $status -eq 0 ]; then
+    echo "INFO - Exit status of evaluation run on individuals is: $status"
+    #rm local_hostfile.*
+else
+    echo "INFO - Exit status of evaluation run on individuals is: $status"
+fi
+
+
+# model_rds='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/models/cistrome_AR_aggByMeanCenter_linear_2023-01-24.rds'
+
+# model_type='linear'
+
+# 
+
+# ${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_type}" "${individuals_data_dir}" "${output_rds}"
+
+
 
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh
 

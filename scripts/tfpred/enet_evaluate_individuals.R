@@ -19,11 +19,17 @@ output_rds <- arguments[5] # /lus/grand/projects/TFXcan/imlab/users/temi/project
 # individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_AR_Prostate/predictions_2023-05-16/aggregated_predictions'
 # output_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output'
 
+# model_rds <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/models/cistrome_AR_Prostate_2023-05-16/aggByMeanCenter_AR_Prostate.logistic.rds' 
+# predict_on <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt' 
+# model_type <- 'logistic' 
+# individuals_data_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_imputed_AR_Prostate/predictions_2023-05-30/aggregated_predictions' 
+#output_rds <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output/imputed_cwas_predictions/aggByMeanCenter_AR_Prostate_cwas.logistic.rds'
+
 #print(glue('model dir is {model_dir}\nTF is {TF}\nmodel_id is {model_id}\noutput directory is {output_dir}\nrun date is {run_date}\nmodel type is {model_type}\n\n'))
 
 # individuals
 individuals <- data.table::fread(predict_on, header=F)
-individuals <- individuals$V1[-1] |> unique()#[1:5]
+individuals <- individuals$V1 |> unique()#[1:5]
 print(individuals[1:5])
 agg_methods <- 'aggByMeanCenter'
 
@@ -52,7 +58,7 @@ print(glue('INFO - Found {length(valid_names)} valid individuals'))
 predictions_list <- parallel::mclapply(valid_names, function(each_ind){
 
     #ind_gt <- ground_truth_file[, c('region', each_ind)]
-    print(each_ind)
+   # print(each_ind)
 
     ind_gt <- glue('{individuals_data_dir}/{each_ind}_aggByMeanCenter_AR_Prostate.csv')
     if(file.exists(ind_gt)){
@@ -76,8 +82,6 @@ predictions_list <- parallel::mclapply(valid_names, function(each_ind){
 
             link_pred <- predict(models_list[[each_method]], newx, s = "lambda.1se", type = 'link') |> as.vector()
             response_pred <- predict(models_list[[each_method]], newx, s = "lambda.1se", type = 'response') |> as.vector()
-
-            df <- new_dt[, c(1:2)] |> as.data.frame()
             df <- cbind(regions, link_pred, response_pred) |> as.data.frame()
             colnames(df) <- c('regions', 'prediction_link', 'prediction_response')
         }
