@@ -1,0 +1,312 @@
+---
+title: "An attempt to linearize TFPred weights"
+author: "Temi"
+date: 'Thurs Jun 1 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+#### Motifs in CWAS loci
+
+```{r}
+library(GenomicRanges)
+```
+
+
+```{r}
+cwas_loci <- data.table::fread(glue('{project_dir}/baca_cwas/bed_files/baca_cwas_loci_hg38.bed'), col.names=c('chr', 'hg38_start', 'hg38_end', 'hg19_id'))
+cwas_loci <- cwas_loci %>% tidyr::unite('hg38_id', c('chr', "hg38_start",  "hg38_end" ))
+cwas_loci[1:5, ]
+```
+
+```{r}
+training_motifs <- glue('{project_dir}/motif_intervals/cistrome/intervals_2023-01-24/predictors/cistrome_AR_37212.txt')
+training_motifs <- data.table::fread(training_motifs, header=F)$V1
+training_motifs <- do.call('rbind', strsplit(training_motifs, '_')) |> as.data.frame()
+colnames(training_motifs) <- c('chr', 'start', 'end')
+training_motifs <- training_motifs %>% dplyr::mutate(start=as.numeric(start), end=as.numeric(end))
+training_motifs[1:5, ]
+```
+```{r}
+cwas_loci <- do.call('rbind', strsplit(cwas_supp$hg38_id, '_')) |> as.data.frame()
+colnames(cwas_loci) <- c('chr', 'start', 'end')
+cwas_loci <- cwas_loci[!is.na(cwas_loci[,2]) & !is.na(cwas_loci[,3]), ]
+cwas_loci[1:5, ]
+```
+
+```{r}
+training_motifs_granges <- with(training_motifs, GRanges(chr, IRanges(as.numeric(start), as.numeric(end)), strand='*', score=0))
+```
+
+```{r}
+cwas_loci_granges <- with(cwas_loci, GRanges(chr, IRanges(as.numeric(start), as.numeric(end)), strand='*', score=0))
+```
+
+```{r}
+loci_overlaps <- GenomicRanges::findOverlaps(query=training_motifs_granges, subject=cwas_loci_granges, type='any')
+```
+
+```{r}
+cwas_loci_granges[subjectHits(loci_overlaps), ]
+```
+
+```{r}
+training_motifs_granges[queryHits(loci_overlaps), ]
+```
+
+
+### Are the clumpings due to a specific SNP?
+
+```{r}
+analysis_matrix <- readRDS(glue('{project_dir}/baca_cwas/output/AR_Prostate_scores_matrix.rds'))
+```
+
+```{r}
+common_regions <- intersect(rownames(analysis_matrix$tfpred_scores), rownames(analysis_matrix$cwas_scores))
+length(common_regions)
+```
+
+```{r}
+
+```
+
+Filter out the snps in this region
+```{r}
+test_loci <- common_regions[1]#'chr4_96092999_96093499'
+test_loci_split <- strsplit(test_loci, '_') |> unlist()
+```
+
+```{r}
+hg38_snps_file <- glue('{project_dir}/baca_cwas/snps/hg38_snps.bed')
+cmd <- glue('grep {test_loci_split[1]} {hg38_snps_file} | grep {test_loci_split[2]} | grep {test_loci_split[3]}')
+cmd
+```
+
+```{r}
+snps_dt <- system(cmd, intern = TRUE) %>% strsplit(., '\t') %>% do.call('rbind', .) |> as.data.frame() %>% dplyr::mutate(V2 = as.numeric(V2), V3 = as.numeric(V3))
+colnames(snps_dt) <- c('chr', 'start', 'end', 'snp_id', 'loci')
+snps_dt[1:5, ]
+```
+
+Filter the training motifs
+
+```{r}
+motif_in_loci <- subset(training_motifs, chr=='chr4' & start >= 96092999 & end <= 96093499)
+motif_in_loci
+```
+
+The motif is not in the define peak
+```{r}
+snp_in_motif <- subset(snps_dt, start >= motif_in_loci$start & end <= motif_in_loci$end)
+snp_in_motif
+```
+
+Calculate distance of snps to motifs
+
+```{r}
+snps_dt <- snps_dt %>% dplyr::mutate(snp_dist = motif_in_loci$start - start, query = paste(chr, start, sep=':'))
+snps_dt
+```
+
+```{r}
+write.table(snps_dt, glue('{project_dir}/analysis/test_variants.txt'), sep='\t')
+```
+
+Nominating snps
+
+```{r}
+#library(vcfR)
+# chr4_vcf <- vcfR::read.vcfR('/lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz', verbose=F)
+```
+
+```{r}
+'rs7686416'
+```
+```{r}
+glue('conda activate compbio-tools\nbcftools view -H -r {paste0(snps_dt$bcf_r, collapse=\',\')} -s {paste0(ind_names, collapse=",")} /lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz')
+```
+
+```{python}
+vcf_file = '/lus/grand/projects/covid-ct/imlab/data/GEUVADIS/vcf_snps_only/ALL.chr4.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz'
+```
+
+```{python}
+import cyvcf2
+import pandas as pd
+import os
+import numpy as np
+```
+
+```{python}
+os.getcwd()
+```
+
+```{python}
+test_variants = pd.read_table('../analysis/test_variants.txt')
+test_variants
+```
+
+```{python}
+individuals = pd.read_table('/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/metadata/valid_subset1KGgenomes_individuals.txt', header=None)[0].to_list()
+individuals[0:5], len(individuals)
+```
+
+```{python}
+vcf_chr = cyvcf2.cyvcf2.VCF(vcf_file, samples=individuals)
+```
+
+
+```{python}
+def find_variants_in_vcf_file(cyvcf2_object, samples, queries):
+
+    """
+    Given a cyvcf2 object and a kipoiseq.Interval object, as well as a list of samples, extract the variants for the samples for the intervals.
+    Parameters:
+        cyvcf2_object: A cyvcf2 object
+        interval_object: a kiposeq.Interval object
+            should have `chrom`, `start`, and `end` attributes
+        samples: list
+            a list of samples: [a, b, c]
+            At least one of these samples should be in the vcf file. 
+    Returns: dict
+        chr: the chromosome
+        position: the list of positions
+        sample: the samples and variants information
+    """
+
+    #n_samples = len(samples)
+
+    # check that samples are in the vcf file
+    # if not set(samples).issubset(cyvcf2_object.samples):
+    #     raise Exception(f'[ERROR] Fatal. Some samples are not in the VCF file.')
+
+    variants_dictionary = {}
+
+    for query in queries:
+        query_dictionary = {}
+        query_dictionary['chr'] = query.split(':')[0]
+        query_dictionary['positions'] = tuple(variant.POS for variant in cyvcf2_object(query))
+
+        if not query_dictionary['positions']:
+            print(f'{query} does not exist in vcf file')
+            continue
+        else:
+            for i, sample in enumerate(samples):
+                try:
+                    if sample in cyvcf2_object.samples:
+                        sample_variants = tuple([variant.genotypes[i][0:2], variant.gt_bases[i].split('|')] for variant in cyvcf2_object(query))
+                        # return(sample_variants)
+                        sample_alleles = ['_'.join(sample_variants[i][1]) for i in range(len(sample_variants))]
+                        query_dictionary[sample] = sample_alleles
+                except UserWarning:
+                    print(f'[WARNING] {sample} is not in the VCF file.')
+                    continue
+        variants_dictionary[query] = pd.DataFrame(query_dictionary)
+
+    output = pd.DataFrame(np.vstack(list(variants_dictionary.values())))
+    colnames = ['chr', 'position']
+    colnames.extend(samples)
+    output.columns = colnames
+    return(output)
+```
+
+
+```{python}
+queries = [f"{test_variants['chr'].tolist()[i]}:{test_variants['start'].tolist()[i]}-{test_variants['end'].tolist()[i]}" for i in range(test_variants.shape[0])]
+queries
+```
+```{python}
+individual_snps = find_variants_in_vcf_file(vcf_chr, samples=individuals, queries=queries)
+```
+
+```{python}
+output_snps = individual_snps.merge(test_variants.loc[:,['chr', 'start', 'snp_id']], left_on=['chr', 'position'], right_on=['chr', 'start'], how='inner')
+output_snps.drop('start', axis=1, inplace=True)
+output_snps = output_snps[['chr', 'position', 'snp_id'] + [c for c in output_snps if c not in ['chr', 'position', 'snp_id']]]
+output_snps.head()
+```
+
+```{python}
+output_snps.to_csv(f'/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/analysis/geuvadis_99_variants.txt', sep='\t', index=False)
+```
+
+Back to R...
+```{r}
+snp_details <- data.table::fread(glue('{project_dir}/analysis/geuvadis_99_variants.txt'))#snp_details <- snp_details %>% tidyr::unite('haps', hap1:hap2, sep='', remove=F)
+snp_details[1:5, ]
+```
+
+```{r}
+individuals <- individuals |> unlist() |> unname()
+unique_snps <- snp_details %>% dplyr::select(.data[[individuals[1]]]) %>% unlist() |> unname() |> unique()
+```
+
+```{r}
+allele_dosage_matrix <- apply(snp_details[, -c(1:3)], 1, function(each_row){
+    unique_snps <- unique(each_row |> unlist() |> unname())
+    dosage_mappings <- strsplit(unique_snps, '_') |> unlist() |> unique()
+    each_row <- sub('_', '', each_row)
+    each_dosage <- ifelse(each_row == strrep(dosage_mappings[1], 2), 0, 
+        ifelse(each_row == strrep(dosage_mappings[2], 2), 2, 
+            1))
+    names(each_dosage) <- each_row
+    return(each_dosage)
+
+}) |> as.data.frame()
+
+rownames(allele_dosage_matrix) <- colnames(snp_details[, -c(1:3)])
+colnames(allele_dosage_matrix) <- snp_details$snp_id
+allele_dosage_matrix <- allele_dosage_matrix %>% tibble::rownames_to_column('sample')
+allele_dosage_matrix[1:5, ]
+```
+
+```{r}
+picked_loci <- 'chr4_96092999_96093499'
+picked_loci_i <- which(cwas_AR_top6_loci == picked_loci)
+x <- tfpred_ca[picked_loci, ] |> unlist() |> as.data.frame() %>% tibble::rownames_to_column('sample')
+colnames(x)[2] <- 'TFPred_score'
+x[1:5,]
+```
+
+```{r}
+xdt <- merge(x, allele_dosage_matrix, by='sample')
+xdt <- xdt[, -1]
+xdt[1:5, ]
+```
+
+```{r}
+lm(TFPred_score ~ ., data=xdt) |> summary()
+```
+
+```{r}
+for(rs in colnames(allele_dosage_matrix)[-1]){
+    print(rs)
+    print(
+        xdt %>% 
+        ggplot(., aes(x=factor(.data[[rs]]), y=TFPred_score, fill=.data[[rs]])) + 
+        geom_boxplot() + 
+        geom_jitter() + 
+        theme_minimal() + 
+        labs(x=rs, y='TFPred score', title='chr4:96093166-96093166')
+    )
+}
+
+```
+
+```{r}
+xdt %>% ggplot(., aes(x=haps, y=TFPred_score, fill=haps)) + geom_boxplot() + geom_jitter() + theme_minimal() + labs(x='rs7686416', y='TFPred score', title='chr4:96093166-96093166')
+```
+
+```{r}
+xdt %>% dplyr::group_by(haps) %>% summarize(mean_TFPred_score = mean(TFPred_score))
+```
+
+```{r}
+x_ <- ifelse(xdt$haps == 'CC', 0, ifelse(xdt$haps == 'TT', 2, 1))
+y_ <- xdt$TFPred_score
+
+lm(y_ ~ x_) |> summary()
+```
