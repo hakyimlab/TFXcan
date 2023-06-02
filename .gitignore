@@ -17,6 +17,7 @@ geuvadis_individuals/*
 **/cmd_parsl.*
 prediXcan/*
 experiments/AR_prostate/output/*
+logs/*
 
 .*
 
