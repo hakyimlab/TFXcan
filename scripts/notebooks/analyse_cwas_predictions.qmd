@@ -8,7 +8,7 @@ format:
     number-sections: true
     code-line-numbers: true
 ---
-
+Latest usage/change: JUne 1 2023
 
 ```{r import libraries}
 setwd('/grand/TFXcan/imlab/users/temi/projects/TFXcan/scripts/')
@@ -46,7 +46,7 @@ cwas_gt[1:5, 1:5]
 
 ```{r}
 # predictions
-tfpred_predictions <- readRDS(glue('{experiment_dir}/output/cwas_AR_Prostate_linear.rds'))
+tfpred_predictions <- readRDS(glue('{experiment_dir}/output/imputed_cwas_predictions/aggByMeanCenter_AR_Prostate_cwas.linear.rds'))
 # individuals
 cwas_individuals <- data.table::fread(glue('{experiment_dir}/metadata/cwas_individuals.txt'), header=FALSE)$V1
 cwas_samples_mtdt <- data.table::fread(file=glue('{project_dir}/baca_cwas/metadata/samples_metadata.txt'))
@@ -180,7 +180,7 @@ baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'to
 ```
 
 ```{r}
-baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/cwas_individuals/{baca_models[6]}/baca_cwas_predict.txt'))
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/cwas_individuals_imputed/{baca_models[6]}/baca_cwas_predict.txt'))
 baca_predictions <- baca_predictions[, -1] %>% t() %>% as.data.frame() 
 colnames(baca_predictions) <- baca_predictions[1, ]
 baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
@@ -342,13 +342,14 @@ pscores_top_regions %>%
 save_rds <- list(tfpred_scores=tfpred_mat, cwas_scores=cwas_scores_mat, ground_truth=gt_matrix)
 saveRDS(save_rds, file = glue('{project_dir}/baca_cwas/output/AR_Prostate_scores_matrix.rds')) 
 ```
+
+
 ```{r}
 #pscores_top_regions <- pscores_dt[(pscores_dt$region %in% top_regions) & (pscores_dt$individual %in% ind_names), ]
 best_obs <- obs[names(top_regions), ] %>% as.data.frame() %>% tibble::rownames_to_column('loci')
 best_pred <- pred[names(top_regions), ] %>% as.data.frame() %>% tibble::rownames_to_column('loci')
 pscores_top_regions <- merge(best_pred %>% tidyr::pivot_longer(!loci), 
   best_obs %>% tidyr::pivot_longer(!loci), by=c('loci', 'name'))
-
 
 ```
 

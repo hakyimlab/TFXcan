@@ -9,7 +9,6 @@ format:
     code-line-numbers: true
 ---
 
-
 ```{r import libraries}
 setwd('/grand/TFXcan/imlab/users/temi/projects/TFXcan/scripts/')
 
@@ -72,6 +71,8 @@ cwas_loci <- data.table::fread(glue('{project_dir}/baca_cwas/bed_files/baca_cwas
 cwas_loci <- cwas_loci %>% tidyr::unite('hg38_id', c('chr', "hg38_start",  "hg38_end" ))
 cwas_loci[1:5, ]
 ```
+
+### Plot the distribution of 
 
 Is any hg38_id cwas loci present in the first 10 bedfiles?
 ```{r}
