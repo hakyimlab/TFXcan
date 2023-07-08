@@ -18,6 +18,7 @@ geuvadis_individuals/*
 prediXcan/*
 experiments/AR_prostate/*
 experiments/association/*
+experiments/association/metadata/*
 experiments/geuvadis_99/*
 experiments/compare_predictors/*
 logs/*
