@@ -1,5 +1,5 @@
 ---
-title: "Association analysis of AR-prostate-pred scores with GEUVADIS gene expression"
+title: "Association analysis of AR-prostate TFPred scores with GEUVADIS gene expression"
 author: "Temi"
 date: 'Thurs Jun 1 2023'
 format: 
@@ -10,6 +10,10 @@ format:
 ---
 
 ```{r}
+expr_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments'
+```
+
+```{r}
 if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
 if(!require("annotatr")){BiocManager::install("annotatr")}
 if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
@@ -17,7 +21,6 @@ if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsa
 # library(EnsDb.Hsapiens.v86)
 if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
 ```
-
 
 ```{r}
 library(glue)
@@ -37,6 +40,8 @@ valid_chr
 ```
 
 Promoters...
+
+I prefer this annotation over the ens annotations
 ```{r}
 annots <- c("hg38_genes_promoters")
 
@@ -45,7 +50,152 @@ annots <- c("hg38_genes_promoters")
 # Build the annotations (a single GRanges object)
 promoter_annotations <- build_annotations(genome = 'hg38', annotations = annots)
 promoter_annotations <- keepSeqlevels(promoter_annotations, standardChromosomes(promoter_annotations)[1:24], pruning.mode = "coarse")
+
+# filter out NAs
+promoter_annotations <- promoter_annotations[!is.na(promoter_annotations$symbol), ]
 promoter_annotations
+```
+
+use biomart to get hugo names mapping to ensembl id to hugo names mapping
+
+```{r}
+hgnc_names <- promoter_annotations$symbol
+hgnc_names <- hgnc_names[!is.na(hgnc_names)] |> unique()
+hgnc_names[1:5]
+```
+```{r}
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+# https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
+#G_list <- getBM(filters = "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"), values=ensembl_ids, mart= mart)
+
+gene_names_list <- getBM(filters = "hgnc_symbol", attributes= c("hgnc_symbol", "ensembl_gene_id"), values=hgnc_names, mart= mart)
+
+gene_names_list |> head()
+```
+
+map and merge
+```{r}
+m <- match(promoter_annotations$symbol, gene_names_list$hgnc_symbol)
+#m <- m[!is.na(m)]
+
+gm <- gene_names_list[m, ]
+```
+
+You can see that they match
+keep in mind that some hgnc_symbols may not have ensembl_ids and vice versa
+```{r}
+gm |> head() ; promoter_annotations ; identical(nrow(gm), length(promoter_annotations))
+```
+
+```{r}
+elementMetadata(promoter_annotations)[['ensembl_id']] <- gm$ensembl_gene_id
+```
+
+```{r}
+promoter_annotations |> as.data.frame()
+```
+
+GEUVADIS expression data
+
+```{r}
+gexpr <- data.table::fread('/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
+gexpr[1:5, 1:5] ; dim(gexpr)
+```
+
+```{r}
+ensembl_ids <- strsplit(gexpr$TargetID, split='\\.') |> sapply(getElement, 1)
+gexpr$ensembl_id <- ensembl_ids
+gexpr[1:5, 1:5]
+```
+
+Filter for the ensemble ids
+```{r}
+promoter_annotations <- promoter_annotations[promoter_annotations$ensembl_id %in% gexpr$ensembl_id, ]
+promoter_annotations
+```
+
+```{r}
+pro_annt_dt <- promoter_annotations[, c('id', 'tx_id', 'symbol', 'ensembl_id')] |> as.data.frame()
+pro_annt_dt |> head()
+```
+
+For now, select distinct genes/transcripts
+```{r}
+pro_annt_dt <- pro_annt_dt %>% dplyr::distinct(symbol, ensembl_id, .keep_all=TRUE)
+pro_annt_dt |> head() ; dim(pro_annt_dt)
+```
+
+Merge with expression
+
+```{r}
+merged_gexpr <- merge(pro_annt_dt, gexpr, by.x="ensembl_id", by.y="ensembl_id")
+# merged_gexpr <- merged_gexpr %>% dplyr::relocate(TargetID, Gene_Symbol, Chr,Coord, hgnc_symbol)
+merged_gexpr[1:5, 1:13]
+```
+
+```{r}
+data.table::fwrite(merged_gexpr, file=glue('{expr_dir}/association/metadata/geuvadis_expression_promoters.txt', quote=F, row.names=F))
+```
+
+loci and individuals
+```{r}
+loci <- with(merged_gexpr, paste(seqnames, start, end, sep='_'))
+
+# remove chromosme Y
+loci <- loci[!startsWith(loci, 'chrY_')]
+length(loci)
+```
+
+```{r}
+individuals <- names(merged_gexpr)[grepl('NA|HG', names(merged_gexpr))]
+length(individuals)
+```
+
+```{r}
+loci |> as.data.frame() |> data.table::fwrite(file=glue('{expr_dir}/association/metadata/loci.txt'), quote=F, row.names=F, col.names=F)
+individuals |> as.data.frame() |> data.table::fwrite(file=glue('{expr_dir}/association/metadata/individuals.txt'), quote=F, row.names=F, col.names=F)
+```
+
+
+
+How many CWAS regions are present in the promoters of these genes?
+
+```{r}
+cwas_loci <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas/predictors/baca_cwas_AR_regions_hg38_2023-01-27.txt', header=F)
+promoter_loci <- data.table::fread(glue('{expr_dir}/association/metadata/loci.txt'), header=F)
+```
+
+```{r}
+cwas_loci <- cwas_loci$V1[!is.na(cwas_loci$V1)] %>% strsplit('_') %>% do.call('rbind', .) %>% as.data.frame() %>% dplyr::mutate(chr=V1, start=as.numeric(V2), end=as.numeric(V3)) %>% dplyr::select(chr, start, end) %>% with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+promoter_loci <- promoter_loci$V1[!is.na(promoter_loci$V1)] %>% strsplit('_') %>% do.call('rbind', .) %>% as.data.frame() %>% dplyr::mutate(chr=V1, start=as.numeric(V2), end=as.numeric(V3)) %>% dplyr::select(chr, start, end) %>% with(., GRanges(chr, IRanges(start, end), strand='+', score=0))
+```
+
+```{r}
+cwas_promoter_overlaps <- findOverlaps(cwas_loci, promoter_annotations, type='any')
+cwas_promoter_overlaps
+```
+
+```{r}
+library(VennDiagram)
+```
+
+```{r}
+# create pairwise Venn diagram
+
+grid.newpage()  
+draw.pairwise.venn(area1=length(cwas_loci), area2=length(promoter_annotations), cross.area=length(cwas_promoter_overlaps), category=c("CWAS loci","annotated promoters"),fill=c("Red","Yellow"), width = 480)
+```
+
+
+
+
+
+```{r}
+promoter_annotations[startsWith(promoter_annotations$symbol, 'FOXA'), ]
+```
+
+```{r}
+'ENSG00000129514' %in% gexpr$ensembl_id
 ```
 
 Genes
@@ -63,16 +213,14 @@ hs_annt
 ```
 
 ```{r}
-query(ah, hs_annt)
-```
-
-```{r}
-hs_annt <- ah[["AH110869"]]
+qq <- query(ah, hs_annt)
+hs_annt <- ah[[qq$ah_id]]
 ```
 
 ```{r}
 hs_annt$type |> unique()
 ```
+
 
 ```{r}
 pcoding_annt <- hs_annt[(hs_annt$type == 'transcript') & (hs_annt$gene_biotype == 'protein_coding'), ] #$source |> unique()
@@ -98,18 +246,7 @@ hs_annt$gene_biotype |> unique()
 ```
 
 
-GEUVADIS expression
 
-```{r}
-gexpr <- data.table::fread('/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
-gexpr[1:5, 1:5] ; dim(gexpr)
-```
-
-```{r}
-ensembl_ids <- strsplit(gexpr$TargetID, split='\\.') |> sapply(getElement, 1)
-gexpr$ensembl_id <- ensembl_ids
-gexpr[1:5, 1:5]
-```
 
 ```{r}
 AR_ensembl_id <- 'ENSG00000169083' 
@@ -134,14 +271,12 @@ G_list <- getBM(filters = "ensembl_gene_id", attributes= c("ensembl_gene_id","hg
 
 
 ```{r}
-merged_gexpr <- merge(gexpr, G_list,by.x="ensembl_id", by.y="ensembl_gene_id")
+merged_gexpr <- merge(gexpr, G_list, by.x="ensembl_id", by.y="ensembl_gene_id")
 merged_gexpr <- merged_gexpr %>% dplyr::relocate(TargetID, Gene_Symbol, Chr,Coord, hgnc_symbol)
 merged_gexpr[1:5, 1:8]
 ```
 
 ### Merge with promoter coordinates
-
-
 ```{r}
 m <- match(merged_gexpr$hgnc_symbol, promoter_annotations$symbol)
 m <- m[!is.na(m)]
@@ -151,13 +286,13 @@ m <- m[!is.na(m)]
 'DDX11L1' %in% merged_gexpr$hgnc_symbol
 ```
 
-
 ```{r}
 aa <- promoter_annotations[promoter_annotations$symbol %in% merged_gexpr$hgnc_symbol, ]
 aa[aa$symbol == 'TSPAN6', ]
 ```
 
 
+### Ensembl genes and promoters
 ```{r}
 edb <- EnsDb.Hsapiens.v86
 ens_genes <- genes(edb)
@@ -165,16 +300,39 @@ ens_promoters <- promoters(edb)
 ```
 
 ```{r}
+ens_promoters$tx_biotype |> unique()
+```
+
+Filter for protein coding and processed transcripts
+
+```{r}
+ens_promoters <- ens_promoters[ens_promoters$tx_biotype %in% c("protein_coding"), ]
+ens_promoters
+```
+
+```{r}
+promoter_annotations[promoter_annotations$symbol %in% c("BPY2C"), ]
+ens_promoters[ens_promoters$gene_id %in% c("ENSG00000185894"), ]
+```
+
+
+```{r}
+genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+```
+```{r}
+range(width(ens_promoters))
+```
+
+```{r}
 ens_genes <- keepSeqlevels(ens_genes, standardChromosomes(ens_genes)[1:24], pruning.mode = "coarse")
 ens_genes
 ```
-
 
 ```{r}
 ens_genes[ens_genes$gene_name == 'TSPAN6', ]
 ```
 
-
 ```{r}
 ens_promoters[ens_promoters$gene_id == 'ENSG00000000003', ]
 ```
+

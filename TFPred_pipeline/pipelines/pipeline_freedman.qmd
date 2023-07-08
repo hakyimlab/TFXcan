@@ -622,6 +622,18 @@ geom_boxplot() + geom_jitter() + theme_bw() +
 #barplot(t(individual_aucs), beside=T)
 ```
 
+only aggbymean
+```{r}
+individual_aucs %>% tibble::rownames_to_column('agg_method') %>% tidyr::pivot_longer(!agg_method) %>% dplyr::filter(agg_method == 'aggByMean') %>% ggplot(.) + aes(x=agg_method, y=value) + 
+geom_boxplot() + geom_jitter() + theme_bw() + 
+    theme(panel.border=element_blank(),
+        axis.text = element_text(size = 12, color='black'),
+        axis.text.x = element_blank(),
+        axis.title = element_text(size=15, color='black'),
+        plot.title= element_text(size=18)) +
+    labs(title='AUC of TFPred predictions across individuals', x='',y='AUC')
+```
+
 
 
 #### I can predict on a random set and include the AUC too

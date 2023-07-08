@@ -1,0 +1,1179 @@
+---
+title: "Association analysis of AR-prostate TFPred scores with GEUVADIS gene expression"
+author: "Temi"
+date: 'Thurs Jun 1 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+rm(list=ls())
+expr_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments'
+```
+
+```{r}
+if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
+if(!require("annotatr")){BiocManager::install("annotatr")}
+if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
+# library(ensembldb)
+# library(EnsDb.Hsapiens.v86)
+if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
+```
+
+```{r}
+library(devtools)
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+library(annotatr)
+library(AnnotationHub)
+library(biomaRt)
+library(hexbin)
+library(RColorBrewer)
+library(preprocessCore)
+library(grid)
+library(gridExtra)
+```
+
+### After predictions
+
+```{r}
+#setwd('/grand/TFXcan/imlab/users/temi/projects/TFXcan/scripts/')
+project_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan'
+experiment_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association'
+analysis_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis'
+
+# for qqplots:
+#devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+
+# for manhattan plots
+devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
+devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
+```
+
+```{r}
+valid_chr <- c(1:22, 'X', 'Y')
+valid_chr
+```
+
+So there are about 4 different rds files ==> I will process one for now, but join with the others later and modify this script
+```{r}
+# predictions
+# tfpred_predictions <- readRDS(glue('{experiment_dir}/output/aggByMean_AR_Prostate_geuvadis.linear.01.rds'))
+
+tfpred_matrix <- purrr::map(c('01', '02', '03', '04'), function(ii){
+  tfpred_predictions <- readRDS(glue('{experiment_dir}/output/aggByMean_AR_Prostate_geuvadis.linear.{ii}.rds'))
+
+  out <- lapply(tfpred_predictions, function(each_ind){
+    a <- data.table::setDT(each_ind$aggByMean)
+    a
+  })
+
+  tfpred_matrix <- out %>% purrr::reduce(dplyr::inner_join, by='regions')
+  colnames(tfpred_matrix) <- c('regions', names(tfpred_predictions))
+  return(tfpred_matrix)
+
+}) %>% purrr::reduce(dplyr::inner_join, by=c('regions')) %>% tibble::column_to_rownames('regions')
+
+dim(tfpred_matrix) ; tfpred_matrix[1:5, 1:5]
+```
+
+For completeness, go through all the loci in the predictions and select the intersections
+
+```{r}
+# ty <- function(a, b){
+#   intersect(a[['aggByMean']][, 'regions'], b[['aggByMean']][, 'regions'])
+#   # sum(length(a[['aggByMean']][, 'regions']), length(b[['aggByMean']][, 'regions']))
+# }
+
+common_regions <- rownames(tfpred_matrix) 
+common_regions[1:10] ; length(common_regions)
+```
+
+### Need to associate the loci back to the promoters and back to the genes
+
+```{r}
+promoter_mtdt <- data.table::fread(glue('{experiment_dir}/metadata/geuvadis_expression_promoters.txt'))
+
+dim(promoter_mtdt); promoter_mtdt[1:5, 1:10]
+```
+
+Filter for the predicted loci
+```{r}
+subset_promoter_mtdt <- promoter_mtdt %>% tidyr::unite(loci, seqnames:end, sep='_') %>% dplyr::filter(loci %in% common_regions)
+subset_promoter_mtdt[1:5, 1:10] ; dim(subset_promoter_mtdt)
+```
+
+There are some duplicated entries : because some promoter region may be associated with more than one gene
+For now, I will remove these but just doing `distinct`
+```{r}
+subset_promoter_mtdt %>% dplyr::group_by(loci) %>% dplyr::filter(n() > 1) 
+```
+
+Select the individuals
+```{r}
+geuvadis_individuals <- colnames(tfpred_matrix)
+length(geuvadis_individuals)
+```
+```{r}
+gene_expr <- subset_promoter_mtdt %>% dplyr::select(all_of(c('ensembl_id', 'symbol', 'loci', geuvadis_individuals))) %>% dplyr::distinct(loci, .keep_all=TRUE) %>% dplyr::arrange(match(loci, common_regions))
+dim(gene_expr)
+```
+
+```{r}
+# merge each loci 
+mt <- gene_expr %>% dplyr::select(all_of(c('loci', 'symbol')))
+tfpred_matrix <- tfpred_matrix %>% tibble::rownames_to_column('loci') %>% inner_join(mt, by=c('loci' = 'loci')) %>% dplyr::relocate(symbol)
+tfpred_matrix[1:5, 1:5] ; dim(tfpred_matrix)
+```
+
+
+### Regression
+
+Regress using `fastlm`
+
+```{r}
+mat_tfpred <- tfpred_matrix %>% dplyr::select(all_of(c('symbol', geuvadis_individuals))) %>% tibble::column_to_rownames('symbol')
+mat_expr <- gene_expr %>% dplyr::select(all_of(c('symbol', geuvadis_individuals))) %>% tibble::column_to_rownames('symbol')
+```
+
+```{r}
+# match and order the rownames and colnames
+mat_expr <- mat_expr[order(match(rownames(mat_expr), rownames(mat_tfpred))), ]
+mat_expr <- mat_expr[, order(match(colnames(mat_expr), colnames(mat_tfpred)))]
+
+identical(rownames(mat_expr), rownames(mat_tfpred))
+identical(colnames(mat_expr), colnames(mat_tfpred))
+```
+
+```{r}
+mat_expr[1:5, 1:5] ; mat_tfpred[1:5, 1:5]
+```
+
+```{r}
+regr_test <- purrr::map(1:nrow(mat_expr), function(i){
+  out <- fastlm(mat_tfpred[i, ], mat_expr[i, ])
+  return(out)
+}, .progress=T)
+```
+
+
+```{r, eval=F}
+qq_generic(pvec, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p) ~ "(correlation test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("Correlation of TFPred scores with gene expression for GEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r, eval=F}
+hist(cvec, main='', xlab=expression(italic(rho)*', correlation coefficient'), cex.lab=1, col='brown')
+mtext(expression("Distribution of" ~ rho ~ "(correlation coefficient)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("TFPred scores with gene expression for GEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r, eval=F}
+hist(pvec, main='', xlab=expression(italic(p)*"-value"), cex.lab=1, col='brown')
+mtext(expression("Distribution of" ~ p*"-values for correlation test"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("TFPred scores with gene expression for GEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+Some plots
+```{r, eval=F}
+tt <- which(abs(cvec) > 0.5)
+aa <- mat_expr[tt, ] %>% as.data.frame() %>% tibble::rownames_to_column('locus')
+bb <- mat_tfpred[tt, ] %>% as.data.frame() %>% tibble::rownames_to_column('locus')
+merge_list <- list(aa, bb)
+top_cor <- merge_list %>% purrr::map(., function(each_b){
+  each_b %>% tidyr::pivot_longer(!locus)
+}) %>% purrr::reduce(dplyr::inner_join, by=c('locus', 'name'))
+colnames(top_cor) <- c('locus', 'name', 'expr', 'tfpred_score')
+top_cor[1:5, ]
+```
+
+
+```{r, eval=F}
+top_cor %>%
+  dplyr::mutate(locus = as.factor(locus)) %>%
+  ggplot(.) + aes(x=tfpred_score, y=expr, group=locus) + 
+  geom_point(col='red') + 
+  facet_wrap(~locus, scales='free') + theme_bw() +
+  labs(title=glue('scatterplot of top {length(unique(top_cor$locus))} loci (ranked by p-values and highest absolute correlations)'), x='TFPred scores', x = 'gene expression (RPKM)') +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+```
+```{r, eval=F}
+best_cwas <- cwas_scores_mat[top12$loci, ] %>% as.data.frame() %>% tibble::rownames_to_column('loci')
+best_tfpred <- tfpred_mat[top12$loci, ] %>% as.data.frame() %>% tibble::rownames_to_column('loci')
+best_gt <- gt_matrix[top12$loci, ] %>% as.data.frame() %>% tibble::rownames_to_column('loci')
+merge_list <- list(best_cwas, best_tfpred, best_gt)
+```
+
+## Cis and trans associations
+### Trans effects
+```{r}
+# merge each loci 
+mt <- gene_expr %>% dplyr::select(all_of(c('loci', 'symbol')))
+tfpred_matrix_2 <- mat_tfpred %>% tibble::rownames_to_column('symbol') %>% inner_join(mt, by=c('symbol' = 'symbol')) %>% tidyr::separate_wider_delim(loci, delim='_', names=c('chr', 'start', 'end')) %>% dplyr::select(-c(start, end)) %>% dplyr::relocate(chr)
+
+tfpred_matrix_2[1:5, 1:5]
+```
+
+# I need to save these matrices
+
+```{r}
+tfpred_mat_save <- tfpred_matrix_2 #%>% t()
+tfpred_mat_save[1:5, 1:5] ; dim(tfpred_mat_save)
+```
+
+```{r}
+expr_mat_save <- mat_expr %>% tibble::rownames_to_column('symbol')
+expr_mat_save[1:5, 1:5] ; dim(expr_mat_save)
+```
+
+```{r}
+data.table::fwrite(tfpred_mat_save, '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/tfpred_scores_geuvadis_AR_promoters.txt', quote=F, row.names=F)
+data.table::fwrite(expr_mat_save, '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/gene_expression_geuvadis.txt', quote=F, row.names=F)
+```
+
+### At this point,
+Just read in the matrices above
+
+```{r}
+tfpred_matrix_2 <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/tfpred_scores_geuvadis_AR_promoters.txt')
+expr_matrix_2 <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/gene_expression_geuvadis.txt')
+
+tfpred_matrix_2[1:5, 1:5] ; expr_matrix_2[1:5, 1:5]
+```
+
+```{r}
+geuvadis_individuals <- colnames(tfpred_matrix_2)[-c(1:2)]
+length(geuvadis_individuals) == 448
+```
+
+```{r}
+chr_order <- tfpred_matrix_2$chr
+mat_tfpred_2 <- tfpred_matrix_2 %>% dplyr::select(-c(chr)) %>% tibble::column_to_rownames('symbol') %>% t()
+mat_tfpred_2[1:5, 1:5]
+```
+
+```{r}
+mat_expr_2 <- expr_matrix_2 %>% tibble::column_to_rownames('symbol') %>% t()
+mat_expr_2[1:5, 1:5]
+```
+
+Remove NAs
+
+```{r}
+expr_nas <- apply(mat_expr_2, 2, var) != 0
+tfpred_nas <- apply(mat_tfpred_2, 2, var) != 0
+both_true <- (expr_nas & tfpred_nas)
+
+mat_expr_2 <- mat_expr_2[, both_true]
+mat_tfpred_2 <- mat_tfpred_2[, both_true]
+chr_order <- chr_order[both_true] 
+
+dim(mat_expr_2) ; dim(mat_tfpred_2) ; length(chr_order)
+```
+
+For now, I am testing trans effects of promoters in chr1 against genes in other chromosomes
+```{r}
+chr1 <- which(chr_order == 'chr1')
+non_chr1 <- which(chr_order != 'chr1')
+
+length(chr1) ; length(non_chr1)
+```
+
+But I want to use normalized
+```{r}
+mat_tfpred_ranked <- apply(mat_tfpred_2, 2, rank)
+mat_expr_norm <- preprocessCore::normalize.quantiles(mat_expr_2)
+rownames(mat_expr_norm) <- rownames(mat_expr_2)
+colnames(mat_expr_norm) <- colnames(mat_expr_2)
+mat_expr_ranked <- apply(mat_expr_2, 2, rank)
+```
+
+Checking
+```{r}
+plot(mat_tfpred_ranked[, 1], mat_tfpred_2[, 1], xlab='ranked tfpred score', ylab='tfpred score', frame.plot=F, main='TFPred score vs ranked TFPred score for an arbitrary promoter region')
+```
+
+```{r}
+plot(mat_expr_norm[, 1], mat_tfpred_2[, 1], xlab='ranked tfpred score', ylab='tfpred score', frame.plot=F, main='TFPred score vs ranked TFPred score for an arbitrary promoter region')
+```
+
+```{r}
+plot(mat_expr_2[, 1], mat_tfpred_2[, 1], xlab='ranked tfpred score', ylab='tfpred score', frame.plot=F, main='TFPred score vs ranked TFPred score for an arbitrary promoter region')
+```
+
+Some helper functions
+
+```{r}
+# with help from Haky
+cor2pval <- function(cc,nn) {
+  zz = atanh(cc) * sqrt(nn-3)
+  pnorm(-abs(zz))*2
+}
+```
+
+
+### cis effect
+
+```{r}
+nterms <- nrow(mat_expr_norm)
+nterms
+```
+```{r}
+cis_cor <- apply(scale(mat_tfpred_2) * scale(mat_expr_norm), 2, sum)/nterms
+cis_pvalues <- cor2pval(cis_cor, nterms) #%>% p.adjust("fdr")
+cis_cor[1:5] ; cis_pvalues[1:5]
+```
+
+```{r}
+range(cis_cor) ; range(cis_pvalues)
+```
+
+```{r}
+which.max(cis_cor) ; which.min(cis_cor) ; which.min(cis_pvalues)
+```
+
+```{r}
+qq_generic(cis_pvalues, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p) ~ "(correlation test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("Correlation of TFPred scores with gene expression for \nGEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+```{r}
+hist(cis_pvalues, main='', xlab=expression(italic(p)*"-value"), cex.lab=1, col='brown')
+mtext(expression("Distribution of" ~ p*"-values for correlation test"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("TFPred scores with gene expression for \nGEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+hist(cis_cor, main='', xlab=expression(italic(rho)*', correlation coefficient'), cex.lab=1, col='brown')
+mtext(expression("Distribution of" ~ rho ~ "(correlation coefficient)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("TFPred scores with gene expression for \nGEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+plot(cis_cor, -log10(cis_pvalues), xlab=bquote(rho ~ "(correlation coefficient)"), ylab=bquote("-log10(p)"*"-value "), frame.plot=F, pch=19)
+mtext(expression(rho ~ "vs." ~ 'p-value'), side=3, line=1, adj=0.05, cex=1.2)
+mtext('cis-effects of TFPred scores on gene expression', side=3, line=0, adj=0.05, cex=1.2) 
+```
+
+
+```{r}
+var_vec <- apply(mat_tfpred_2, 2, var)
+names(var_vec) <- colnames(mat_tfpred_2)
+var_vec <- sort(log10(var_vec))
+pv_vec <- -log10(cis_pvalues[mm])
+var_vec <- as.data.frame(var_vec) %>% tibble::rownames_to_column('symbol')
+colnames(var_vec)[2] <- 'var'
+pv_vec <- as.data.frame(pv_vec) %>% tibble::rownames_to_column('symbol')
+colnames(pv_vec)[2] <- 'pvalue'
+var_pv_vec <- merge(pv_vec, var_vec, by='symbol') %>% dplyr::arrange(var)
+var_pv_vec[1:5, ]
+```
+
+```{r}
+with(var_pv_vec, plot(var, pvalue, frame.plot=F, xlab='log10(var)', ylab='-log10(p)', main='cis-effects'))
+```
+
+```{r}
+cis_cor_dt <- cis_cor |> as.data.frame() %>% tibble::rownames_to_column('symbol') %>% dplyr::rename(cor_coef=cis_cor)
+cis_pv_dt <- cis_pvalues |> as.data.frame() %>% tibble::rownames_to_column('symbol') %>% dplyr::rename(pvalue=cis_pvalues)
+cis_results <- merge(cis_cor_dt, cis_pv_dt, by='symbol')
+
+data.table::fwrite(cis_results, '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/cis_effects_AR_geuvadis.txt', quote=F, row.names=F)
+cis_results[1:5, ]
+```
+
+### Trans effects
+```{r}
+aa <- scale(mat_tfpred_2[, chr1]) |> t()
+bb <- scale(mat_expr_norm[, non_chr1])
+
+if(dim(aa)[2] == dim(bb)[1]){
+  trans_cor <- (aa %*% bb)/nterms
+  trans_pvalues <- cor2pval(trans_cor, nterms)
+} else {
+  print('Matrix dimensions are not compatible for multiplication')
+}
+```
+
+```{r}
+trans_cor[1:5, 1:5] ; range(trans_cor[!is.na(trans_cor)]) ; dim(trans_cor)
+trans_pvalues[1:5, 1:5] ; range(trans_pvalues[!is.na(trans_pvalues)]) ; dim(trans_pvalues)
+```
+
+```{r}
+
+
+out <- lapply(valid_chr, function(i){
+  chr <- paste0('chr', i)
+  if(chr %in% chr_order){
+    chr_use <- which(chr_order == chr)
+    non_chr <- which(chr_order != chr)
+    aa <- scale(mat_tfpred_2[, chr_use]) |> t()
+    bb <- scale(mat_expr_norm[, non_chr])
+  } 
+
+  if(identical(ncol(aa), nrow(bb))){
+    trans_cor <- (aa %*% bb)/nterms
+    trans_pvalues <- cor2pval(trans_cor, nterms)
+    trans_cor %>% as.data.frame() %>% tibble::rownames_to_column('id') %>% data.table::fwrite(glue('{analysis_dir}/{chr}_trans_effects_AR_geuvadis.cor.txt'), quote=F, row.names=F)
+    trans_pvalues %>% as.data.frame() %>% tibble::rownames_to_column('id') %>% data.table::fwrite(glue('{analysis_dir}/{chr}_trans_effects_AR_geuvadis.pvalues.txt'), quote=F, row.names=F)
+  }
+  
+})
+```
+
+```{r}
+pv_ex <- purrr::map(.x=valid_chr, .f=function(i){
+  chr_ = paste0('chr', i)
+  trans_pvalues <- data.table::fread(glue('{analysis_dir}/{chr_}_trans_effects_AR_geuvadis.pvalues.txt'))
+  return(trans_pvalues) 
+},.progress=TRUE)
+
+cor_ex <- purrr::map(.x=valid_chr, .f=function(i){
+  chr_ = paste0('chr', i)
+  trans_cor <- data.table::fread(glue('{analysis_dir}/{chr_}_trans_effects_AR_geuvadis.cor.txt')) 
+  return(trans_cor)
+},.progress=TRUE)
+```
+
+```{r}
+new_pv_ex <- dplyr::bind_rows(pv_ex)
+new_cor_ex <- dplyr::bind_rows(cor_ex)
+new_pv_ex <- dplyr::distinct(new_pv_ex, id, .keep_all=T) %>% 
+  tidyr::pivot_longer(!id) #%>% dplyr::left_join(var_vec, by=c('id' = 'symbol'))
+new_cor_ex <- dplyr::distinct(new_cor_ex, id, .keep_all=T) %>% 
+  tidyr::pivot_longer(!id)
+```
+
+```{r}
+new_ex <- dplyr::inner_join(new_pv_ex, new_cor_ex, by=c('id' = 'id', 'name' = 'name'), suffix=c('_pvalue', '_cor'))
+new_ex[1:5, ]
+```
+
+
+### Analysis
+
+```{r}
+ex <- purrr::map(.x=valid_chr, .f=function(i){
+  chr_ = paste0('chr', i)
+  trans_pvalues <- data.table::fread(glue('{analysis_dir}/{chr_}_trans_effects_AR_geuvadis.pvalues.txt')) %>% tibble::column_to_rownames('id') %>% as.matrix()
+
+  top10 <- sort(trans_pvalues)[1]
+  top10 <- lapply(top10, function(tp){
+    msig <- which(trans_pvalues == tp, arr.ind=T)
+    return(msig)
+  })
+  top10 <- do.call('rbind', top10)
+  trans_p <- rownames(trans_pvalues)[top10[, 'row']]
+  target_g <- colnames(trans_pvalues)[top10[, 'col']]
+
+  x <- mat_expr_norm[, target_g] %>% as.data.frame()
+  colnames(x) <- target_g 
+  x <- x %>% janitor::clean_names(case='none') %>% tibble::rownames_to_column('id') %>%
+    tidyr::pivot_longer(!id) %>% dplyr::rename(target_gene=name, expr=value)
+
+  y <- mat_tfpred_2[, trans_p] %>% as.data.frame() 
+  colnames(y) <- trans_p
+  y <- y %>% janitor::clean_names(case='none') %>% tibble::rownames_to_column('id') %>%
+    tidyr::pivot_longer(!id) %>% dplyr::rename(promoter_id=name, tfpred_score=value)
+
+  trans_dt <- merge(y, x, by='id')
+
+  plt_mapping <- cbind(trans_p, target_g)
+
+  return(list(x=trans_dt, mapping=plt_mapping))
+
+}, .progress=T)
+
+names(ex) <- valid_chr
+```
+
+#### Plot top significant genes' tfpred scores vs expression
+```{r}
+plt_list <- list()
+for(i in 1:length(ex)){
+  pt <- apply(ex[[i]]$mapping, 1, function(each_row){
+    ex[[i]]$x %>% 
+      dplyr::mutate(promoter_id=gsub('_', '-', promoter_id), target_gene=gsub('_', '-', target_gene)) %>%
+      dplyr::mutate(promoter_id = as.factor(promoter_id)) %>% filter(promoter_id==each_row[1] & target_gene == each_row[2]) %>%
+      ggplot(.) + aes(x=expr, y=tfpred_score, group=promoter_id) + 
+      geom_point(col='red') + theme_bw() +
+      theme(plot.title=element_text(size=8), axis.title=element_text(size=18)) + 
+      labs(x='', y='', title=glue('chr{names(ex)[i]}:\npromoter {each_row[1]} on {each_row[2]}')) +
+      geom_smooth(method='lm', formula= y~x)
+  })
+  plt_list[[i]] <- pt[[1]]
+}
+
+gridExtra::grid.arrange(grobs=plt_list, ncol=5, 
+  top = grid::textGrob('trans-effects of AR-binding\nMost significant trans-promoter', gp = gpar(fontsize = 13)), 
+  left = 'tfpred score',
+  bottom='expression')
+```
+
+## Global trans effects
+```{r}
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
+require(org.Hs.eg.db)
+tx <- transcripts(TxDb.Hsapiens.UCSC.hg38.knownGene, columns=c("tx_name", "gene_id"))
+mcols(tx)$gene_id <- as.character(mcols(tx)$gene_id)
+ENTREZID2SYMBOL <- select(org.Hs.eg.db, mcols(tx)$gene_id, c("ENTREZID", "SYMBOL"))
+# 'select()' returned many:1 mapping between keys and columns
+stopifnot(identical(ENTREZID2SYMBOL$ENTREZID, mcols(tx)$gene_id))
+mcols(tx)$SYMBOL <- ENTREZID2SYMBOL$SYMBOL
+```
+
+```{r}
+gene_coord_mapping <- tx %>% as.data.frame() %>% dplyr::select(chr=seqnames, start, end, strand, symbol=SYMBOL) %>% dplyr::distinct(symbol, .keep_all=T)
+gene_coord_mapping[1:5, ]
+```
+```{r}
+alpha <- 0.01
+
+# max(mydata$pvalue[mydata$padj < alpha])
+
+trans_ex <- purrr::map(.x=valid_chr, .f=function(i){
+  chr_ = paste0('chr', i)
+  trans_pvalues <- data.table::fread(glue('{analysis_dir}/{chr_}_trans_effects_AR_geuvadis.pvalues.txt')) %>% 
+    tidyr::pivot_longer(!id) %>% 
+    dplyr::rename(trans_promoter=id, target_gene=name, pvalue=value) %>% 
+    dplyr::left_join( (gene_coord_mapping %>% dplyr::select(symbol, chr, start)), by=c('trans_promoter' = 'symbol')) %>% 
+    dplyr::left_join( (gene_coord_mapping %>% dplyr::select(symbol, chr, start)), by=c('target_gene' = 'symbol')) %>%
+    dplyr::rename(chr_trans_promoter=chr.x, locus_trans_promoter=start.x, chr_target_gene=chr.y, locus_target_gene=start.y)
+
+  # slice away those that do not meet the bonferroni significance level
+  #signif <- 0.05/length(trans_pvalues$trans_promoters |> unique())
+  # arrange the data by pvalues
+  trans_pvalues <- trans_pvalues %>% 
+    dplyr::arrange(pvalue) %>% 
+    dplyr::mutate(bh = p.adjust(pvalue, 'fdr')) 
+
+  bh_cutoff <- which.max(trans_pvalues$pvalue[trans_pvalues$bh < alpha])
+
+  trans_pvalues <- trans_pvalues[1:bh_cutoff, ] %>% 
+    dplyr::mutate(chr_trans_promoter = gsub('chr', '', chr_trans_promoter), chr_target_gene = gsub('chr', '', chr_target_gene))
+  trans_pvalues
+}, .progress=TRUE)
+```
+
+```{r}
+# chr17_effects <- data.table::fread(glue('{analysis_dir}/chr17_trans_effects_AR_geuvadis.pvalues.txt')) %>% 
+#     tidyr::pivot_longer(!id)
+
+# chr17_effects[1:5, ]
+```
+
+```{r}
+trans_dt <- do.call('rbind', trans_ex) %>% 
+  dplyr::mutate(chr_trans_promoter = as.integer(chr_trans_promoter), chr_target_gene = as.integer(chr_target_gene)) %>% 
+  dplyr::filter(!is.na(chr_trans_promoter)) %>% dplyr::filter(!is.na(chr_target_gene))
+trans_dt[1:5, ] ; dim(trans_dt)
+```
+
+
+```{r}
+sorted <- dplyr::arrange(trans_dt, chr_trans_promoter, locus_trans_promoter, chr_target_gene, locus_target_gene)
+resobssort <- dplyr::arrange(trans_dt, chr_target_gene, locus_target_gene, chr_trans_promoter, locus_trans_promoter)
+
+d <- as.data.frame(sorted)
+predticks <- NULL
+predlastbase <- 0
+d$predpos <- NA
+
+for(i in unique(d$chr_trans_promoter)) {
+  if(i == 1) {
+  	d[d$chr_trans_promoter == i, ]$predpos <- d[d$chr_trans_promoter == i, ]$locus_trans_promoter
+  } else {
+  	predlastbase <- predlastbase + tail(subset(d, chr_trans_promoter == i-1)$locus_trans_promoter, 1)
+  	d[d$chr_trans_promoter==i, ]$predpos <- d[d$chr_trans_promoter==i, ]$locus_trans_promoter + predlastbase
+  }
+  #  predticks=c(predticks, d[d$predChr==i, ]$predpos[floor(length(d[d$predChr==i, ]$predpos)/2)+1])
+  predticks = c(predticks, predlastbase)
+}
+
+predticks = c(predticks, max(d$predpos))
+#get chromosomal coordinates
+e <- resobssort %>% as.data.frame()
+obsticks = NULL
+obslastbase=0
+e$obspos=NA
+for (i in unique(e$chr_target_gene)) {
+  if (i==1) {
+  	e[e$chr_target_gene==i, ]$obspos=e[e$chr_target_gene==i, ]$locus_target_gene
+  } else {
+  	obslastbase=obslastbase+tail(subset(e,chr_target_gene==i-1)$locus_target_gene, 1)
+  	e[e$chr_target_gene==i, ]$obspos=e[e$chr_target_gene==i, ]$locus_target_gene + obslastbase
+  }
+  obsticks = c(obsticks,obslastbase)
+}
+obsticks = c(obsticks,max(e$obspos))
+esubset <- dplyr::select(e, target_gene, trans_promoter, obspos)
+d <- left_join(d, esubset, by=c("target_gene" = 'target_gene', "trans_promoter" = 'trans_promoter')) %>% 
+  dplyr::distinct()
+
+#get position for chr labels
+predchrticks <- c()
+for(i in 2:length(predticks)){
+  midpt <- mean(c(predticks[i-1],predticks[i]))
+  predchrticks <- c(predchrticks,midpt)
+}
+obschrticks <- c()
+for(i in 2:length(obsticks)){
+  midpt <- mean(c(obsticks[i-1],obsticks[i]))
+  obschrticks <- c(obschrticks,midpt)
+}
+
+repsorted <- mutate(d, signif=ifelse(bh in sort(bh)[1:3], "red", "grey"), neglog=-log10(bh))
+
+```
+
+
+
+```{r}
+p <- ggplot(repsorted, aes(x=predpos, y = obspos, size=neglog, color=signif)) + 
+  geom_point(shape=21)  +  
+  scale_size_continuous(guide='none') +
+  scale_colour_manual(values=c("dark gray", "red"), na.value="dark gray", guide='none') +
+  geom_hline(yintercept = obsticks, size=0.2) + 
+  geom_vline(xintercept = predticks, size=0.2) +
+  xlab('trans-acting promoter') + 
+  ylab('target gene') + 
+  coord_cartesian(xlim=c(predticks[1], predticks[23]), ylim=c(obsticks[1], obsticks[24]), expand=FALSE) +
+  theme_classic(10) + 
+  theme(axis.text=element_text(size=8),
+        axis.title=element_text(size=18)) +
+  scale_x_continuous(breaks = predchrticks, labels = c(1:14,"",16,"",18,"",20,"",22)) +
+  scale_y_continuous(breaks = obschrticks, labels = c(1:16,"",18,"",20,"",22)) 
+```
+
+```{r}
+annt_tg <- repsorted %>% dplyr::filter(target_gene %in% (
+  repsorted %>% group_by(target_gene) %>% summarise(cnt = n()) %>% arrange(desc(cnt)) %>% dplyr::slice_head(n=3) %>% dplyr::pull(target_gene)
+)) %>% dplyr::select(target_gene, obspos, predpos) %>% dplyr::distinct() %>% group_by(target_gene) %>% filter(predpos == min(predpos))
+
+annt_tp <- repsorted %>% dplyr::filter(trans_promoter %in% (
+  repsorted %>% group_by(trans_promoter) %>% summarise(cnt = n()) %>% arrange(desc(cnt)) %>% dplyr::slice_head(n=3) %>% dplyr::pull(trans_promoter)
+)) %>% dplyr::select(trans_promoter, obspos, predpos) %>% dplyr::distinct() %>% group_by(trans_promoter) %>% filter(obspos == min(obspos))
+```
+
+```{r}
+p + 
+  annotate("text", x = annt_tg$predpos, y = annt_tg$obspos, label = annt_tg$target_gene, size=3, color='red') + coord_cartesian(clip = "off") + 
+  annotate("text", x = annt_tp$predpos, y = annt_tp$obspos, label = annt_tp$trans_promoter, size=3, color='blue') + coord_cartesian(clip = "off")
+```
+
+```{r}
+repsorted %>% dplyr::filter(target_gene == 'GAREM1') %>% group_by(trans_promoter) %>% summarise(cnt = n()) %>% arrange(desc(cnt)) 
+```
+
+```{r}
+qq_ex <- purrr::map(.x=valid_chr, .f=function(i){
+  chr_ = paste0('chr', i)
+  trans_pvalues <- data.table::fread(glue('{analysis_dir}/{chr_}_trans_effects_AR_geuvadis.pvalues.txt')) %>% 
+    tidyr::pivot_longer(!id) %>% 
+    dplyr::rename(trans_promoter=id, target_gene=name, pvalue=value) %>%
+    dplyr::filter(pvalue < 0.001)
+  trans_pvalues
+}, .progress=TRUE)
+
+qq_dt <- do.call('rbind', qq_ex)
+qq_dt[1:5, ]
+```
+
+```{r}
+png('/lus/grand/projects/TFXcan/imlab/users/temi/qqplot_temi.png')
+qqunif_maxp(qq_dt$pvalue, maxp=0.001)
+dev.off()
+```
+
+```{r}
+sum(is.na(trans_dt$chr_target_gene))
+```
+
+
+```{r}
+neg_cis <- -log10(cis_pvalues)
+neg_trans <- -log10(trans_pvalues)
+qqplot(neg_cis, neg_trans, frame.plot=F, xlab='-log10(p) cis-effect', ylab='-log10(p) trans-effects')
+abline(0, 1, col = "red", lwd = 2, lty = 2)
+mtext(glue("p-values of trans-effect of AR binding at the promoters of \nchr1 genes on non-chr1 genes\nvs. cis-effects of chr1 promoter-gene pairs"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+### subsequent analysis
+```{r}
+cis_pvalues[!is.na(cis_pvalues)][which.min(cis_pvalues[!is.na(cis_pvalues)])]
+```
+
+```{r}
+trans_pvalues[, 'MAP3K2-DT'][!is.na(trans_pvalues[, 'MAP3K2-DT'])][which.min(trans_pvalues[, 'MAP3K2-DT'][!is.na(trans_pvalues[, 'MAP3K2-DT'])])]
+```
+
+```{r}
+trans_pvalues[which(trans_pvalues < 1e-50)]
+```
+
+```{r}
+target_genes <- apply(trans_pvalues, 2, min) %>% sort() %>% head() # gene expression
+trans_acting <- apply(trans_pvalues, 1, min) %>% sort() %>% head() # tfpred scores
+
+target_genes ; trans_acting
+```
+
+```{r}
+which(trans_pvalues == min(trans_pvalues), arr.ind=T)
+```
+
+```{r}
+query_promoter <- rownames(which(trans_pvalues == min(trans_pvalues), arr.ind=T))
+query_promoter
+```
+
+```{r}
+chr_arrangement <- paste0('chr', valid_chr)
+chr_arrangement
+```
+
+```{r}
+mtX <- trans_pvalues[query_promoter, ] %>% as.data.frame() %>% tibble::rownames_to_column('target_gene') 
+#mtX$coords <- 1:nrow(mtX)
+colnames(mtX) <- c('target_gene', 'pvalue')
+mtX <- merge(mtX, gene_coord_mapping, by.x='target_gene', by.y='symbol')
+mtX <- mtX %>% dplyr::arrange(factor(chr, levels=chr_arrangement), start)
+xdt <- mtX %>% dplyr::select(id=target_gene, pvalue, chr=chr, locus=start)
+xdt[1:5, ]
+```
+
+```{r}
+library(ggrepel)
+# simulate_input_dt() |> head()
+tfwas_list <- prepare_manhattan_dt(xdt)
+plot_manhattan_dt(tfwas_list, plot_id=query_promoter) + title(glue('trans-effect of AR binding at promoter of {query_promoter} on gene expression'))
+```
+
+
+```{r}
+male_trans_promoters <- rownames(males_trans_cor)[top9_males[, 'row']]
+male_target_genes <- colnames(males_trans_cor)[top9_males[, 'col']]
+
+female_trans_promoters <- rownames(females_trans_cor)[top9_females[, 'row']]
+female_target_genes <- colnames(females_trans_cor)[top9_females[, 'col']]
+```
+```{r}
+
+```
+
+```{r}
+target_genes ; trans_acting
+```
+
+
+```{r}
+x <- mat_expr_2['GSTM2P1', ] |> as.vector() |> unlist()
+y <- mat_tfpred_2['GSTM1', ] |> as.vector() |> unlist()
+
+plot(x, y, xlab='expression (GSTM2P1)', ylab='TFPred score (GSTM1)', frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(expression("TFPred score at the promoter of GSTM1 vs. \nexpression of GSTM2P1"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+x <- mat_expr_ranked[, 'GSTM2P1'] |> as.vector() |> unlist()
+y <- mat_tfpred_ranked[, 'GSTM1'] |> as.vector() |> unlist()
+
+plot(x, y, xlab='expression (GSTM2P1)', ylab='TFPred score (GSTM1)', frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(expression("TFPred score at the promoter of GSTM1 vs. \nexpression of GSTM2P1 (ranked)"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+x <- mat_expr['FAM135B', ] |> as.vector() |> unlist()
+y <- mat_tfpred['INPP5B', ] |> as.vector() |> unlist()
+
+plot(x, y, xlab='expression (FAM135B)', ylab='TFPred score (INPP5B)', frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(expression("TFPred score at promoter of INPP5B vs. \nexpression of FAM135B"), side=3, line=1, adj=0.05, cex=1.2) 
+```
+
+```{r}
+x <- mat_expr_ranked[, 'FAM135B'] |> as.vector() |> unlist()
+y <- mat_tfpred_ranked[, 'INPP5B'] |> as.vector() |> unlist()
+
+plot(x, y, xlab='expression (FAM135B)', ylab='TFPred score (INPP5B)', frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(expression("TFPred score at promoter of INPP5B vs. \nexpression of FAM135B (ranked)"), side=3, line=1, adj=0.05, cex=1.2) 
+```
+
+
+### Male vs Female analysis
+
+```{r}
+cis_results <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/cis_effects_AR_geuvadis.txt', quote=F)
+cis_results[1:5, ]
+
+cis_pvalues <- cis_results$pvalue
+names(cis_pvalues) <- cis_results$
+```
+
+```{r}
+meta_strat <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/files/igsr_samples.tsv')
+meta_strat[1:5, 1:5] ; dim(meta_strat)
+```
+
+What distribution of males to females do I have?
+```{r}
+meta_strat %>% dplyr::filter(`Sample name` %in% geuvadis_individuals) %>% dplyr::pull(Sex) %>% table()
+```
+
+```{r}
+geuvadis_sex <- meta_strat %>% dplyr::filter(`Sample name` %in% geuvadis_individuals) %>% dplyr::select(id=`Sample name`, sex=Sex)
+geuvadis_sex
+```
+
+What genes have the most significant cis effect?
+```{r}
+which.max(cis_results$cor_coef)
+m_sig_ce <- which.min(cis_pvalues) |> names()
+m_sig_ce <- cis_results[which.max(cis_results$cor_coef), ]$symbol
+```
+
+```{r}
+encoded_sex <- ifelse(geuvadis_sex$sex == 'male', 0, 1)
+names(encoded_sex) <- geuvadis_sex$id
+
+sex_expr_test <- purrr::map(1:ncol(mat_expr_2), function(i){
+  aa <- cbind(as.matrix(encoded_sex), as.matrix(mat_expr_2[, i][names(encoded_sex)]))
+  aa_test <- t.test(aa[, 2] ~ aa[, 1])
+  return(c(statistic = aa_test$statistic, pvalue=aa_test$p.value))
+}, .progress=TRUE)
+names(sex_expr_test) <- colnames(mat_expr_2)
+
+sex_tfpred_test <- purrr::map(1:ncol(mat_tfpred_2), function(i){
+  aa <- cbind(as.matrix(encoded_sex), as.matrix(mat_tfpred_2[, i][names(encoded_sex)]))
+  aa_test <- t.test(aa[, 2] ~ aa[, 1])
+  return(c(statistic = aa_test$statistic, pvalue=aa_test$p.value))
+}, .progress=TRUE)
+names(sex_tfpred_test) <- colnames(mat_tfpred_2)
+```
+
+```{r}
+ss <- sex_expr_test %>% do.call('rbind', .) |> as.data.frame()
+gg <- sex_tfpred_test %>% do.call('rbind', .) |> as.data.frame()
+range(ss[, 2]) ; range(gg[, 2])
+```
+
+```{r}
+gg %>% dplyr::arrange(pvalue) %>% head()
+```
+
+```{r}
+ss[which(p.adjust(ss$pvalue, 'fdr') < 0.01), ]
+```
+
+```{r}
+gg[which(p.adjust(gg$pvalue, 'fdr') < 0.001), ]
+```
+
+```{r}
+m_sig_ce <- 'TMLHE'
+mat_tfpred_2[, m_sig_ce] |> as.data.frame() |> tibble::rownames_to_column('id') %>%
+ dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::rename(!!quo_name(m_sig_ce) := 2) %>% dplyr::mutate(sex = as.factor(sex)) %>%
+  ggplot(.) + aes(x=sex, y=.data[[m_sig_ce]], fill=sex) + 
+  geom_boxplot() + 
+  geom_jitter(col='red') + theme_bw() +
+  labs(title='Boxplot of most significant TFPred cis effect', y=glue('Expression of {m_sig_ce}')) +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+```
+
+```{r}
+qqunif(gg[, 'pvalue'] |> unlist(), frame.plot=F)
+```
+
+```{r}
+x <- mat_expr_2[, m_sig_ce] |> as.vector() |> unlist()
+y <- mat_tfpred_2[, m_sig_ce] |> as.vector() |> unlist()
+
+plot(x, y, xlab=glue("expression - {m_sig_ce}"), ylab=glue('TFPred score - {m_sig_ce}'), frame.plot=F)
+abline(lm(y ~ x), col='red', ifelse)
+mtext(glue("TFPred score at the promoter of {m_sig_ce} vs. \nexpression of {m_sig_ce}"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+mat_expr_2[, m_sig_ce] |> as.data.frame() |> tibble::rownames_to_column('id') %>%
+ dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::rename(!!quo_name(m_sig_ce) := 2) %>% dplyr::mutate(sex = as.factor(sex)) %>%
+  ggplot(.) + aes(x=sex, y=.data[[m_sig_ce]], fill=sex) + 
+  geom_boxplot() + 
+  geom_jitter(col='red') + theme_bw() +
+  labs(title='Boxplot of most significant TFPred cis effect', y=glue('Expression of {m_sig_ce}')) +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+```
+
+```{r}
+mat_tfpred[m_sig_ce, ] |> t() |> as.data.frame() |> tibble::rownames_to_column('id') %>% dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::mutate(sex = as.factor(sex)) %>%
+  ggplot(.) + aes(x=sex, y=.data[[m_sig_ce]], fill=sex) + 
+  geom_boxplot() + 
+  geom_jitter(col='red') + theme_bw() +
+  labs(title='Boxplot of most significant TFPred cis effect', y=glue('TFPred score of AR binding to {m_sig_ce}')) +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+```
+
+```{r}
+mat_expr[m_sig_ce, ] |> t() |> as.data.frame() |> tibble::rownames_to_column('id') %>% dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::group_by(sex) %>% dplyr::summarise(mean(.data[[m_sig_ce]]))
+```
+
+```{r}
+mat_tfpred[m_sig_ce, ] |> t() |> as.data.frame() |> tibble::rownames_to_column('id') %>% dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::group_by(sex) %>% dplyr::summarise(mean(.data[[m_sig_ce]]))
+```
+
+
+#### cis and trans effects
+```{r}
+males <- subset(geuvadis_sex, sex=='male') %>% dplyr::pull(id)
+females <- subset(geuvadis_sex, sex=='female') %>% dplyr::pull(id)
+```
+
+```{r}
+males_cis_cor <- apply(scale(mat_tfpred_ranked[males, ]) * scale(mat_expr_ranked[males, ]), 2, sum)/length(males)
+
+females_cis_cor <- apply(scale(mat_tfpred_ranked[females, ]) * scale(mat_expr_ranked[females, ]), 2, sum)/length(females)
+
+males_cis_pvalues <- cor2pval(males_cis_cor, length(males))
+females_cis_pvalues <- cor2pval(females_cis_cor, length(females))
+```
+
+
+```{r}
+## to add other qqplots on top of current plot
+qqpoints <- function(p, BH=T,mlog10_p_thres=30,...){
+  ## thresholded by default at 1e-30
+  p=na.omit(p)
+  nn = length(p)
+  xx =  -log10((1:nn)/(nn+1))
+  
+  p_thres = 10^{-mlog10_p_thres}
+  if( sum( p < p_thres) )
+  {
+    warning(paste("thresholding p to ",p_thres) )
+    p = pmax(p, p_thres)
+  }
+  nn = length(p)
+  xx =  -log10((1:nn)/(nn+1))
+  points( xx,  -sort(log10(p)), ... )
+}
+```
+```{r}
+qq_generic(males_cis_pvalues, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19, col='blue'))
+qqpoints(females_cis_pvalues, col='red', pch=19)
+mtext(expression("qqplot of" ~ italic(p) * "-values" ~ "(correlation test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("Correlation of TFPred scores with gene expression for \nmale vs. female GEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+legend(0.5, 20, legend=c("male", "female"),
+       col=c("blue", "red"), cex=0.8, pch=19)
+```
+
+
+```{r}
+qq_generic(females_cis_pvalues, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p) * "-values" ~ "(correlation test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("Correlation of TFPred scores with gene expression for \nfemale GEUVADIS individuals"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+qqplot(males_cis_pvalues, females_cis_pvalues, frame.plot=F, xlab='p-values: male', ylab='p-values: female')
+abline(a=0, b=1, col='red')
+mtext(expression("qqplot of" ~ italic(p) * "-values"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("cis-effect of AR binding at promoter of genes on expression in males vs. females"), side=3, line=1, cex=1.2, adj=0.05)
+```
+
+```{r}
+a_males <- males_cis_pvalues %>% as.data.frame() %>% tibble::rownames_to_column('symbol')
+a_females <- females_cis_pvalues %>% as.data.frame() %>% tibble::rownames_to_column('symbol')
+
+a_sex <- merge(a_males, a_females, by='symbol')
+colnames(a_sex) <- c('symbol', 'male', 'female')
+a_sex[1:5, ]
+```
+
+```{r}
+a_males <- males_cis_cor %>% as.data.frame() %>% tibble::rownames_to_column('symbol')
+a_females <- females_cis_cor %>% as.data.frame() %>% tibble::rownames_to_column('symbol')
+
+a_sex <- merge(a_males, a_females, by='symbol')
+colnames(a_sex) <- c('symbol', 'male', 'female')
+a_sex[1:5, ]
+```
+
+```{r}
+# Make the plot
+bin <- with(a_sex, hexbin(male, female, xbins=40))
+my_colors <- colorRampPalette(rev(brewer.pal(11,'Spectral')))
+pp <- hexbin::plot(bin, main="" , colramp=my_colors , legend=F )
+hexbin::hexVP.abline(hvp=pp$plot, a = 0, b = 1, col='red')
+mtext(expression(italic(rho) ~ "(correlation coefficient) of AR binding cis-effect on \ngene expression in males vs. females"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+qqplot(-log10(males_cis_pvalues), -log10(females_cis_pvalues), frame.plot=F, xlab='-log10(p): males', ylab='-log10(p): females')
+abline(a=0, b=1, col='red')
+mtext(expression("qqplot of" ~ italic(p) * "-values"), side=3, line=2, adj=0.05, cex=1.2)
+mtext("AR binding cis-effect on gene expression in males vs. females", side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+plot(males_cis_cor, females_cis_cor, frame.plot=F, xlab='correlation: males', ylab='correlation: females')
+abline(a=0, b=1, col='red')
+mtext(expression(italic(rho) ~ "(correlation coefficient)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext("AR binding cis-effect on gene expression in males vs. females", side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+hist(males_cis_cor)
+hist(females_cis_cor)
+```
+
+### Trans effects by sex
+
+```{r}
+aa_males <- scale(mat_tfpred_ranked[males, chr1]) |> t()
+bb_males <- scale(mat_expr_ranked[males, non_chr1])
+
+dim(aa_males) ; dim(bb_males)
+
+males_trans_cor <- (aa_males %*% bb_males)/length(males)
+males_trans_pvalues <- cor2pval(males_trans_cor, length(males))
+```
+
+```{r}
+aa_females <- scale(mat_tfpred_ranked[females, chr1]) |> t()
+bb_females <- scale(mat_expr_ranked[females, non_chr1])
+
+dim(aa_females) ; dim(bb_females)
+
+females_trans_cor <- (aa_females %*% bb_females)/length(females)
+females_trans_pvalues <- cor2pval(females_trans_cor, length(females))
+```
+
+```{r}
+males_trans_cor[1:5, 1:5] ; range(males_trans_cor[!is.na(males_trans_cor)]) ; dim(males_trans_cor)
+females_trans_cor[1:5, 1:5] ; range(females_trans_cor[!is.na(females_trans_cor)]) ; dim(females_trans_cor)
+```
+
+Which chr1 genes have the most significant effect on other chromosomes in males and females?
+
+```{r}
+top9_males <- sort(males_trans_pvalues)[1:9]
+top9_males <- lapply(top9_males, function(tp){
+  msig_males <- which(males_trans_pvalues == tp, arr.ind=T)
+  return(msig_males)
+})
+top9_males <- do.call('rbind', top9_males)
+
+top9_females <- sort(females_trans_pvalues)[1:9]
+top9_females <- lapply(top9_females, function(tp){
+  msig_females <- which(females_trans_pvalues == tp, arr.ind=T)
+  return(msig_females)
+})
+top9_females <- do.call('rbind', top9_females)
+```
+
+```{r}
+male_trans_promoters <- rownames(males_trans_cor)[top9_males[, 'row']]
+male_target_genes <- colnames(males_trans_cor)[top9_males[, 'col']]
+
+female_trans_promoters <- rownames(females_trans_cor)[top9_females[, 'row']]
+female_target_genes <- colnames(females_trans_cor)[top9_females[, 'col']]
+```
+
+promoter-target
+```{r}
+
+```
+
+```{r}
+x_males <- mat_expr_2[, male_target_genes] %>% as.data.frame() %>% tibble::rownames_to_column('id') %>% tidyr::pivot_longer(!c(id)) %>% dplyr::mutate(type='target') %>% View()
+#y_males <- mat_tfpred_2[, male_trans_promoters]
+```
+
+```{r}
+trans_promoter <- rownames(males_trans_cor)[msig_males[, 'row']]
+target_gene <- colnames(males_trans_cor)[msig_males[, 'col']]
+
+trans_promoter ; target_gene
+
+x <- mat_expr_2[, target_gene] |> as.vector() |> unlist()
+y <- mat_tfpred_2[, trans_promoter] |> as.vector() |> unlist()
+
+plot(x, y, xlab=glue('expression of {target_gene}'), ylab=glue('TFPred score at promoter of {trans_promoter}'), frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(glue("TFPred score at the promoter of {trans_promoter} vs. \nexpression of {target_gene} in males"), side=3, line=1, adj=0.05, cex=1.2)
+
+```
+
+```{r}
+msig_males <- which(males_trans_pvalues == min(males_trans_pvalues), arr.ind=T)
+msig_females <- which(females_trans_pvalues == min(females_trans_pvalues), arr.ind=T)
+
+msig_males ; msig_females
+```
+
+Plot the TFPred scores vs. gene expression in males and females
+```{r}
+mat_expr[m_sig_ce, ] |> t() |> as.data.frame() |> tibble::rownames_to_column('id') %>% dplyr::inner_join(geuvadis_sex, by=c('id' ='id')) %>% dplyr::mutate(sex = as.factor(sex)) %>%
+  ggplot(.) + aes(x=sex, y=.data[[m_sig_ce]], fill=sex) + 
+  geom_boxplot() + 
+  geom_jitter(col='red') + theme_bw() +
+  labs(title='Boxplot of most significant TFPred cis effect', y=glue('Expression of {m_sig_ce}')) +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+```
+
+```{r}
+trans_promoter <- rownames(males_trans_cor)[msig_males[, 'row']]
+target_gene <- colnames(males_trans_cor)[msig_males[, 'col']]
+
+trans_promoter ; target_gene
+
+x <- mat_expr_2[, target_gene] |> as.vector() |> unlist()
+y <- mat_tfpred_2[, trans_promoter] |> as.vector() |> unlist()
+
+plot(x, y, xlab=glue('expression of {target_gene}'), ylab=glue('TFPred score at promoter of {trans_promoter}'), frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(glue("TFPred score at the promoter of {trans_promoter} vs. \nexpression of {target_gene} in males"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+trans_promoter <- rownames(females_trans_cor)[msig_females[, 'row']]
+target_gene <- colnames(females_trans_cor)[msig_females[, 'col']]
+
+trans_promoter ; target_gene
+
+x <- mat_expr_2[, target_gene] |> as.vector() |> unlist()
+y <- mat_tfpred_2[, trans_promoter] |> as.vector() |> unlist()
+
+plot(x, y, xlab=glue('expression of {target_gene}'), ylab=glue('TFPred score at promoter of {trans_promoter}'), frame.plot=F)
+abline(lm(y ~ x), col='red')
+mtext(glue("TFPred score at the promoter of {trans_promoter} vs. \nexpression of {target_gene} in females"), side=3, line=1, adj=0.05, cex=1.2)
+```
+
+```{r}
+qqplot(males_trans_pvalues[1:5, ], females_trans_pvalues[1:5, ])
+```
+
+
+### PrediXcan trans-gene analysis
+
+```{r}
+
+```
+
+```{r}
+predixcan_trans_associations <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/files/DatasetS2_trans-MultiXcan_multi-tissue_FHS_results.txt.gz', nrows=100)
+
+predixcan_trans_associations[1:5, 1:5]
+```

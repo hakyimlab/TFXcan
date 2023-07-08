@@ -8,8 +8,8 @@ library(dplyr)
 ```
 
 ```{r}
-data_dir <- '/lus/grand/projects/covid-ct/imlab/data/baca_cwas/cwas_weights'
-project_dir <- '/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas'
+data_dir <- '/lus/grand/projects/TFXcan/imlab/data/baca_cwas/cwas_weights'
+project_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas'
 output_dir <- glue('{project_dir}/data')
 TF <- 'AR'
 ```
@@ -99,10 +99,10 @@ write.table(coordinates_bed_files, glue("{project_dir}/bed_files/baca_cwas_loci_
 
 ```{r}
 # lift over these files
-liftover_sh <-  "/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
-liftover_cmd <- '/lus/grand/projects/covid-ct/imlab/users/temi/software/liftOver'
+liftover_sh <-  "/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
+liftover_cmd <- '/lus/grand/projects/TFXcan/imlab/users/temi/software/liftOver'
 input_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg19.bed")
-chain_file <- '/lus/grand/projects/covid-ct/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+chain_file <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
 output_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg38.bed")
 unmapped_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_unmapped.bed")
 ```
@@ -175,10 +175,10 @@ write.table(tt, file=glue('{project_dir}/output/{TF}_baca_cwas_extra_hg38_2023-0
 
 ```{r}
 # lift over these files
-liftover_sh <-  "/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
-liftover_cmd <- '/lus/grand/projects/covid-ct/imlab/users/temi/software/liftOver'
+liftover_sh <-  "/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
+liftover_cmd <- '/lus/grand/projects/TFXcan/imlab/users/temi/software/liftOver'
 input_bed <- glue("{project_dir}/snps/hg19_snps.bed")
-chain_file <- '/lus/grand/projects/covid-ct/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+chain_file <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
 output_bed <- glue("{project_dir}/snps/hg38_snps.bed")
 unmapped_bed <- glue("{project_dir}/bed_files/hg19_snps_unmapped.bed")
 
@@ -321,7 +321,7 @@ dbDisconnect(lasso_db)
 
 extra column : dunno what this is
 ```{r}
-predixcan_dir='/lus/grand/projects/covid-ct/imlab/users/temi/projects/prediXcan/tutorial'
+predixcan_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/prediXcan/tutorial'
 predict_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{predixcan_dir}/data/models/gtex_v8_en/en_Whole_Blood.db'))
 #dbplyr::src_dbi(predict_db)
 extra_dt <- tbl(predict_db, 'extra') %>% as.data.frame()

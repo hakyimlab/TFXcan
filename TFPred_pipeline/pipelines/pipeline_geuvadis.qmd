@@ -21,7 +21,7 @@ library(xlsx)
 library(reticulate)
 ```
 ```{r}
-imlab_dir <- '/lus/grand/projects/covid-ct/imlab'
+imlab_dir <- '/lus/grand/projects/TFXcan/imlab'
 data_dir <- glue('{imlab_dir}/data/freedman_data/peaks_liftover')
 project_dir <- glue('{imlab_dir}/users/temi/projects/TFXcan/TFPred_pipeline')
 homer_dir <- glue('/lus/grand/projects/covid-ct/imlab/users/temi/software/homer')
@@ -437,7 +437,7 @@ tfpred_ca[1:5, 1:5] ; cwas_ca[1:5, 1:5]
 ```
 
 ```{r}
-source(glue('{project_dir}/pipelines/utilities.R'))
+source(glue('{project_dir}/TFPred_pipeline/pipelines/utilities.R'))
 ```
 
 #### Correlation
@@ -978,6 +978,10 @@ snps_dt
 write.table(snps_dt, glue('{project_dir}/analysis/test_variants.txt'), sep='\t')
 ```
 
+```{r}
+data.table::fread(glue('{project_dir}/analysis/test_variants.txt'), row.names=F) %>% tibble::column_to_rownames('V1')
+```
+
 Nominating snps
 
 ```{r}
@@ -1104,7 +1108,7 @@ snp_details[1:5, ]
 
 ```{r}
 individuals <- individuals |> unlist() |> unname()
-unique_snps <- snp_details %>% dplyr::select(.data[[individuals[1]]]) %>% unlist() |> unname() |> unique()
+unique_snps <- snp_details %>% dplyr::select(all_of(individuals[1])) %>% unlist() |> unname() |> unique()
 ```
 
 ```{r}
@@ -1128,7 +1132,7 @@ allele_dosage_matrix[1:5, ]
 
 ```{r}
 picked_loci <- 'chr4_96092999_96093499'
-picked_loci_i <- which(cwas_AR_top6_loci == picked_loci)
+picked_loci_i <- which(rownames(tfpred_ca) == picked_loci)
 x <- tfpred_ca[picked_loci, ] |> unlist() |> as.data.frame() %>% tibble::rownames_to_column('sample')
 colnames(x)[2] <- 'TFPred_score'
 x[1:5,]
@@ -1141,7 +1145,31 @@ xdt[1:5, ]
 ```
 
 ```{r}
-lm(TFPred_score ~ ., data=xdt) |> summary()
+tst <- lm(TFPred_score ~ ., data=xdt) |> summary()
+```
+
+```{r}
+tst_dt <- coef(tst) %>% as.data.frame() %>% tibble::rownames_to_column('snp')
+tst_dt <- tst_dt[-1, ] %>% dplyr::select(all_of(c('snp', 'Estimate', 'Pr(>|t|)'))) %>% dplyr::rename(pvalue=3, beta=2)
+tst_dt
+```
+
+```{r}
+plot(-log10(tst_dt$pvalue), frame.plot=F, pch=19, xaxt='n', ylab='-log10(p)', xlab='snp')
+axis(1, at = 1:nrow(tst_dt), labels = F)
+text(x = 1:nrow(tst_dt), y = par("usr")[3] - 0.45,
+     labels = tst_dt$snp,xpd = NA,
+     ## Rotate the labels by 35 degrees.
+     srt = 35,
+     cex = 0.8, adj = 1.2)
+```
+
+```{r}
+with(tst_dt, plot(-log10(pvalue), beta, pch=19, frame.plot=F, xlim=c(0, 60)))
+# pos_vector <- rep(4, nrow(tst_dt))
+# pos_vector[-log10(tst_dt$pvalue) < 10] <- 3
+with(tst_dt, text(-log10(pvalue) + 4, beta, labels=snp))
+mtext(glue('p-values and effects of nearby known SNPs on TFPred score of {picked_loci}'), side=3, line=2, adj=0.05, cex=1.2)
 ```
 
 ```{r}
@@ -1153,18 +1181,57 @@ for(rs in colnames(allele_dosage_matrix)[-1]){
         geom_boxplot() + 
         geom_jitter() + 
         theme_minimal() + 
-        labs(x=rs, y='TFPred score', title='chr4:96093166-96093166')
+        labs(x=rs, y='TFPred score', title=picked_loci)
     )
 }
 
 ```
 
 ```{r}
-xdt %>% ggplot(., aes(x=haps, y=TFPred_score, fill=haps)) + geom_boxplot() + geom_jitter() + theme_minimal() + labs(x='rs7686416', y='TFPred score', title='chr4:96093166-96093166')
+xdt %>% ggplot(., aes(x=haps, y=TFPred_score, fill=haps)) + geom_boxplot() + geom_jitter() + theme_minimal() + labs(x='rs10516988', y='TFPred score', title='chr4:96093166-96093166')
 ```
 
 ```{r}
 xdt %>% dplyr::group_by(haps) %>% summarize(mean_TFPred_score = mean(TFPred_score))
+```
+
+```{r}
+snp_effects_dt <- lapply(colnames(xdt)[-1], function(rs){
+    ty <- xdt[, c('TFPred_score', rs)]
+    ty <- lm(ty[, 1] ~ ty[, 2]) |> summary() |> coef()
+    return(ty[2, c(1,4)])
+}) %>% do.call('rbind', .) %>% cbind(colnames(xdt)[-1], .) %>% as.data.frame() %>% dplyr::rename(snp=1, beta=2, pvalue=3) %>% dplyr::mutate(beta=as.numeric(beta), pvalue=as.numeric(pvalue))
+
+snp_effects_dt
+```
+
+```{r}
+test_variants <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/analysis/test_variants.txt') %>% dplyr::select(snp_id, snp_dist, query)
+test_variants
+```
+
+```{r}
+snp_effects_dt <- merge(snp_effects_dt, test_variants, by.x='snp', by.y='snp_id')
+snp_effects_dt <- snp_effects_dt[order(snp_effects_dt$snp_dist), ] %>% dplyr::mutate(pvalue_adj = p.adjust(pvalue,method='fdr'))
+snp_effects_dt 
+```
+
+```{r}
+with(snp_effects_dt, base::plot(snp_dist, -log10(pvalue_adj), pch=19, frame.plot=F, ylim=c(0, 60), xlab='SNP position from center of loci', ylab='-log10(p)'))
+abline(h=-log10(0.001), col='red')
+mtext(glue('p-values and effects of nearby known SNPs \non TFPred score of {picked_loci}'), side=3, line=1, adj=0, cex=1.2)
+legend('topright', col='red', legend='fdr, p < 0.001', lty=1)
+```
+
+```{r}
+msigsnp <- snp_effects_dt[which.min(snp_effects_dt$pvalue_adj)]
+
+xdt %>% 
+        ggplot(., aes(x=factor(.data[[msigsnp]]), y=TFPred_score, fill=.data[[msigsnp]])) + 
+        geom_boxplot() + 
+        geom_jitter() + 
+        theme_minimal() + 
+        labs(x=msigsnp, y='TFPred score', title=picked_loci)
 ```
 
 ```{r}

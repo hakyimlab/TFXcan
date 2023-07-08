@@ -16,7 +16,10 @@ geuvadis_individuals/*
 **/predictions_folder/
 **/cmd_parsl.*
 prediXcan/*
-experiments/AR_prostate/output/*
+experiments/AR_prostate/*
+experiments/association/*
+experiments/geuvadis_99/*
+experiments/compare_predictors/*
 logs/*
 
 .*
@@ -41,6 +44,8 @@ logs/*
 !TFPred_pipeline/config_files
 !TFPred_pipeline/helpers
 !experiments/
+!experiments/compare_predictors/config_files
+!experiments/compare_predictors/metadata
 !prediXcan/config
 !prediXcan/scripts
 !prediXcan/metadata

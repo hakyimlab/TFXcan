@@ -96,6 +96,7 @@ t-test between TFPred scores and the ground truth
 predicted <- tfpred_matrix
 truth <- gt_matrix
 ```
+
 Match the rownames and column names
 ```{r}
 # match and order the rownames and colnames
@@ -160,8 +161,13 @@ names(pvec) <- names(ind[ind == T])
 ```
 
 ```{r}
+sum(pvec < 0.01)
+length(pvec)
+```
+
+```{r}
 qq_generic(pvec, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
-mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(wilcoxon test)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(t-test)"), side=3, line=2, adj=0.05, cex=1.2)
 mtext(glue("Predicted TFPred scores vs observed AR binding"), side=3, line=0, cex=1.2, adj=0.05)
 ```
 
@@ -239,6 +245,24 @@ df_cor_test[1:5, ]
 ```
 
 ```{r}
+a <- cwas_scores_mat[1, ] |> unlist() |> unname()
+b <- tfpred_mat[1,] |> unlist() |> unname()
+reg_test <- lm(a ~ b) |> summary() |> coef()
+reg_test[2, c(1,4)]
+```
+
+
+
+```{r}
+bh_corrected <- p.adjust(df_cor_test$p_value, "bonferroni")
+length(bh_corrected)
+```
+
+```{r}
+sum(bh_corrected < (0.01/length(df_cor_test$p_value))) / length(df_cor_test$p_value)
+```
+
+```{r}
 # test_reg <- 'chr8_107302472_107303022'
 # a <- cwas_scores_mat[test_reg, ] |> unlist() |> unname()
 # b <- tfpred_mat[test_reg,] |> unlist() |> unname()
@@ -268,6 +292,61 @@ mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), sid
 qq_generic(df_cor_test[, 'p_value'] |> unlist(), distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
 mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2)
 mtext(glue("correlation test of predicted TFPred scores vs CWAS scores"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+df_cor_test %>% dplyr::arrange('r') %>% ggplot(aes(r, -log10(p_value))) + geom_point() + theme_minimal() + labs(x='r, correlation coefficient', y='-log10(p)', title='r vs p-value of CWAS and TFPred correlation test for \nAR binding in CWAS individuals') + ylim(0, 1000)
+```
+
+### regression
+```{r}
+region_reg_test <- purrr::map(1:length(common_regions), function(i){
+    a <- cwas_scores_mat[i, ] |> unlist() |> unname()
+    b <- tfpred_mat[i,] |> unlist() |> unname()
+    reg_test <- lm(a ~ b) |> summary() |> coef()
+    out <- reg_test[2, c(1,4)]
+    return(c(beta=out[1], pvalue=out[2]))
+}, .progress=T)
+
+df_reg_test <- do.call('rbind', region_reg_test) %>% as.data.frame() %>% data.table::setDT()
+colnames(df_reg_test) <- c('beta', 'pvalue')
+rownames(df_reg_test) <- common_regions
+# filter out NAs 
+df_reg_test <- df_reg_test %>% tibble::rownames_to_column('loci') %>% dplyr::filter(!(is.na(pvalue) | is.na(r)))
+df_reg_test[1:5, ]
+```
+
+```{r}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(df_reg_test[, 'beta'] |> unlist(), main='', xlab=expression(italic(beta) ~ ", effect"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ beta ~ "(regression)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_reg_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+hist(df_cor_test[, 'r']^2 |> unlist(), main='', xlab=expression(italic(r^2) ~ ", correlation"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ italic(r^2) ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+hist(df_reg_test[, 'pvalue'] |> unlist(), main='', xlab=expression(italic(p)*"-value"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ italic(p)*"-value" ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+qq_generic(df_cor_test[, 'p_value'] |> unlist(), distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("correlation test of predicted TFPred scores vs CWAS scores"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r}
+df_cor_test %>% dplyr::arrange('r') %>% ggplot(aes(r, -log10(p_value))) + geom_point() + theme_minimal() + labs(x='r, correlation coefficient', y='-log10(p)', title='r vs p-value of CWAS and TFPred correlation test for \nAR binding in CWAS individuals') + ylim(0, 70)
+```
+
+```{r}
+
 ```
 
 ### Plot TFPred scores and CWAS scores of top 12 regions ordered by p-values
@@ -305,10 +384,11 @@ colnames(pscores_top_regions) <- c('locus', 'individual', 'cwas_score', 'tfpred_
 pscores_top_regions %>%
   dplyr::mutate(locus = as.factor(locus)) %>%
   ggplot(.) + aes(x=cwas_score, y=tfpred_score, group=locus) + 
-  geom_point(col='red') + 
+  geom_point(col='red', size=0.5) + 
   facet_wrap(~locus, scales='free') + theme_bw() +
   labs(title='scatterplot of top 12 loci (ranked by p-values and highest absolute correlations)', y='TFPred scores', x = 'CWAS scores') +
-  theme(plot.title=element_text(size=16), axis.title=element_text(size=18))
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18)) + 
+  geom_smooth(method='lm', se=FALSE, color='grey')
 ```
 
 plot the boxplot for these same regions for TFPred and CWAS scores against the observed
