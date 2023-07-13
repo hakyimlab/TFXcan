@@ -22,6 +22,8 @@ experiments/association/metadata/*
 experiments/geuvadis_99/*
 experiments/compare_predictors/*
 logs/*
+scripts/predictDB_helpers/format_files/*
+scripts/predictDB_helpers/*
 
 .*
 

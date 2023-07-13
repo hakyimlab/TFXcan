@@ -3,7 +3,6 @@
 
 from parsl.app.app import python_app
 
-
 def create_locus_info(chr_, loci_list):
 
     vcf_path = str('/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/vcf_snps_only/ALL.{}.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.vcf.gz')
@@ -20,7 +19,7 @@ def create_locus_info(chr_, loci_list):
     return({'vcf_file': vcf_path.replace('{}', chr_), 'queries': queries})
 
 @python_app
-def create_prediction_matrix(chr_, chr_info, individuals, tfpred_matrix, save_dir):
+def create_prediction_matrix(chr_, chr_info, individuals, tfpred_matrix, save_dir, batch_num=None):
     import re, os
     import pandas as pd
     import cyvcf2
@@ -121,6 +120,7 @@ def create_prediction_matrix(chr_, chr_info, individuals, tfpred_matrix, save_di
     
     # read the vcf file + find variants
     chr_vcf_cy = cyvcf2.cyvcf2.VCF(chr_info['vcf_file'], samples=individuals)
+    print(f"INFO - Collecting alleles for {chr_}")
     locus_genotypes = find_variants_in_vcf_file(chr_vcf_cy, individuals, chr_info['queries'])
     chr_vcf_cy.close()
 
@@ -130,10 +130,17 @@ def create_prediction_matrix(chr_, chr_info, individuals, tfpred_matrix, save_di
     # saving the data
     chrF = os.path.join(save_dir, chr_)
     if not os.path.isdir(chrF): os.makedirs(chrF, exist_ok = True)
-    save_alleles = [v.to_csv(os.path.join(chrF, f'{k}_1KG_alleles.csv'), sep = '\t', index=False) for k, v in locus_genotypes.items()]
-    save_dosages = [v.to_csv(os.path.join(chrF, f'{k}_1KG_dosages.csv'), sep = '\t', index=False) for k, v in info1.items()]
-    save_prediction_matrices = [v.to_csv(os.path.join(chrF, f'{k}_1KG_prediction_matrix.csv'), sep = '\t', index=False) for k, v in info2.items()]
+    save_alleles = [v.to_csv(os.path.join(chrF, f'{k}_1KG_alleles.{batch_num}.csv'), sep = '\t', index=False) for k, v in locus_genotypes.items()]
+    save_dosages = [v.to_csv(os.path.join(chrF, f'{k}_1KG_dosages.{batch_num}.csv'), sep = '\t', index=False) for k, v in info1.items()]
+    save_prediction_matrices = [v.to_csv(os.path.join(chrF, f'{k}_1KG_prediction_matrix.{batch_num}.csv'), sep = '\t', index=False) for k, v in info2.items()]
 
     print(f"INFO - Allele information for {chr_} have been collected and saved.")
 
     return(0)
+
+
+
+def generate_batch_n_elems(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]

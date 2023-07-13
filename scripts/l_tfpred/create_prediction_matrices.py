@@ -11,11 +11,14 @@ import parsl
 import random
 import parslConfiguration
 
+batch_regions = 2
+batch_individuals = 2
+
 
 parsl_parameters = {
     "job_name": "collect_l_tfpred_training_data",
     "num_of_full_nodes": 4,
-    "walltime": "06:00:00",
+    "walltime": "12:00:00",
     "init_blocks":1,
     "min_num_blocks": 0,
     "max_num_blocks": 10,
@@ -55,10 +58,10 @@ tfpred_scores_dt = reduce(lambda x, y: pd.merge(x, y, on = 'locus'), tfpred_scor
 # cwas loci ===
 cwas_loci = pd.read_table(f'/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/metadata/cwas_intervals.txt', header=None).iloc[:,0].tolist()
 cwas_loci = [r for r in cwas_loci if isinstance(r, str)]
-
-#random.shuffle(cwas_loci)
+random.shuffle(cwas_loci)
+cwas_loci = cwas_loci[:20]
 # individuals ===
-individuals = pd.read_table(f'/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/metadata/1000_genome_individuals.txt', header=None).iloc[:,0].tolist()
+individuals = pd.read_table(f'/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/metadata/1000_genome_individuals.txt', header=None).iloc[:,0].tolist()[:10]
 
 print(f'INFO - Collecting matrix for {len(individuals)} individuals and {len(cwas_loci)} loci.')
 
@@ -66,26 +69,56 @@ print(f'INFO - Collecting matrix for {len(individuals)} individuals and {len(cwa
 chromosomes = [f"chr{i}" for i in range(1, 23)]
 chromosomes.extend(['chrX', 'chrY'])
 
-available_loci_by_chr = {}
+tfpred_obj_list = []
 for chromosome in chromosomes:
-    chr_list_of_regions = [r for r in cwas_loci if r.startswith(f"{chromosome}_")]
-    if chr_list_of_regions:
-        available_loci_by_chr[chromosome] = chr_list_of_regions
+  chr_list_of_regions = [r for r in cwas_loci if r.startswith(f"{chromosome}_")]
+  if not chr_list_of_regions:
+    print(f'WARNING - {chromosome} sites are not available.')
+    continue
 
-# step 2 - collect locus information (vcf file and location) by chromosome
-ltfpred_obj = {k: create_locus_info(k, v) for k, v in available_loci_by_chr.items()}
+  if len(chr_list_of_regions) > batch_regions:  
+    region_batches = generate_batch_n_elems(chr_list_of_regions, n=batch_regions)
+  else:
+    region_batches = [chr_list_of_regions]
+
+  for i, batch in enumerate(region_batches):
+    available_loci_by_chr = {}
+    available_loci_by_chr[chromosome] = batch
+    tfpred_obj_list.append(available_loci_by_chr)
+
+#print(tfpred_obj_list)
+
+# to make this faster, I should batch the individuals too
+individuals_batches = generate_batch_n_elems(individuals, n=batch_individuals)
+
+# split the available loci by chromosome into a batch of n loci:
+
+# # step 2 - collect locus information (vcf file and location) by chromosome
+ltfpred_obj = [{k: create_locus_info(k, v) for k, v in b.items()} for b in tfpred_obj_list] #{k: create_locus_info(k, v) for k, v in available_loci_by_chr.items()}
 print(f"INFO - created locus information per chromosome")
 
-# step 3 - get prediction matrices for each locus by chromosome
-# this is what wastes time the most and this is where I use parsl
-alleles_matrices = {k: create_prediction_matrix(chr_=k, chr_info = ltfpred_obj[k], individuals=individuals, tfpred_matrix = tfpred_scores_dt, save_dir = save_dir).result() for k in list(ltfpred_obj.keys())}
+# # step 3 - get prediction matrices for each locus by chromosome
+# # this is what wastes time the most and this is where I use parsl
+# alleles_matrices = {k: create_prediction_matrix(chr_=k, chr_info = ltfpred_obj[k], individuals=individuals, tfpred_matrix = tfpred_scores_dt, save_dir = save_dir) for k in list(ltfpred_obj.keys())}
+
+parsl_apps = {}
+for i, batch_ind in enumerate(individuals_batches):
+  alleles_matrices_parsl_apps = [{k: create_prediction_matrix(chr_ = k, chr_info = v, individuals=batch_ind, batch_num = i, tfpred_matrix = tfpred_scores_dt, save_dir = save_dir) for k, v in b.items()} for b in ltfpred_obj]
+  parsl_apps[i] = alleles_matrices_parsl_apps
+  #parsl_apps.extend(alleles_matrices_parsl_apps)
+
+print(parsl_apps)
+
+print(f"INFO - running {len(parsl_apps)} parsl tasks")
+#alleles_matrices_parsl_run = [{k: v.result() for k, v in b.items()} for b in parsl_apps]
+print(f"INFO - Matrices of alleles, dosages and predictions have been saved.")
 
 # training_loci = []
 # for chrK, chrV in prediction_matrices.items():
 #     training_loci.extend(list(chrV.keys()))
 
 # pd.DataFrame(training_loci).to_csv(os.path.join(chrF, '..', f'training_locus_1KG.csv'), sep = '\t', index=False, header=False)
-print(f"INFO - Matrices of alleles, dosages and predictions have been saved.")
+
 
 # for chrK, chrV in alleles_matrices.items():
 #     chrF = os.path.join(save_dir, chrK)
