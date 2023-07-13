@@ -1,8 +1,13 @@
 #!/bin/bash
 #PBS -l select=1:system=polaris
 #PBS -l walltime=01:00:00,filesystems=grand
+<<<<<<< HEAD
 #PBS -A TFXcan
 #PBS -q debug    
+=======
+#PBS -A covid-ct
+#PBS -q preemptable    
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 #PBS -N liftover
 #PBS -k doe
 #PBS -o /lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/baca_cwas/log/liftover.out

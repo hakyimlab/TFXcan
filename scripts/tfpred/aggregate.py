@@ -103,7 +103,10 @@ collection_fxn = return_prediction_function(use_parsl)
 app_futures = []
 for each_id in ids_names:
     log_data = pd.read_csv(os.path.join(prediction_logfiles_folder, f'{each_id}_log.csv'))
+<<<<<<< HEAD
     print(log_data.head())
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
     for each_agg in agg_types:
         log_data = log_data.loc[log_data['sample'] == each_id, ]
         log_data = log_data.drop_duplicates(subset=['region'])

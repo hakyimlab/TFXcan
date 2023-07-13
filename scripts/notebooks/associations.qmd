@@ -1,5 +1,9 @@
 ---
+<<<<<<< HEAD
 title: "Association analysis of AR-prostate TFPred scores with GEUVADIS gene expression"
+=======
+title: "Association analysis of AR-prostate-pred scores with GEUVADIS gene expression"
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 author: "Temi"
 date: 'Thurs Jun 1 2023'
 format: 
@@ -10,10 +14,13 @@ format:
 ---
 
 ```{r}
+<<<<<<< HEAD
 expr_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments'
 ```
 
 ```{r}
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
 if(!require("annotatr")){BiocManager::install("annotatr")}
 if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
@@ -22,6 +29,10 @@ if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsa
 if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
 ```
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 library(glue)
 library(GenomicRanges)
@@ -40,8 +51,11 @@ valid_chr
 ```
 
 Promoters...
+<<<<<<< HEAD
 
 I prefer this annotation over the ens annotations
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 annots <- c("hg38_genes_promoters")
 
@@ -50,6 +64,7 @@ annots <- c("hg38_genes_promoters")
 # Build the annotations (a single GRanges object)
 promoter_annotations <- build_annotations(genome = 'hg38', annotations = annots)
 promoter_annotations <- keepSeqlevels(promoter_annotations, standardChromosomes(promoter_annotations)[1:24], pruning.mode = "coarse")
+<<<<<<< HEAD
 
 # filter out NAs
 promoter_annotations <- promoter_annotations[!is.na(promoter_annotations$symbol), ]
@@ -198,6 +213,11 @@ promoter_annotations[startsWith(promoter_annotations$symbol, 'FOXA'), ]
 'ENSG00000129514' %in% gexpr$ensembl_id
 ```
 
+=======
+promoter_annotations
+```
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 Genes
 ```{r}
 # genes_annotations = build_annotations(genome = 'hg38', annotations = "hg38_basicgenes")
@@ -213,15 +233,26 @@ hs_annt
 ```
 
 ```{r}
+<<<<<<< HEAD
 qq <- query(ah, hs_annt)
 hs_annt <- ah[[qq$ah_id]]
+=======
+query(ah, hs_annt)
+```
+
+```{r}
+hs_annt <- ah[["AH110869"]]
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```
 
 ```{r}
 hs_annt$type |> unique()
 ```
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 pcoding_annt <- hs_annt[(hs_annt$type == 'transcript') & (hs_annt$gene_biotype == 'protein_coding'), ] #$source |> unique()
 pcoding_annt <- keepSeqlevels(pcoding_annt, standardChromosomes(pcoding_annt)[1:24], pruning.mode = "coarse")
@@ -246,7 +277,22 @@ hs_annt$gene_biotype |> unique()
 ```
 
 
+<<<<<<< HEAD
 
+=======
+GEUVADIS expression
+
+```{r}
+gexpr <- data.table::fread('/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
+gexpr[1:5, 1:5] ; dim(gexpr)
+```
+
+```{r}
+ensembl_ids <- strsplit(gexpr$TargetID, split='\\.') |> sapply(getElement, 1)
+gexpr$ensembl_id <- ensembl_ids
+gexpr[1:5, 1:5]
+```
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 
 ```{r}
 AR_ensembl_id <- 'ENSG00000169083' 
@@ -271,12 +317,21 @@ G_list <- getBM(filters = "ensembl_gene_id", attributes= c("ensembl_gene_id","hg
 
 
 ```{r}
+<<<<<<< HEAD
 merged_gexpr <- merge(gexpr, G_list, by.x="ensembl_id", by.y="ensembl_gene_id")
+=======
+merged_gexpr <- merge(gexpr, G_list,by.x="ensembl_id", by.y="ensembl_gene_id")
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 merged_gexpr <- merged_gexpr %>% dplyr::relocate(TargetID, Gene_Symbol, Chr,Coord, hgnc_symbol)
 merged_gexpr[1:5, 1:8]
 ```
 
 ### Merge with promoter coordinates
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 m <- match(merged_gexpr$hgnc_symbol, promoter_annotations$symbol)
 m <- m[!is.na(m)]
@@ -286,13 +341,20 @@ m <- m[!is.na(m)]
 'DDX11L1' %in% merged_gexpr$hgnc_symbol
 ```
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 aa <- promoter_annotations[promoter_annotations$symbol %in% merged_gexpr$hgnc_symbol, ]
 aa[aa$symbol == 'TSPAN6', ]
 ```
 
 
+<<<<<<< HEAD
 ### Ensembl genes and promoters
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 edb <- EnsDb.Hsapiens.v86
 ens_genes <- genes(edb)
@@ -300,6 +362,7 @@ ens_promoters <- promoters(edb)
 ```
 
 ```{r}
+<<<<<<< HEAD
 ens_promoters$tx_biotype |> unique()
 ```
 
@@ -324,15 +387,28 @@ range(width(ens_promoters))
 ```
 
 ```{r}
+=======
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ens_genes <- keepSeqlevels(ens_genes, standardChromosomes(ens_genes)[1:24], pruning.mode = "coarse")
 ens_genes
 ```
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 ```{r}
 ens_genes[ens_genes$gene_name == 'TSPAN6', ]
 ```
 
+<<<<<<< HEAD
 ```{r}
 ens_promoters[ens_promoters$gene_id == 'ENSG00000000003', ]
 ```
 
+=======
+
+```{r}
+ens_promoters[ens_promoters$gene_id == 'ENSG00000000003', ]
+```
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d

@@ -20,10 +20,17 @@ def aggregate_enformer_predictions(each_id, log_data, predictions_path, predicti
     # center = 8
     # pre_center = 7
     # post_center = 9
+<<<<<<< HEAD
     mean_center=[7,8,9]
     # downstream = list(range(10, 17)) # or 10 to 17
 
     #mean_center =  [0,1,2]
+=======
+    # mean_center=[7,8,9]
+    # downstream = list(range(10, 17)) # or 10 to 17
+
+    mean_center =  [0,1,2]
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 
     global read_file
 

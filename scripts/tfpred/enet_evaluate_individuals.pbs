@@ -1,4 +1,5 @@
 #!/bin/bash
+<<<<<<< HEAD
 #PBS -l select=4:system=polaris
 #PBS -l walltime=03:00:00,filesystems=grand
 #PBS -A covid-ct
@@ -10,6 +11,17 @@
 
 PBS_O_WORKDIR=${PBS_O_WORKDIR}/tfpred_eval_run
 mkdir -p $PBS_O_WORKDIR
+=======
+#PBS -l select=2:system=polaris
+#PBS -l walltime=00:30:00,filesystems=grand
+#PBS -A covid-ct
+#PBS -q debug    
+#PBS -N cwas_individuals_evaluate
+#PBS -k doe
+#PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/cwas_individuals_evaluate.out
+#PBS -e /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/cwas_individuals_evaluate.err
+
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 echo Working directory is $PBS_O_WORKDIR
 cd $PBS_O_WORKDIR
 
@@ -32,6 +44,7 @@ conda activate r-env
 
 echo "PBS_JOBID = " $PBS_JOBID
 
+<<<<<<< HEAD
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 mkdir -p "${output_dir}"
 
@@ -71,6 +84,42 @@ wait
 #     ) & sleep 1
 # done
 # wait
+=======
+#project_dir="/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline"
+#data_file=${1} # path to the data file
+#"${project_dir}/data/enet_data/data_2022-12-13/balanced_enet.csv.gz"
+#Rscript="~/miniconda3/envs/r-env/bin/Rscript"
+mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
+
+individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_imputed_AR_Prostate/predictions_2023-05-30/aggregated_predictions'
+predict_on='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/cwas_individuals.txt'
+evaluate_rscript='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/enet_evaluate_individuals.R'
+output_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/output/imputed_cwas_predictions'
+mkdir -p "${output_dir}"
+
+model_dir="/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/models/cistrome_AR_Prostate_2023-05-16"
+model_types=("linear" "logistic")
+
+# split node files into 2 files
+NUM_NODES_PER_MPI=1
+split --lines=${NUM_NODES_PER_MPI} --numeric-suffixes=0 --suffix-length=1 $PBS_NODEFILE local_hostfile.
+
+for i in ${!model_types[@]}; do 
+    model_rds="${model_dir}/aggByMeanCenter_AR_Prostate.${model_types[i]}.rds"
+    (
+        if [ -f "${model_rds}" ]; then
+            output_rds="${output_dir}/aggByMeanCenter_AR_Prostate_cwas.${model_types[i]}.rds"
+            echo "INFO - Model file exists for ${model_types[i]}"
+
+            ${mpiexec} --hostfile local_hostfile.${i} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_rds}" "${predict_on}" "${model_types[i]}" "${individuals_data_dir}" "${output_rds}"
+        else
+            echo "INFO - Model file does not exist for ${model_types[i]}"
+            exit 1
+        fi
+    ) & sleep 1
+done
+wait
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
 
 status=$?
 if [ $status -eq 0 ]; then
@@ -95,6 +144,7 @@ fi
 
 # ${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" ~/miniconda3/envs/r-env/bin/Rscript "${evaluate_rscript}" "${model_dir}" "${model_id}" "${model_type}" "${predict_on}" "${individuals_data_dir}" "${individuals_ground_truth_file}" "${TF}" "${run_date}" "${output_dir}"
 
+<<<<<<< HEAD
 # qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh
 
 # individuals_data_dir='/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/predictions_folder/cwas_imputed_AR_Prostate/predictions_2023-05-30/aggregated_predictions'
@@ -124,3 +174,6 @@ fi
 # den=10
 # let "NNPM = $num / $den"
 # split --lines=${NNPM} --numeric-suffixes=1 --suffix-length=2 ${predict_on} predict_on.
+=======
+# qsub -v 'data_file=/lus/grand/projects/covid-ct/imlab/users/temi/projects/TFXcan/modeling_pipeline/data/train-test-val/kawakami/data_2022-12-12/kawakami_aggByCenter_FOXA1_old.csv.gz,metainfo=old' train_enet_model_pbs.sh
+>>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
