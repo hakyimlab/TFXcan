@@ -23,7 +23,6 @@ experiments/geuvadis_99/*
 experiments/compare_predictors/*
 logs/*
 scripts/predictDB_helpers/format_files/*
-scripts/predictDB_helpers/*
 experiments/compare_predictors/metadata/geuvadis_expression_promoters.txt
 experiments/association/metadata/geuvadis_expression_promoters.txt
 experiments/association/*

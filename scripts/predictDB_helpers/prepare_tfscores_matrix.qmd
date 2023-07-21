@@ -1,0 +1,47 @@
+---
+title: "Prepare files for predictDB training"
+author: "Temi"
+date: 'Wed Jul 12 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(glue)
+```
+
+```{r}
+valid_chr <- paste0('chr', c(1:22, 'X'), sep='')
+valid_chr
+```
+
+collect all genotypes into one
+```{r}
+dt_dir <- '/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/formatted_geno'
+all_geno_files <- purrr::map(valid_chr[1:3], function(chrom){
+    ff <- glue('{dt_dir}/ALL.{chrom}.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.geno.txt')
+    if(file.exists(ff)){
+        dt <- data.table::fread(ff)
+        return(dt)
+    }
+}, .progress=TRUE)
+
+all_snpannot_files <- purrr::map(valid_chr[1:3], function(chrom){
+    ff <- glue('{dt_dir}/ALL.{chrom}.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.snp_annot.txt')
+    if(file.exists(ff)){
+        dt <- data.table::fread(ff)
+        return(dt)
+    }
+}, .progress=TRUE)
+```
+
+
+```{r}
+geno_file <- dplyr::bind_rows(all_geno_files)
+snpannot_file <- dplyr::bind_rows(all_snpannot_files)
+```
