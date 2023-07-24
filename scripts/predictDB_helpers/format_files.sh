@@ -1,17 +1,17 @@
 #!/bin/bash
 
-vcf_files_arr=${1}
+rscript=${1}
+utility_functions=${2}
+vcf_files_arr=${3}
 IFS=,$'\n' read -d '' -r -a vcf_arr < ${vcf_files_arr}
 for vfile in "${vcf_arr[@]}"; do
-
-    printf '\n%s\n' "INFO - preparing for ${vfile}: plink portion"
 
     pattern=`echo ${vfile} | rev | cut -d '/' -f 1 | cut -d '.' -f 3- | rev`
 
     echo "Pattern is =" ${pattern}
 
-    plink_results_pattern=${2}/${pattern}
-    formatted_files_folder=${3}
+    plink_results_pattern=${4}/${pattern}
+    formatted_files_folder=${5}
 
     if [ ! -f ${plink_results_pattern}.traw ] && [ ! -f ${plink_results_pattern}.bim ]; then
         printf '\n%s\n' "INFO - preparing ${pattern}: plink portion"
@@ -28,15 +28,14 @@ for vfile in "${vcf_arr[@]}"; do
             --bfile ${plink_results_pattern} \
             --recode A-transpose \
             --out ${plink_results_pattern}
+    fi
 
+    if [ ! -f ${formatted_files_folder}/${pattern}.geno.txt ] && [ ! -f ${formatted_files_folder}/{pattern}.snp_annot.txt ]; then
         printf '\n%s\n' "INFO - preparing ${pattern}: R portion"
-        /home/temi/miniconda3/envs/r-env/bin/Rscript /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/predictDB_helpers/format_files.R ${plink_results_pattern} ${formatted_files_folder}/${pattern}
-    else
-        printf '\n%s\n' "INFO - for ${pattern}, .traw and .bim files exist."
-        printf '\n%s\n' "INFO - preparing ${pattern}: R portion"
-        /home/temi/miniconda3/envs/r-env/bin/Rscript /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/predictDB_helpers/format_files.R ${plink_results_pattern} ${formatted_files_folder}/${pattern}
+        ${rscript} ${utility_functions} --file_prefix ${plink_results_pattern} --output_prefix ${formatted_files_folder}/${pattern} --command "create_genotype_dosage_and_snp_annot_files"
     fi
 done
+# Rscript -e "source('/beagle3/haky/users/temi/projects/TFXcan/scripts/ss.R'); summ(4, 5)"
 
 # function create_file_formats(){
 # }

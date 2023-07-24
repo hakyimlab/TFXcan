@@ -12,13 +12,14 @@ for model_db in `ls ${temi_dir}/projects/TFXcan/baca_cwas/db_folder/`; do
     --model_db_path "${temi_dir}/projects/TFXcan/baca_cwas/db_folder/baca_cwas_${m_name}.db" \
     --vcf_genotypes ${temi_dir}/projects/TFXcan/geuvadis_individuals/vcf_files/chr*_99_individuals.vcf.gz \
     --vcf_mode genotyped \
-    --on_the_fly_mapping METADATA "{}_{}_{}_{}_b38" \
-    --variant_mapping "${predixcan_dir}/tutorial/data/gtex_v8_eur_filtered_maf0.01_monoallelic_variants.txt.gz" id rsid \
+    --on_the_fly_mapping METADATA "{}_{}_{}_{}_b37" \
     --prediction_output "${predixcan_dir}/output/${m_name}/baca_cwas_predict.txt" \
     --prediction_summary_output "${predixcan_dir}/output/${m_name}/baca_cwas_summary.txt" \
     --verbosity 9 \
     --throw 
 done
+
+# --variant_mapping "${predixcan_dir}/tutorial/data/gtex_v8_eur_filtered_maf0.01_monoallelic_variants.txt.gz" id rsid \
 
 
 

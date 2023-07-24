@@ -1,0 +1,19 @@
+
+
+
+```{r}
+library(data.table)
+library(tidyverse)
+library(glue)
+```
+
+
+```{r}
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_99/{baca_models[6]}/baca_cwas_predict.txt'))
+baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
+colnames(baca_predictions) <- baca_predictions[1, ]
+baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
+baca_predictions$region <- gsub('\\:|\\-', '_', baca_predictions[['region']])
+baca_predictions <- baca_predictions %>% dplyr::mutate(across(!region, as.numeric))
+baca_predictions[1:5, 1:5] |> summary() ; baca_predictions[1:5, 1:5]
+```
