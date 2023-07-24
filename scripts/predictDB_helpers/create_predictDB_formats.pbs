@@ -61,6 +61,7 @@ done
 wait
 
 printf '\n%s\n' "INFO - merging all files into one"
-/home/temi/miniconda3/envs/r-env/bin/Rscript /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/predictDB_helpers/merge_files.R ${formatted_files_folder}
+
+/home/temi/miniconda3/envs/r-env/bin/Rscript /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/manipulate_vcfs/vcfs_utils.R --command "merge_genotype_dosage_and_snp_annot_files" --files_folder ${formatted_files_folder} --output_folder ${formatted_files_folder}
 
 printf '\n%s\n' "Finished preparing all VCF files\n"
