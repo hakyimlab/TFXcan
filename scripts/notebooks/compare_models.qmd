@@ -9,11 +9,12 @@ library(glue)
 
 
 ```{r}
-baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/geuvadis_99/{baca_models[6]}/baca_cwas_predict.txt'))
+predixcan_result_dir <- '/beagle3/haky/users/temi/projects/TFXcan/experiments/compare_predictors/l-tfpred_predictions/EUR_AR_Prostate'
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/baca_cwas_predict.txt'))
 baca_predictions <- baca_predictions[, -1] |> t() %>% as.data.frame()
 colnames(baca_predictions) <- baca_predictions[1, ]
-baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
-baca_predictions$region <- gsub('\\:|\\-', '_', baca_predictions[['region']])
-baca_predictions <- baca_predictions %>% dplyr::mutate(across(!region, as.numeric))
+baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('locus')
+baca_predictions$locus <- gsub('\\:|\\-', '_', baca_predictions[['locus']])
+baca_predictions <- baca_predictions %>% dplyr::mutate(across(!locus, as.numeric))
 baca_predictions[1:5, 1:5] |> summary() ; baca_predictions[1:5, 1:5]
 ```
