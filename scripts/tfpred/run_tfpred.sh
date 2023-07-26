@@ -5,7 +5,6 @@ python3 /lus/grand/projects/TFXcan/imlab/shared/pipelines/enformer_pipeline/scri
 
 # aggregate
 conda activate /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools
-<<<<<<< HEAD
 /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools/bin/python3 /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/aggregate.py --metadata_file="/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/aggregation_config_cwas_imputed_AR_Prostate.json" --agg_types="aggByMeanCenter" --hpc="polaris"
 
 
@@ -41,6 +40,4 @@ conda activate /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enfor
 
 # predict using model
 qsub -v 'individuals_data_dir=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/predictions_folder/1KG_AR_Prostate/predictions_2023-06-28/aggregated_predictions,predict_on=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/metadata/1000_genome_individuals.txt,evaluate_rscript=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/enet_evaluate_individuals.R,output_dir=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/tfpred_scores,agg_method=aggByCollect,metainfo=AR_Prostate' /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/enet_evaluate_individuals.pbs
-=======
 /lus/grand/projects/TFXcan/imlab/shared/software/conda_envs/enformer-predict-tools/bin/python3 /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/aggregate.py --metadata_file="/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/AR_prostate/metadata/aggregation_config_cwas_imputed_AR_Prostate.json" --agg_types="aggByMeanCenter" --hpc="polaris"
->>>>>>> 8d1e50b0eb3dd8bdfc1db9105ea1984253c9762d
