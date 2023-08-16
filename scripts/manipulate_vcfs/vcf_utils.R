@@ -23,7 +23,7 @@ create_genotype_dosage_and_snp_annot_files <- function(file_prefix, output_prefi
 
     snp_annot <- fread(glue::glue("{file_prefix}.bim")) %>% 
         setnames(.,names(.), c("chr", "snp", "CM", "pos", "alt_vcf", "ref_vcf")) %>%
-        dplyr::mutate(rsid = paste(chr, pos, ref_vcf, alt_vcf, 'b37', sep=':')) %>%
+        dplyr::mutate(rsid = paste(chr, pos, ref_vcf, alt_vcf, 'b38', sep=':')) %>%
         dplyr::mutate(maf = 0.01) %>%  
         dplyr::mutate(varID = str_replace_all(rsid,":","_")) %>%
         dplyr::select(chr, pos, varID, ref_vcf, alt_vcf, maf, rsid)
@@ -31,9 +31,11 @@ create_genotype_dosage_and_snp_annot_files <- function(file_prefix, output_prefi
 
     genotype <- readr::read_table(glue::glue("{file_prefix}.traw")) %>% 
         tidyr::unite('varID', CHR, POS, COUNTED, ALT, sep = '_', remove=FALSE) %>%
-        dplyr::mutate(varID = paste(varID, 'b37', sep='_')) %>%
+        dplyr::mutate(varID = paste(varID, 'b38', sep='_')) %>%
         dplyr::select(-c(CHR,`(C)M`,POS, COUNTED, ALT, SNP)) %>% 
         setnames(.,names(.),gsub("0_", "", colnames(.)))
+    genotype[genotype == 0] <- 2
+    genotype[genotype == 2] <- 0
     data.table::fwrite(genotype, file=glue("{output_prefix}.geno.txt"), sep='\t', quote=F, row.names=F)
 }
 
