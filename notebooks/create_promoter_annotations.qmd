@@ -1,0 +1,138 @@
+---
+title: "Creating promoter annotations"
+author: "Temi"
+date: 'Mon Aug 7 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+library(tidyverse)
+library(glue)
+library(data.table)
+```
+
+```{r}
+if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
+if(!require("annotatr")){BiocManager::install("annotatr")}
+if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
+# library(ensembldb)
+# library(EnsDb.Hsapiens.v86)
+if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
+if(!require("org.Hs.eg.db")){BiocManager::install("org.Hs.eg.db")}
+#if(!require("plyranges")){BiocManager::install("plyranges")}
+```
+
+
+```{r}
+base_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/1KG_promoters'
+```
+
+gtex genes
+
+```{r}
+gtex_genes <- readLines(glue('{base_dir}/files/gtex_genes.txt')) %>% strsplit(x=., split=',') %>% unlist() %>% gsub('"', '', .) %>% trimws(x=., which='both') 
+gtex_genes <- setdiff(gtex_genes, c("")) %>% strsplit(x=., split='\\.') %>% sapply(., getElement, 1) %>% unique()
+gtex_genes[1:8] ; length(gtex_genes)
+``` 
+
+use biomart to get hugo names mapping to ensembl id to hugo names mapping
+```{r}
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+# https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
+#G_list <- getBM(filters = "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"), values=ensembl_ids, mart= mart)
+gene_names_list <- getBM(filters = "ensembl_gene_id", attributes= c("hgnc_symbol", "ensembl_gene_id"), values=gtex_genes, mart= mart)
+gene_names_list |> head() ; dim(gene_names_list)
+```
+
+
+gene annotations --> promoters
+```{r}
+valid_chr <- c(1:22, 'X', 'Y')
+valid_chr
+```
+
+Promoters...
+
+```{r}
+annots <- c("hg38_genes_promoters")
+
+# bb <- builtin_annotations()
+# bb[startsWith(bb, 'hg38_')]
+# Build the annotations (a single GRanges object)
+promoter_annotations <- build_annotations(genome = 'hg38', annotations = annots)
+promoter_annotations <- keepSeqlevels(promoter_annotations, standardChromosomes(promoter_annotations)[1:24], pruning.mode = "coarse")
+
+# filter out NAs
+promoter_annotations <- promoter_annotations[!is.na(promoter_annotations$symbol), ]
+promoter_annotations
+```
+
+using txdb and 1000 bp ustream and downstream
+
+```{r}
+txdb <- genes(EnsDb.Hsapiens.v86) %>% dplyr::filter(gene_biotype == 'protein_coding')
+```
+```{r}
+txdb <- genes(EnsDb.Hsapiens.v86) %>% 
+    dplyr::filter(gene_biotype == 'protein_coding', gene_id %in% gtex_genes) %>% 
+    dplyr::select(gene_id, symbol) %>% 
+    as.data.table() %>%
+    dplyr::distinct(gene_id, symbol, .keep_all=TRUE) %>% 
+    dplyr::group_by(strand) %>%
+    dplyr::mutate(pend = case_when(
+        strand == '+' ~ start, 
+        strand == '-' ~ end,
+        .default = end), 
+    pstart = ifelse(strand == '+', pend - 1000, pend + 1000)) %>%
+    dplyr::distinct() %>%
+    dplyr::rename(chrom=seqnames) %>%
+    dplyr::ungroup()
+        #%>%
+    #dplyr::mutate(pend = case_when(strand == '-' ~ end, .default = start))
+txdb
+```
+
+
+
+```{r}
+library("RSQLite")
+```
+
+```{r}
+con <- dbConnect(SQLite(), "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/l-TFPRed/gtex_v7_EUR_AR_Prostate_filtered_signif.db")
+weights <- dbGetQuery(con, "SELECT * FROM weights") %>% data.table::setDT()
+dbDisconnect()
+```
+
+
+```{r}
+wget -r -nHp -e robots=off -R "index.html*" http://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/GCST006001-GCST007000/GCST006085/
+```
+
+
+```{r}
+prostate_cancer_gwas_ss <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/prostate_cancer/pub/databases/gwas/summary_statistics/GCST006001-GCST007000/GCST006085/harmonised/29892016-GCST006085-EFO_0001663.h.tsv.gz') 
+dim(prostate_cancer_gwas_ss) ; prostate_cancer_gwas_ss[1:5, 1:10]
+```
+
+```{r}
+pcgss <- prostate_cancer_gwas_ss %>% 
+    dplyr::select(chrom=hm_chrom, variant_id=hm_variant_id, rsid=hm_rsid, pos=hm_pos, A2=hm_other_allele, A1=hm_effect_allele, beta=hm_beta, p_value=p_value, se=standard_error, maf=hm_effect_allele_frequency) %>% dplyr::filter(!(is.na(variant_id) | is.na(rsid) | is.na(pos))) %>%
+    dplyr::mutate(variant_id = paste0(variant_id, '_', 'b37'), zscore=beta/se) %>% 
+    dplyr::filter(variant_id %in% weights$varID)
+```
+
+```{r}
+pcgss %>% split(.$chrom) %>% imap(~data.table::fwrite(.x, paste0('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/prostate_cancer/data/GWAS/chr', .y, '_Schumacher.gwas_ss.txt.gz'), compress='gzip', row.names=F, quote=F, sep = '\t'))
+```
+
+
+
+```{r}
+ttest <- dplyr::inner_join(pcgss, weights, by = c('variant_id' = 'varID'))
+dim(ttest) ; ttest
+```

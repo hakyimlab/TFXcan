@@ -1,0 +1,177 @@
+---
+title: "Association analysis of AR-prostate-pred scores with GEUVADIS gene expression"
+author: "Temi"
+date: 'Thurs Jun 1 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
+if(!require("annotatr")){BiocManager::install("annotatr")}
+if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
+# library(ensembldb)
+# library(EnsDb.Hsapiens.v86)
+if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
+```
+
+```{r}
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+library(annotatr)
+library(AnnotationHub)
+library(biomaRt)
+```
+
+```{r}
+valid_chr <- c(1:22, 'X', 'Y')
+valid_chr
+```
+
+Promoters...
+```{r}
+annots <- c("hg38_genes_promoters")
+
+# bb <- builtin_annotations()
+# bb[startsWith(bb, 'hg38_')]
+# Build the annotations (a single GRanges object)
+promoter_annotations <- build_annotations(genome = 'hg38', annotations = annots)
+promoter_annotations <- keepSeqlevels(promoter_annotations, standardChromosomes(promoter_annotations)[1:24], pruning.mode = "coarse")
+promoter_annotations
+```
+
+Genes
+```{r}
+# genes_annotations = build_annotations(genome = 'hg38', annotations = "hg38_basicgenes")
+# genes_annotations
+```
+
+I have the ENST or transcript IDs but I want the gene IDs too. 
+
+```{r}
+ah <- AnnotationHub()
+hs_annt <- ah$title[startsWith(ah$title, 'Homo_sapiens.GRCh38.109.gtf')]
+hs_annt
+```
+
+```{r}
+query(ah, hs_annt)
+```
+
+```{r}
+hs_annt <- ah[["AH110869"]]
+```
+
+```{r}
+hs_annt$type |> unique()
+```
+
+```{r}
+pcoding_annt <- hs_annt[(hs_annt$type == 'transcript') & (hs_annt$gene_biotype == 'protein_coding'), ] #$source |> unique()
+pcoding_annt <- keepSeqlevels(pcoding_annt, standardChromosomes(pcoding_annt)[1:24], pruning.mode = "coarse")
+pcoding_annt <- pcoding_annt[, c('type', 'gene_id', 'gene_name', 'transcript_id', 'transcript_biotype', 'gene_biotype')]
+pcoding_annt
+```
+
+```{r}
+pcoding_annt$gene_name |> unique() |> length()
+```
+
+```{r}
+'AR' %in% pcoding_annt$gene_name
+```
+
+```{r}
+pcoding_annt$transcript_id |> unique()
+```
+
+```{r}
+hs_annt$gene_biotype |> unique()
+```
+
+
+GEUVADIS expression
+
+```{r}
+gexpr <- data.table::fread('/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
+gexpr[1:5, 1:5] ; dim(gexpr)
+```
+
+```{r}
+ensembl_ids <- strsplit(gexpr$TargetID, split='\\.') |> sapply(getElement, 1)
+gexpr$ensembl_id <- ensembl_ids
+gexpr[1:5, 1:5]
+```
+
+```{r}
+AR_ensembl_id <- 'ENSG00000169083' 
+AR_ensembl_id %in% ensembl_ids
+```
+
+```{r}
+m <- match(ensembl_ids, pcoding_annt$gene_id)
+m <- m[!is.na(m)]
+pcoding_annt[m, ]
+```
+
+```{r}
+gexpr[which(ensembl_ids == AR_ensembl_id), ]
+```
+
+```{r}
+mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+# https://stackoverflow.com/questions/28543517/how-can-i-convert-ensembl-id-to-gene-symbol-in-r
+G_list <- getBM(filters = "ensembl_gene_id", attributes= c("ensembl_gene_id","hgnc_symbol"), values=ensembl_ids, mart= mart)
+```
+
+
+```{r}
+merged_gexpr <- merge(gexpr, G_list,by.x="ensembl_id", by.y="ensembl_gene_id")
+merged_gexpr <- merged_gexpr %>% dplyr::relocate(TargetID, Gene_Symbol, Chr,Coord, hgnc_symbol)
+merged_gexpr[1:5, 1:8]
+```
+
+### Merge with promoter coordinates
+
+
+```{r}
+m <- match(merged_gexpr$hgnc_symbol, promoter_annotations$symbol)
+m <- m[!is.na(m)]
+```
+
+```{r}
+'DDX11L1' %in% merged_gexpr$hgnc_symbol
+```
+
+```{r}
+aa <- promoter_annotations[promoter_annotations$symbol %in% merged_gexpr$hgnc_symbol, ]
+aa[aa$symbol == 'TSPAN6', ]
+```
+
+
+```{r}
+edb <- EnsDb.Hsapiens.v86
+ens_genes <- genes(edb)
+ens_promoters <- promoters(edb)
+```
+
+```{r}
+ens_genes <- keepSeqlevels(ens_genes, standardChromosomes(ens_genes)[1:24], pruning.mode = "coarse")
+ens_genes
+```
+
+```{r}
+ens_genes[ens_genes$gene_name == 'TSPAN6', ]
+```
+
+
+```{r}
+ens_promoters[ens_promoters$gene_id == 'ENSG00000000003', ]
+```
