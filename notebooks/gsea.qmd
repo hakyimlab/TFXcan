@@ -1,0 +1,157 @@
+---
+title: "Gene set enrichment, overrpresentation, pathways e.t.c."
+author: "Temi"
+date: 'Fri Jun 9 2023'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+expr_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments'
+```
+
+```{r}
+if(!requireNamespace("BiocManager", quietly=TRUE)){install.packages("BiocManager")}
+if(!require("annotatr")){BiocManager::install("annotatr")}
+if(!require("TxDb.Hsapiens.UCSC.hg38.knownGene")){BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")}
+# library(ensembldb)
+# library(EnsDb.Hsapiens.v86)
+if(!require("EnsDb.Hsapiens.v86")){BiocManager::install("EnsDb.Hsapiens.v86")}
+```
+
+```{r}
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+library(annotatr)
+library(AnnotationHub)
+library(biomaRt)
+library(hexbin)
+library(RColorBrewer)
+library(clusterProfiler)
+library(pathview)
+library(enrichplot)
+library(org.Hs.eg.db)
+```
+
+
+```{r}
+cis_results <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/association/analysis/cis_effects_AR_geuvadis.txt')
+cis_results[1:5, ] ; dim(cis_results)
+```
+
+```{r}
+alpha <- 0.1
+cis_results$qvalue <- p.adjust(cis_results$pvalue, method='fdr')
+cis_results$adj_pvalue <- p.adjust(cis_results$pvalue, method='bonferroni')
+cis_results[1:5, ] ; sum(cis_results$qvalue < (alpha/nrow(cis_results)))
+```
+These are significant based on FDR correction
+```{r}
+#bfsig <- which(cis_results$qvalue < (alpha/nrow(cis_results)))
+bfsig <- which(cis_results$pvalue < (alpha))
+cis_results[bfsig, ]
+```
+
+Need a way to convert gene names 
+```{r}
+organism <- 'org.Hs.eg.db'
+keytypes(org.Hs.eg.db)
+```
+
+
+```{r}
+gene_mappings <- mapIds(org.Hs.eg.db, keys=cis_results[bfsig, ]$symbol, column=c("ENTREZID"), keytype="SYMBOL", multiVals="first") %>% as.data.frame() %>% tibble::rownames_to_column('symbol')
+colnames(gene_mappings)[2] <- 'entrezid'
+gene_mappings[1:5, ]
+```
+
+```{r}
+dtX <- merge(cis_results[bfsig, ], gene_mappings, by='symbol')
+dtX
+```
+
+```{r}
+genelist <- as.numeric(dtX$pvalue) #sort( |> as.numeric(), decreasing = TRUE)
+names(genelist) <- dtX$symbol
+genelist <- sort(genelist, decreasing = TRUE)
+genelist
+```
+
+### GO, MF, CC enrichment analysis
+```{r}
+gse <- gseGO(geneList=genelist, 
+             ont ="ALL", 
+             keyType = "SYMBOL",  
+             minGSSize = 2, 
+             maxGSSize = 800, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = organism, 
+             pAdjustMethod = "none",
+             scoreType = "pos")
+```
+
+```{r}
+head(gse)
+```
+
+```{r}
+dotplot(gse, showCategory=30, split=".sign") + facet_grid(.~.sign)
+```
+
+
+```{r}
+b <- pairwise_termsim(gse)
+emapplot(b, showCategory = 10)
+```
+
+
+### KEGG Pathway analysis
+```{r}
+genelist <- as.numeric(dtX$pvalue) #sort( |> as.numeric(), decreasing = TRUE)
+names(genelist) <- dtX$entrezid
+genelist <- sort(genelist, decreasing = TRUE)
+genelist
+```
+
+
+```{r}
+kegg_organism = "hsa" # https://www.genome.jp/kegg/catalog/org_list.html
+kk2 <- gseKEGG(geneList     = genelist,
+               organism     = kegg_organism,
+               minGSSize    = 100,
+               maxGSSize    = 800,
+               pvalueCutoff = 1,
+               pAdjustMethod = "none",
+               keyType       = "ncbi-geneid",
+               scoreType = "pos")
+```
+
+```{r}
+head(kk2)
+```
+
+
+```{r}
+dotplot(kk2, showCategory = 10, title = "Enriched Pathways" , split=".sign") + facet_grid(.~.sign)
+```
+
+### Disease enrichment
+
+```{r}
+disOnt <-  DOSE::enrichDO(gene=names(genelist), universe=names(genelist), 
+  ont ="DO", minGSSize = 5, 
+  maxGSSize = 500, pvalueCutoff = 1, pAdjustMethod = "BH",)
+```
+
+
+```{r}
+head(disOnt)
+```

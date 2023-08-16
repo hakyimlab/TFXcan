@@ -1,0 +1,304 @@
+---
+title: "Compare TFPred predictions in CWAS with observed ground cwas_gt_processeds"
+author: "Temi"
+date: 'Tuesday Aug 15 2023'
+fig-format: svg
+---
+Latest usage/change: JUne 1 2023
+
+```{r import libraries}
+setwd('/grand/TFXcan/imlab/users/temi/projects/TFXcan/scripts/')
+
+rm(list=ls())
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+```
+
+```{r}
+devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
+devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
+devtools::source_gist('https://gist.github.com/TemiPete/e7214eb308c4116e2f10ee96401be0c2')
+```
+
+```{r}
+project_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan'
+bedfiles_dir <- '/lus/grand/projects/TFXcan/imlab/data/baca_cwas/sorted_bed_hg38'
+
+cwas_tfpredscores <- glue('{project_dir}/experiments/compare_predictors/tfpred_scores/aggByCollect_AR_Prostate_CWAS.linear.txt.gz') %>% data.table::fread()
+
+cwas_gt <- glue('{project_dir}/baca_cwas/metadata/cwas_ground_truth.AR_Prostate.txt') %>% data.table::fread()
+
+cwas_mappings <- glue('{project_dir}/baca_cwas/metadata/samples_metadata.txt') %>% data.table::fread() %>% dplyr::filter(sample != "NKI_25_AR_Healthy_rep2")
+```
+
+The column names of the ground cwas_gt_processed file need to be matched with the predictions'
+
+```{r}
+cwas_pmapped <- cwas_mappings$sample[match(colnames(cwas_tfpredscores)[-1], cwas_mappings$sample_formatted)]
+cwas_pmapped[1:5]
+```
+
+- but first, the `cwas_gt` file colnames have these extra '_1' that need to be taken care of.
+```{r}
+cnames <- colnames(cwas_gt)[-1]
+
+cvector <- c()
+for(i in seq_along(cwas_pmapped)){
+    cvector <- append(cvector, cnames[startsWith(cnames, cwas_pmapped[i])])
+    #print(glue('{cwas_pmapped[i]} : {cnames[startsWith(cnames, cwas_pmapped[i])]}'))
+}
+cvector <- setNames(cvector, cwas_pmapped)
+cvector[1:5]
+
+cwas_gt <- cwas_gt %>% dplyr::rename(!!!cvector)
+cwas_gt[1:5, 1:5]
+```
+
+- Now I can match the colnames with the ground cwas_gt_processed
+
+```{r}
+pmappings <- cwas_mappings %>% dplyr::filter(sample_formatted %in% colnames(cwas_tfpredscores))
+pmappings_vec <- setNames(gsub('_rep2', '', pmappings$sample), pmappings$sample_formatted)
+pmappings_vec
+```
+
+```{r}
+cwas_gt_processed <- cwas_gt %>% dplyr::rename(!!!pmappings_vec) %>% dplyr::select(any_of(c('cwas_locus', colnames(cwas_tfpredscores)))) %>% tibble::column_to_rownames('cwas_locus')
+cwas_gt_processed[cwas_gt_processed > 0] <- 1
+cwas_gt_processed[1:5, 1:5]
+```
+
+```{r}
+cwas_tfpredscores <- cwas_tfpredscores %>% tibble::column_to_rownames('locus')
+```
+
+```{r}
+dim(cwas_gt_processed) ; dim(cwas_tfpredscores) ; cwas_gt_processed[1:5, 1:5] ; cwas_tfpredscores[1:5, 1:5]
+```
+
+- load and prepare CWAS predictions 
+- Here, I am using Fusion's `top1` models
+```{r}
+predixcan_result_dir <- glue('{project_dir}/prediXcan/output')
+baca_models <- c('lasso', 'lasso.as', 'lasso.plasma', 'top1.as', 'top1.qtl', 'top1')
+```
+
+```{r}
+baca_predictions <- data.table::fread(glue('{predixcan_result_dir}/cwas_individuals_imputed/{baca_models[6]}/baca_cwas_predict.txt'))
+baca_predictions <- baca_predictions[, -1] %>% t() %>% as.data.frame() 
+colnames(baca_predictions) <- baca_predictions[1, ]
+baca_predictions <- baca_predictions[-1, ] %>% tibble::rownames_to_column('region')
+baca_predictions$region <- gsub('\\:|\\-', '_', baca_predictions[['region']])
+baca_predictions <- baca_predictions %>% dplyr::mutate(across(!region, as.numeric))
+baca_predictions[1:5, 1:5] |> summary() ; baca_predictions[1:5, 1:5]
+```
+
+- filter for loci common to all 3 matrices
+```{r}
+common_regions <- intersect(rownames(cwas_tfpredscores), rownames(cwas_gt_processed))
+common_regions <- intersect(baca_predictions$region, common_regions)
+length(common_regions)
+```
+
+```{r}
+tfpred_mat <- cwas_tfpredscores[common_regions, ]
+
+gt_mat <- cwas_gt_processed[common_regions, ]#[match(rownames(tfpred_mat), rownames(cwas_gt_processed)), ]
+gt_mat <- gt_mat[, colnames(tfpred_mat)] #[, match(colnames(tfpred_mat), colnames(cwas_gt_processed))]
+
+cwas_mat <- baca_predictions %>% tibble::column_to_rownames('region') %>% as.matrix()
+cwas_mat <- cwas_mat[common_regions, ]#[match(rownames(tfpred_mat), rownames(cwas_mat)), ]
+cwas_mat <- cwas_mat[, colnames(tfpred_mat)]
+```
+
+```{r}
+identical(rownames(tfpred_mat), rownames(gt_mat))
+identical(colnames(tfpred_mat), colnames(gt_mat))
+identical(rownames(tfpred_mat), rownames(cwas_mat))
+identical(colnames(tfpred_mat), colnames(cwas_mat))
+```
+
+
+Now I can compare the predictions by doing various tests
+
+
+## t-test of observed binding with `tfpred_mat` TFPred scores
+```{r}
+nbou <- apply(gt_mat,1,sum)
+ind <- (nbou >= 4) & (nbou <= (max(nbou) - 4))
+obs <- gt_mat[ind, ]
+pred <- tfpred_mat[ind, ]
+
+identical(dim(obs), dim(pred))
+```
+
+```{r}
+pvec = rep(NA,nrow(obs))
+tvec = rep(NA,nrow(obs))
+
+for(cc in 1:nrow(obs)) {
+    y <- pred[cc, ] |> unlist() |> unname()
+    x <- obs[cc, ] |> unlist() |> unname()
+    tryCatch({
+        res <- wilcox.test(y ~ x)
+        pvec[cc] = res$p.value
+        tvec[cc] = res$statistic
+    }, error=function(a){
+        pvec[cc] = NA
+        tvec[cc] = NA
+    })
+    #res =  #t.test(pred[cc, obs[cc,]==1], pred[cc,obs[cc, ]==0])
+}
+
+names(pvec) <- names(ind[ind == T])
+```
+
+```{r fig.height=8, fig.width=8}
+qq_generic(pvec, distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(t-test)"), side=3, line=2, adj=0.05, cex=1.2)
+```
+
+```{r fig.height=8, fig.width=8}
+hist(pvec, main='', xlab=expression(italic(p)*"-value"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ p ~ "(t-test)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("wilcoxon test of predicted TFPred scores vs observed AR binding"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+Plotting the top 9 regions by pvalues
+
+```{r}
+pvec_sorted <- sort(pvec, decreasing=F)[1:9]
+pvec_sorted
+```
+```{r}
+top9_gt <- gt_mat[names(pvec_sorted), ] %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='binding_class')
+top9_pt <- tfpred_mat[names(pvec_sorted), ] %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='TFPred_score')
+
+top9 <- dplyr::inner_join(top9_gt, top9_pt, by=c('locus' = 'locus', 'sample' = 'sample'))
+top9[1:5, ]
+```
+
+```{r fig.height=12, fig.width=12}
+top9 %>%
+  dplyr::mutate(binding_class = as.factor(binding_class), locus=as.factor(locus)) %>%
+  ggplot(.) + aes(x=binding_class, y=TFPred_score, fill=binding_class) + 
+  geom_boxplot() + 
+  geom_jitter(col='red') + 
+  facet_wrap(~locus, scales='free') + theme_bw() +
+  labs(title='Boxplot of top 9 loci ranked by p-values', y='TFPred scores') +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18)) 
+
+  # chr7_110754494_110755194
+```
+
+```{r fig.height=8, fig.width=8}
+top9 %>%
+    dplyr::filter(locus == 'chr13_51458464_51459164') %>%
+    dplyr::mutate(binding_class = as.factor(binding_class), locus=as.factor(locus)) %>%
+    ggplot(.) + aes(x=binding_class, y=TFPred_score, fill=binding_class) + 
+    geom_boxplot() + 
+    geom_jitter(col='red') + theme_bw() +
+    labs(title='chr13_51458464_51459164', y='TFPred scores') +
+    scale_x_discrete(labels=c("0" = "unbound", "1" = "bound")) +
+    theme(plot.title=element_text(size=16), axis.title=element_text(size=18), axis.text.x = element_text(size = 16), axis.title.x=element_blank())
+```
+
+
+## Comparing CWAS scores with TFPred scores for these individuals
+
+```{r}
+region_correlations_test <- purrr::map(1:length(common_regions), function(i){
+    a <- cwas_mat[i, ] |> unlist() |> unname()
+    b <- tfpred_mat[i,] |> unlist() |> unname()
+    cor_test <- cor.test(a, b, method='spearman')
+    return(c(cor_test$p.value, cor_test$estimate))
+}, .progress=T)
+
+df_cor_test <- do.call('rbind', region_correlations_test) %>% as.data.frame() %>% data.table::setDT()
+colnames(df_cor_test) <- c('p_value', 'r')
+rownames(df_cor_test) <- common_regions
+# filter out NAs 
+df_cor_test <- df_cor_test %>% tibble::rownames_to_column('locus') %>% dplyr::filter(!(is.na(p_value) | is.na(r)))
+df_cor_test[1:5, ]
+```
+
+```{r}
+bh_corrected <- p.adjust(df_cor_test$p_value, "bonferroni")
+length(bh_corrected)
+```
+
+
+```{r fig.height=8, fig.width=8}
+#par(mfrow=c(1, 2), oma = c(0, 0.5, 2, 0), mar=c(4,4,2,2))
+hist(df_cor_test[, 'r'] |> unlist(), main='', xlab=expression(italic(rho) ~ ", correlation"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ rho ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r fig.height=8, fig.width=8}
+hist(df_cor_test[, 'r']^2 |> unlist(), main='', xlab=expression(italic(r^2) ~ ", correlation"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ italic(r^2) ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r fig.height=8, fig.width=8}
+hist(df_cor_test[, 'p_value'] |> unlist(), main='', xlab=expression(italic(p)*"-value"), cex.lab=1, col='brown')
+mtext(expression("Histogram of" ~ italic(p)*"-value" ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2) 
+mtext(glue("CWAS scores vs. TFPred scores for {nrow(df_cor_test)} regions"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+```{r fig.height=8, fig.width=8}
+qq_generic(df_cor_test[, 'p_value'] |> unlist(), distribution='uniform', neg_log10_values=T, BH=T, params_to_legend=list(x='topleft', bty = "n"), params_to_plot=list(frame.plot=F, pch=19))
+mtext(expression("qqplot of" ~ italic(p)*"-values" ~ "(spearman correlation)"), side=3, line=2, adj=0.05, cex=1.2)
+mtext(glue("correlation test of predicted TFPred scores vs CWAS scores"), side=3, line=0, cex=1.2, adj=0.05)
+```
+
+#### CWAS vs TFPred scores: Top 9 loci by p-val
+
+```{r}
+df_cor_test <- df_cor_test %>% arrange(p_value, desc(abs(r)))
+top9_cwas_tfpred <- setNames(df_cor_test$p_value, df_cor_test$locus)[1:9]
+top9_cwas_tfpred
+```
+```{r}
+top9_cwas <- cwas_mat[names(top9_cwas_tfpred), ] %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='CWAS_score')
+top9_tfpred <- tfpred_mat[names(top9_cwas_tfpred), ] %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='TFPred_score')
+
+top9 <- dplyr::inner_join(top9_cwas, top9_tfpred, by=c('locus' = 'locus', 'sample' = 'sample'))
+top9[1:5, ]
+```
+
+```{r fig.height=12, fig.width=12}
+top9 %>%
+  dplyr::mutate(locus = as.factor(locus)) %>%
+  ggplot(.) + aes(x=CWAS_score, y=TFPred_score, group=locus) +
+  geom_point(col='red', size=0.5) + 
+  facet_wrap(~locus, scales='free') + theme_bw() +
+  labs(title='scatterplot of top 9 loci (ranked by p-values and highest absolute correlations)', y='TFPred scores', x = 'CWAS scores') +
+  theme(plot.title=element_text(size=16), axis.title=element_text(size=18)) + 
+  geom_smooth(method='lm', se=FALSE, color='grey') 
+
+  # chr7_110754494_110755194
+```
+
+```{r, fig.height=8, fig.width=8}
+tbest <- top9_cwas_tfpred[1]
+top9 %>%
+    dplyr::filter(locus == names(tbest)) %>%
+    dplyr::mutate(locus = as.factor(locus)) %>%
+    ggplot(.) + aes(x=CWAS_score, y=TFPred_score, group=locus) +
+    geom_point(col='red', size=0.5) + theme_bw() +
+    labs(title=names(tbest), y='TFPred scores', x = 'CWAS scores') +
+    theme(plot.title=element_text(size=16), axis.title=element_text(size=18)) + 
+    geom_smooth(method='lm', se=FALSE, color='grey')
+```
+
+
+
+

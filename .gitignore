@@ -26,11 +26,14 @@ scripts/predictDB_helpers/format_files/*
 experiments/compare_predictors/metadata/geuvadis_expression_promoters.txt
 experiments/association/metadata/geuvadis_expression_promoters.txt
 experiments/association/*
+data/*
+experiments/prostate_cancer/*
 
 .*
 
 # include
 !scripts/
+!notebooks/
 !metadata/
 !enformer_pipeline/scripts/
 !enformer_pipeline/metadata/

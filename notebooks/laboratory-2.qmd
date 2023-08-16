@@ -1,0 +1,182 @@
+---
+title: "Analyse Kawakami and Freedman's intersections and create train, test, validation splits for both datasets"
+author: "Temi"
+date: 'Wednesday September 28 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
+
+#rm(list=ls())
+
+library(glue)
+library(GenomicRanges)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+library(AnnotationHub)
+library(GenomicFeatures)
+library(annotatr)
+
+# pick a transcription factor
+TF <- 'FOXA1' #
+cell_line <- 'LuCaP' # a prostrate cancer cell line
+foxa1_motif <- 'foxa1.lncap.motif'
+
+# where is the TF chip-seq data, as well as other directories
+work_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+
+freedman_dir <- glue('{work_dir}/getting-freedman-data')
+# sorted directory
+sort_dir <- glue('{freedman_dir}/sorted_bed_files')
+if(!dir.exists(sort_dir)){
+    dir.create(sort_dir, recursive=T)
+} else {
+    print('Dir exists.')
+}
+
+peak_files_dir <- glue('{sort_dir}')
+homer_dir <- '~/miniconda3/envs/r-env/share/homer'
+project_dir <- '../'
+output_dir <- glue('../processed-data/{TF}/{cell_line}/freedman')
+
+# there are like 4 chip-seq information for Freedman data
+freedman_info <- c('FOXA1', 'H3K27me3', 'H3K27ac', 'H3K4me3')
+```
+
+
+```{r}
+peak_files_full_path <- list.files(glue('{peak_files_dir}'), full.names=T)
+FOXA1_files <- peak_files_full_path[grepl('*FOXA1*', list.files(glue('{peak_files_dir}')))]
+FOXA1_files <- lapply(FOXA1_files, data.table::fread, col.names=c('chr', 'start', 'end', 'id', 'score')) # 29 foxa1 chip-seq data
+FOXA1_bed_files <- peak_files_full_path[grepl('*FOXA1*', list.files(glue('{peak_files_dir}')))]
+```
+
+```{r}
+file_names <- lapply(strsplit(x = FOXA1_bed_files, split='/', fixed=T), function(ea){
+    ea[11]
+}) |> unlist()
+```
+
+```{r}
+bedfiles_names <- sapply(strsplit(file_names, split='_'), getElement, 1)
+
+# col.names=c('chrom', 'start', 'end', 'num', 'list', bedfiles_names)
+
+FOXA1_intersected <- data.table::fread(glue('{freedman_dir}/FOXA1_intersected_files.bed'))
+
+```
+
+Make Granges object from here
+```{r}
+FOXA1_intersected$strand <- '*'
+FOXA1_granges <- with(FOXA1_intersected, GRanges(chrom, IRanges(start,end), strand))
+FOXA1_granges
+```
+
+## 
+
+```{r}
+ah <- AnnotationHub()
+```
+
+```{r}
+enhancers_ah <- query(ah, 'enhancer')
+enhancers_ah <- enhancers_ah['AH5093'] # vs AH5221 and AH5352
+enhancers_ah
+```
+
+```{r}
+# Create a named vector for the AnnotationHub accession codes with desired names
+vista_enhancers_codes = c('vista' = 'AH5093')
+# Fetch ah_codes from AnnotationHub and create annotations annotatr understands
+build_ah_annots(genome = 'hg19', ah_codes = vista_enhancers_codes, annotation_class='enhancers')
+# The annotations as they appear in annotatr_cache
+ve_name = c("hg19_enhancers_vista")
+
+print(annotatr_cache$get(ve_name))
+```
+
+Build annotations
+```{r}
+annots <- c('hg19_basicgenes', 'hg19_genes_intergenic',
+    'hg19_genes_intronexonboundaries')
+annotations <- build_annotations(genome = 'hg19', annotations = annots)
+complete_annotations <- c(annotatr_cache$get(ve_name), annotations)
+```
+
+Annotate the regions in the FOXA1 peak files
+
+```{r}
+FOXA1_granges_annotated <- annotate_regions(regions=FOXA1_granges, annotations=complete_annotations, ignore.strand=T, quiet=F)
+```
+
+```{r}
+FOXA1_df_annotated <- data.frame(FOXA1_granges_annotated)
+head(FOXA1_df_annotated)
+```
+
+```{r}
+#FOXA1_df_annotated$annot.id |> unique()
+```
+
+```{r}
+FOXA1_annsum <- summarize_annotations(FOXA1_granges_annotated, quiet=T)
+FOXA1_annsum
+```
+
+```{r}
+plot_annotation(annotated_regions=FOXA1_granges_annotated, annotation_order=FOXA1_annsum$annot.type)
+```
+
+Takes long for now
+```{r, eval=F}
+plot_coannotations(annotated_regions=FOXA1_granges_annotated, annotation_order=FOXA1_annsum$annot.type)
+```
+
+```{r}
+c(annotatr_cache$get(ve_name), annotations)
+```
+
+```{r}
+print(annotatr_cache$list_env())
+```
+
+
+```{r}
+fantom_db <- query(ah, 'FANTOM')
+```
+
+
+Subset for the regions common to all 29 individuals
+```{r}
+regionCounts <- sapply(1:length(bedfiles_names), function(f){
+    which(chip_counts == f) |> length()
+})
+```
+
+```{r}
+bp <- barplot(regionCounts, names.arg=1:length(bedfiles_names), ylim=c(0, max(regionCounts + 100000)), ylab='Number of overlapping ChIP peaks', xlab='Number of files (individuals)')
+#bp <- axis(1, at=1:length(bedfiles_names), labels=F, tick=T)
+text(x=bp, y=regionCounts, label=regionCounts, cex=0.8, pos=4, srt=45) 
+mtext('Number of ChIP-seq peaks overlapped across number of individuals')
+```
+
+```{r}
+regionPeaks <- sapply(1:length(bedfiles_names), function(f){
+    which(chip_counts == f)
+})
+
+overlap_29 <- FOXA1_intersected[regionPeaks[29] |> unlist(), ]
+
+overlap_29$chrom |> table() %>% sort(decreasing=T)
+```
+
+
+

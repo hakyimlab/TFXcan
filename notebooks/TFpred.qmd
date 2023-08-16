@@ -1,0 +1,334 @@
+---
+title: "Build models on Kawakami data: elastic net and xgboost"
+author: "Temi"
+date: 'Wednesday Oct 26 2022'
+format: 
+  pdf: 
+    toc: true
+    number-sections: true
+    code-line-numbers: true
+---
+
+```{r}
+rm(list=ls())
+setwd('/projects/covid-ct/imlab/users/temi/projects/TFXcan/scripts/')
+
+library(glue)
+library(reticulate)
+library(R.utils)
+library(data.table)
+library(glmnet)
+library(doMC)
+library(ROCR)
+library(Matrix)
+library(reshape2)
+library(tidyverse)
+library(foreach)
+library(doParallel)
+
+```
+
+```{r}
+TF <- 'FOXA1'
+# locations
+project_dir <- '/projects/covid-ct/imlab/users/temi/projects/TFXcan'
+kawakami_data_dir <- glue('{project_dir}/train-test-val/kawakami-human')
+```
+
+```{r}
+# using the aggByCenter 
+kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/aggByCenter_{TF}_40000.csv.gz'))
+```
+
+```{r}
+# split the data
+X_train <- kawakami_center_dt[, -c(1,2)] |> as.matrix()
+y_train <- kawakami_center_dt[, c(1,2)] |> as.data.frame()
+```
+
+```{r}
+# check the distribution
+y_train$class |> table()
+```
+
+### Utility functions
+```{r}
+source('./utility-functions.R')
+```
+
+\newpage
+### Modelling: elastic net () 
+I have moved this section to a stand-alone script that trains and saves the model. It takes some time to build the model and I needed some compute power.
+
+```{r, eval=F}
+# register a parallel backend
+cl <- 4
+doParallel::registerDoParallel(cl)
+getDoParWorkers()
+```
+
+```{r, eval=F}
+enet_center_binary_model <- glmnet::cv.glmnet(x=X_train, y=y_train$class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T)
+```
+
+```{r, eval=F}
+registerDoSEQ()
+stopCluster(cl)
+
+# save the model
+saveRDS(enet_center_binary_model, file=glue('{project_dir}/models/kawakami-human/enet-center-binary.rds'))
+```
+
+
+### testing on LuCaP_145
+```{r}
+# may want to load the model
+enet_center_binary_model <- readRDS(glue('{project_dir}/models/kawakami-human/enet-center-binary-40000.rds'))
+```
+
+Read in the test set: LuCaP_145 and LuCaP_136
+```{r}
+library(vcd)
+
+save_dir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/train-test-val/freedman'
+```
+
+```{r}
+# list of individuals
+individuals <- c('LuCaP_145', 'LuCaP_136')
+test_metrics <- list()
+
+# this produces a plot
+
+lo <- layout(matrix(c(1, 2), nrow=1, ncol=2))
+
+for(ind in individuals){
+
+  test_data_path <- glue('{save_dir}/{ind}_aggByCenter_FOXA1.csv')
+  test_data <- data.table::fread(test_data_path)
+
+  X_test <- test_data[, -c(1:2)] |> as.matrix()
+  y_test <- test_data[, c(1:2)] |> as.data.frame()
+
+  test_metrics[[ind]] <- test_models(enet_center_binary_model, X_test, y_test$class)
+
+  test_predictions <- predict(enet_center_binary_model, X_test, type='class')
+  test_predictions <- as.numeric(test_predictions[, 1])
+
+  mc <- cbind(test_predictions, y_test$class)
+  colnames(mc) <- c('predicted', 'truth')
+  mc <- as.data.frame(mc)
+
+  mtable <- table(mc$predicted, mc$truth)
+  dimnames(mtable) <- list(predicted = c('neg', 'pos'), truth=c('neg', 'pos'))
+
+  # plot
+  vcd::mosaic(mtable, highlighting = "truth", highlighting_fill = c("pink", "lightblue"), pop=F, main=ind)
+  labeling_cells(text = mtable, margin=0)(mtable)
+}
+```
+
+\newpage
+## xgboost models
+```{r}
+library(xgboost)
+library(DiagrammeR)
+library(DiagrammeRsvg)
+library(rsvg)
+```
+
+```{r}
+# I should try with a small dataset
+
+# using the aggByCenter 
+kawakami_center_dt <- data.table::fread(glue('{kawakami_data_dir}/aggByCenter_{TF}_40000.csv'))
+
+# split the data
+X_train <- kawakami_center_dt[, -c(1,2)] |> as.matrix()
+y_train <- kawakami_center_dt[, c(1,2)] |> as.data.frame()
+
+# check the distribution
+y_train$class |> table()
+```
+
+```{r}
+# for optimization, I need a test set
+set.seed(27102022)
+
+# first bind the data 
+dt_all <- cbind(y_train[, 2], X_train) |> as.data.frame()
+
+# split and do your magic
+split_dt <- lapply(split(dt_all, f=dt_all$V1), function(each_dt){
+
+  dt_indices <- sample(1:nrow(each_dt), 5000)
+  a <- each_dt[dt_indices, ] 
+  b <- each_dt[-dt_indices, ]
+
+  return(list(train=a, test=b))
+
+})
+
+train_dt <- rbind(split_dt[[1]][[1]], split_dt[[2]][[1]])
+test_dt <- rbind(split_dt[[1]][[2]], split_dt[[2]][[2]])
+
+train_dt <- train_dt[sample(1:nrow(train_dt)), ] |> as.matrix()
+test_dt <- test_dt[sample(1:nrow(test_dt)), ] |> as.matrix()
+
+dim(train_dt) ; dim(test_dt)
+```
+
+```{r}
+# construct a dmatrix
+dtrain <- xgboost::xgb.DMatrix(data=train_dt[, -1], label=train_dt[, 1])
+dtest <- xgboost::xgb.DMatrix(data=test_dt[, -1], label=test_dt[, 1])
+```
+
+```{r, eval=F}
+# here we use a grid search to find the optimal hyperparameters
+xgb_grid_search <- expand.grid(colsample_bytree = 0.7, max_depth=20, eta=c(0.01, 0.1, 1), gamma=c(5, 10, 20), lambda=c(1, 3, 5), alpha=c(0, 3, 7))
+xgb_grid_search
+```
+
+```{r, eval=F}
+grid_model <- apply(xgb_grid_search, 1, function(each_param){
+
+  params <- list(max_depth=each_param[['max_depth']], eta=each_param[['eta']], colsample_bytree=each_param[['colsample_bytree']],
+    gamma=each_param[['gamma']], lambda=each_param[['lambda']], nthreads=8, verbosity=0, objective = "binary:logistic", eval_metric='auc')
+
+  # uses 3-folds cross validation
+  xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=100, nfold=5, metrics='auc',
+    early_stopping_rounds = 20, verbose = 1, print_every_n = 20)
+
+  scores <- as.data.frame(xgb_model$evaluation_log)
+  test_auc <- tail(scores$test_auc_mean, 1)
+  train_auc <- tail(scores$train_auc_mean, 1)
+
+  return(c(test_auc, train_auc, each_param[['max_depth']], each_param[['eta']], each_param[['colsample_bytree']], each_param[['lambda']], each_param[['gamma']]))
+
+})
+```
+
+```{r, eval=F}
+grid_result <- t(grid_model) |> as.data.frame()
+colnames(grid_result) <- c('test_auc', 'train_auc', 'max_depth', 'learning_rate', 'colsample_bytree', 'lambda', 'gamma')
+```
+
+
+```{r}
+#test_boost <- xgboost(dtrain, max.depth = 2, eta = 1, nthread = 2, nrounds = 50, objective = "binary:logistic", eval_metric='auc')
+
+# params <- list(colsample_bytree = 0.7, max_depth=50, eta=c(0.01), gamma=20, lambda=25)
+# xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=300, nfold=3, metrics='auc',
+#     early_stopping_rounds = 10, verbose = 2, print_every_n = 1)
+```
+
+```{r}
+params <- list(colsample_bytree = 0.7, subsample=0.7, max_depth=30, eta=c(0.1), gamma=25, lambda=3, alpha=3, nthread=8, verbosity=1, objective = "binary:logistic", eval_metric=c('auc', 'aucpr', 'error'))
+xgb_model_trained <- xgb.train(data=dtrain, params=params, nrounds=600, watchlist=list(training=dtrain, testing=dtest), print_every_n = 10, early_stopping_rounds = 50)
+xgb_model_trained
+```
+
+```{r}
+plot(xgb_model_trained$evaluation_log$training_auc, type='l', ylim=c(0.7, 1))
+lines(xgb_model_trained$evaluation_log$testing_auc, col='red')
+```
+
+
+```{r}
+imp_matrix <- xgb.importance(model = xgb_model_trained)
+```
+
+```{r}
+xgb.plot.importance(importance_matrix = imp_matrix)
+```
+
+```{r}
+gr <- xgb.plot.tree(model = xgb_model_trained, tree=1, render=F)
+export_graph(gr, file_name=glue('{project_dir}/plots/tree_1_node.png'), file_type='png')
+```
+
+```{r}
+library(SHAPforxgboost)
+```
+
+obtain shap values
+
+```{r}
+shap_values <- SHAPforxgboost::shap.values(xgb_model_trained, train_dt[, -1])#predict(xgb_model_trained, train_dt[, -1], predcontrib = TRUE, approxcontrib = F)
+```
+
+
+
+```{r}
+save_dir = '/projects/covid-ct/imlab/users/temi/projects/TFXcan/train-test-val/freedman'
+ind <- 'LuCaP_145'
+test_data_path <- glue('{save_dir}/{ind}_aggByCenter_FOXA1.csv')
+val_data <- data.table::fread(test_data_path)
+
+X_val <- val_data[, -c(1:2)] |> as.matrix()
+y_val <- val_data[, c(1:2)] |> as.data.frame()
+```
+
+```{r}
+xgb_prediction <- predict(xgb_model_trained, X_val)
+xgb_pred_class <- ifelse(xgb_prediction > 0.5, 1, 0)
+```
+
+```{r}
+table(xgb_pred_class, y_val[, 2])
+```
+
+\newpage
+
+I mostly used this to create a script that I can run on the cluster
+
+```{r}
+# here we use a grid search to find the optimal hyperparameters
+xgb_grid_search <- expand.grid(colsample_bytree = 0.7, max_depth=20, eta=c(0.01, 0.1, 1), gamma=c(5, 10, 20), lambda=c(1, 3, 5), alpha=c(0, 3, 7))
+xgb_grid_search
+```
+
+```{r}
+# testing for each
+#fk_cl <- parallel::makeForkCluster(8)
+fk_cl <- parallel::makeCluster(8)
+registerDoParallel(fk_cl)
+
+#clusterExport(fk_cl, c('dtrain'))
+#clusterEvalQ(fk_cl, 'dtrain')
+
+set.seed(27102022)
+#user_matrix <- matrix(sample(1:500, 10*10), nrow=10, ncol=10)
+output_cv_result <- foreach(i=1:nrow(xgb_grid_search), .combine='rbind', .packages=c('xgboost'), .inorder=F) %dopar% {
+
+  # this is important - you need to initialize this within the loop !!!
+  dtrain <- xgboost::xgb.DMatrix(data=train_dt[, -1], label=train_dt[, 1])
+
+  params <- list(max_depth=xgb_grid_search[i, 'max_depth'], eta=xgb_grid_search[i, 'eta'], colsample_bytree=xgb_grid_search[i, 'colsample_bytree'], gamma=xgb_grid_search[i, 'gamma'], lambda=xgb_grid_search[i, 'lambda'], alpha=xgb_grid_search[i, 'alpha'], nthreads=2, verbosity=0, objective = "binary:logistic", eval_metric='auc', booster='gbtree')
+
+  # # uses 3-folds cross validation
+  xgb_model <- xgboost::xgb.cv(data=dtrain, params=params, nrounds=5, nfold=3, metrics='auc', early_stopping_rounds = 20, print_every_n = 1)
+
+  scores <- as.data.frame(xgb_model$evaluation_log)
+  test_auc <- tail(scores$test_auc_mean, 1)
+  train_auc <- tail(scores$train_auc_mean, 1)
+
+  return(
+    c(test_auc, train_auc, 
+    xgb_grid_search[i, 'max_depth'], xgb_grid_search[i, 'eta'], 
+    xgb_grid_search[i, 'colsample_bytree'], xgb_grid_search[i, 'gamma'], 
+    xgb_grid_search[i, 'lambda'], xgb_grid_search[i, 'alpha'])
+  )
+}
+
+stopCluster(fk_cl)
+```
+
+
+
+
+
+
+
+
