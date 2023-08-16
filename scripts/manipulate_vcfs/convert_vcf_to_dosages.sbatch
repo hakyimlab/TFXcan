@@ -43,9 +43,9 @@ plink_results_folder=${parent_folder}/plink_geno
 formatted_files_folder=${parent_folder}/formatted_geno
 
 # exec files
-exec_file=/beagle3/haky/users/temi/projects/TFXcan/scripts/predictDB_helpers/format_files.sh
+exec_file=/beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs/format_files.sh
 rscript=/home/temi/miniconda3/envs/r-env/bin/Rscript
-utility_functions=/beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs/vcfs_utils.R
+utility_functions=/beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs/vcf_utils.R
 
 mkdir -p ${plink_results_folder}
 mkdir -p ${formatted_files_folder}
