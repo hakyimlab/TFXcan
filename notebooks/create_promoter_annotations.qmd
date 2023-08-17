@@ -2,11 +2,7 @@
 title: "Creating promoter annotations"
 author: "Temi"
 date: 'Mon Aug 7 2023'
-format: 
-  pdf: 
-    toc: true
-    number-sections: true
-    code-line-numbers: true
+fig-format: svg
 ---
 
 ```{r}
@@ -105,7 +101,7 @@ library("RSQLite")
 ```{r}
 con <- dbConnect(SQLite(), "/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFPred_models/l-TFPRed/gtex_v7_EUR_AR_Prostate_filtered_signif.db")
 weights <- dbGetQuery(con, "SELECT * FROM weights") %>% data.table::setDT()
-dbDisconnect()
+dbDisconnect(con)
 ```
 
 
@@ -122,13 +118,40 @@ dim(prostate_cancer_gwas_ss) ; prostate_cancer_gwas_ss[1:5, 1:10]
 ```{r}
 pcgss <- prostate_cancer_gwas_ss %>% 
     dplyr::select(chrom=hm_chrom, variant_id=hm_variant_id, rsid=hm_rsid, pos=hm_pos, A2=hm_other_allele, A1=hm_effect_allele, beta=hm_beta, p_value=p_value, se=standard_error, maf=hm_effect_allele_frequency) %>% dplyr::filter(!(is.na(variant_id) | is.na(rsid) | is.na(pos))) %>%
-    dplyr::mutate(variant_id = paste0(variant_id, '_', 'b37'), zscore=beta/se) %>% 
+    dplyr::mutate(variant_id = paste0(variant_id, '_', 'b38'), zscore=beta/se) %>% 
     dplyr::filter(variant_id %in% weights$varID)
+
+pcgss[1:5, 1:5]
 ```
 
 ```{r}
-pcgss %>% split(.$chrom) %>% imap(~data.table::fwrite(.x, paste0('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/prostate_cancer/data/GWAS/chr', .y, '_Schumacher.gwas_ss.txt.gz'), compress='gzip', row.names=F, quote=F, sep = '\t'))
+output_folder <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/prostate_cancer/data/GWAS'
+if(!dir.exists(output_folder)){
+    dir.create(output_folder, recursive=T)
+}
+
+pcgss %>% split(.$chrom) %>% imap(~data.table::fwrite(.x, glue('{output_folder}/chr{.y}_Schumacher.gwas_ss.txt.gz'), compress='gzip', row.names=F, quote=F, sep = '\t'))
 ```
+
+```{r}
+pcgss_chr_added <- prostate_cancer_gwas_ss %>% 
+    dplyr::select(chrom=hm_chrom, variant_id=hm_variant_id, rsid=hm_rsid, pos=hm_pos, A2=hm_other_allele, A1=hm_effect_allele, beta=hm_beta, p_value=p_value, se=standard_error, maf=hm_effect_allele_frequency) %>% dplyr::filter(!(is.na(variant_id) | is.na(rsid) | is.na(pos))) %>%
+    dplyr::mutate(variant_id = paste0('chr', variant_id, '_', 'b38', sep=''), zscore=beta/se, chrom=paste0('chr',chrom, sep='')) %>% 
+    dplyr::filter(variant_id %in% weights$varID)
+pcgss_chr_added[1:5, 1:5]
+```
+
+```{r}
+```{r}
+output_folder <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/prostate_cancer/data/GWAS_predictDB_compatible'
+if(!dir.exists(output_folder)){
+    dir.create(output_folder, recursive=T)
+}
+
+pcgss %>% split(.$chrom) %>% imap(~data.table::fwrite(.x, glue('{output_folder}/chr{.y}_Schumacher.gwas_ss.txt.gz'), compress='gzip', row.names=F, quote=F, sep = '\t'))
+```
+
+
 
 
 
