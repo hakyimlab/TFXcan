@@ -1,0 +1,150 @@
+---
+title: "Exploring Baca's CWAS models + creating DBs"
+author: "Temi"
+description: "..."
+date: 'Tues Aug 8 2023'
+html:
+    self-contained: true
+    code-background: true
+fig-format: svg
+---
+
+# Introduction
+
+Here, I explore Baca's CWAS models, and create necessary DBs suitable in a Predixcan framework
+
+
+```{r}
+liftover_cmd <- '/project2/haky/temi/software/liftOver'
+lifover_sh <- 
+chainfile <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+```
+
+## Lift over coordinates:
+The Baca CWAS loci are given in hg19. I want to convert these to hg38. It is fairly simple to do, if necessary.
+```{r}
+
+hg38_mappings <- glue("{base_dir}/bed_files/baca_cwas_loci_hg38.bed")
+
+if(!file.exists(hg38_mappings)){
+
+    dir.create(dirname(hg38_mappings), recursive = T)
+
+    cwas_db <- data.table::fread(file=glue('{files_dir}/{transcription_factor}_baca_cwas_weights_{tdate}.txt.gz'))
+    # create a bed file to be lifted over
+    coordinates_bed_files <- do.call('rbind', strsplit(x=cwas_db$locus, split='\\-|\\:')) |> 
+        as.data.frame() %>% 
+        dplyr::distinct(V1, V2, V3, .keep_all = TRUE) %>% 
+        dplyr::rename(chr=V1, start=V2, end=V3) %>%
+        dplyr::mutate(id=paste(paste(chr, start, sep=':'), end, sep='-'))
+    write.table(coordinates_bed_files, glue("{base_dir}/bed_files/baca_cwas_loci_hg19.bed"), col.names=F, quote=F, row.names=F)
+
+    # lift over these files
+    liftover_sh <-  "/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
+    liftover_cmd <- '/lus/grand/projects/TFXcan/imlab/users/temi/software/liftOver'
+    input_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg19.bed")
+    chain_file <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+    output_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg38.bed")
+    unmapped_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_unmapped.bed")
+
+
+}
+
+cwas_db[1:5, ]
+```
+```{r}
+
+
+coordinates_bed_files[1:5, ]
+```
+
+```{r}
+
+```
+
+```{r}
+# lift over these files
+liftover_sh <-  "/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
+liftover_cmd <- '/lus/grand/projects/TFXcan/imlab/users/temi/software/liftOver'
+input_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg19.bed")
+chain_file <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+output_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_hg38.bed")
+unmapped_bed <- glue("{project_dir}/bed_files/baca_cwas_loci_unmapped.bed")
+```
+
+```{r}
+file.exists(liftover_sh) ; file.exists(liftover_cmd) ; file.exists(chain_file) ; file.exists(input_bed)
+```
+
+```{r}
+cmd <- glue('qsub -v liftover_cmd={liftover_cmd},chain_file={chain_file},input_bed={input_bed},output_bed={output_bed},unmapped_bed={unmapped_bed} {liftover_sh}')
+cmd
+```
+
+```{r}
+system(cmd)
+```
+
+```{r}
+system('qstat -u temi')
+```
+
+
+
+
+Liftover the snps too
+```{r}
+library(biomaRt)
+```
+
+```{r}
+hg19_snps <- hg38_cwas_db %>%
+    dplyr::select(snp_id, position, locus, chr) %>%
+    dplyr::mutate(start = position, chr=paste0('chr', chr, sep='')) %>%
+    dplyr::rename(end = position) %>%
+    dplyr::relocate(chr, start, end, .before=snp_id)
+hg19_snps[1:5, ] ; dim(hg19_snps)
+```
+
+```{r}
+write.table(hg19_snps, glue("{project_dir}/snps/hg19_snps.bed"), col.names=F, quote=F, row.names=F)
+```
+
+```{r}
+tt <- dplyr::inner_join(extra_dt, hg38_bed_files, by=c('locus' = 'hg19_id'))
+tt$locus <- tt$hg38_id
+tt$hg38_id <- NULL
+tt$chr <- NULL
+tt[1:5, ]
+```
+
+```{r}
+write.table(tt, file=glue('{project_dir}/output/{TF}_baca_cwas_extra_hg38_2023-01-27.txt'), col.names=T, row.names=F, quote=F)
+```
+
+
+
+```{r}
+# lift over these files
+liftover_sh <-  "/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/TFPred_pipeline/scripts/utilities/liftover.sh"
+liftover_cmd <- '/lus/grand/projects/TFXcan/imlab/users/temi/software/liftOver'
+input_bed <- glue("{project_dir}/snps/hg19_snps.bed")
+chain_file <- '/lus/grand/projects/TFXcan/imlab/data/liftover_files/hg19ToHg38.over.chain.gz'
+output_bed <- glue("{project_dir}/snps/hg38_snps.bed")
+unmapped_bed <- glue("{project_dir}/bed_files/hg19_snps_unmapped.bed")
+
+file.exists(liftover_sh) ; file.exists(liftover_cmd) ; file.exists(chain_file) ; file.exists(input_bed)
+```
+
+```{r}
+cmd <- glue('qsub -v liftover_cmd={liftover_cmd},chain_file={chain_file},input_bed={input_bed},output_bed={output_bed},unmapped_bed={unmapped_bed} {liftover_sh}')
+cmd
+```
+
+```{r}
+system(cmd)
+```
+
+```{r}
+system('qstat -u temi')
+```

@@ -1,0 +1,6 @@
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.as.db
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.db
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_lasso.plasma.db
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.as.db
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.db
+/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/db_folder/baca_cwas_top1.qtl.db
