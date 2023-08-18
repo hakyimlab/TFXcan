@@ -28,8 +28,8 @@ experiments/association/metadata/geuvadis_expression_promoters.txt
 experiments/association/*
 data/*
 experiments/prostate_cancer/*
-
-.*
+**/__pycache__/
+.*/
 
 # include
 !scripts/
