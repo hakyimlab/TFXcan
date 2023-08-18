@@ -6,15 +6,16 @@
 # Date: Fri July 21 2023
 # Dependencies: 
 
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=32G
 #SBATCH --job-name=convert_vcf_to_dosages
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/convert_vcf_to_dosages.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/convert_vcf_to_dosages.err
-#SBATCH --time=00:30:00	
-#SBATCH --partition=caslake
+#SBATCH --output=/project2/haky/temi/projects/TFXcan/logs/convert_vcf_to_dosages.out
+#SBATCH --error=/project2/haky/temi/projects/TFXcan/logs/convert_vcf_to_dosages.err
+#SBATCH --time=01:00:00	
+#SBATCH --partition=bigmem
 
 module load openmpi
 module load parallel
@@ -43,9 +44,10 @@ plink_results_folder=${parent_folder}/plink_geno
 formatted_files_folder=${parent_folder}/formatted_geno
 
 # exec files
-exec_file=/beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs/format_files.sh
-rscript=/home/temi/miniconda3/envs/r-env/bin/Rscript
-utility_functions=/beagle3/haky/users/temi/projects/TFXcan/scripts/manipulate_vcfs/vcf_utils.R
+src_dir=/project2/haky/temi/projects/TFXcan/scripts/manipulate_vcfs
+exec_file=${src_dir}/format_files.sh
+rscript=/project2/haky/temi/software/miniconda3/envs/r-env/bin/Rscript
+utility_functions=${src_dir}/vcf_utils.R
 
 mkdir -p ${plink_results_folder}
 mkdir -p ${formatted_files_folder}
