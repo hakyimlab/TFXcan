@@ -1,8 +1,8 @@
 #!/bin/bash
-#PBS -l select=4:system=polaris
-#PBS -l walltime=02:00:00,filesystems=grand
-#PBS -A covid-ct
-#PBS -q preemptable    
+#PBS -l select=2:system=polaris
+#PBS -l walltime=01:00:00,filesystems=grand
+#PBS -A TFXcan
+#PBS -q debug    
 #PBS -N individuals_evaluate
 #PBS -k doe
 #PBS -o /lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/logs/individuals_evaluate.out
@@ -72,17 +72,18 @@ wait
 combine_rscript=/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/scripts/tfpred/combine_predictions.R
 combined_file="${output_dir}/${agg_method}_${metadata}_${extra_info}.${model_type}.txt.gz"
 # collect the files into 1
-echo "INFO - combining files"
-# echo "${output_files[@]}"
-# echo "${#output_files[@]}"
+
+echo "output files are: ${output_files[@]}"
 
 if [ ${#output_files[@]} -gt 1 ]; then
     printf -v output_files_vec '%s,' "${output_files[@]}"
     # echo "${#output_files[@]}"
     # echo "${output_files_vec}"
+    echo "INFO - combining ${#output_files[@]} files"
     ${rscript} ${combine_rscript} --command "combine_predictions" --files "${output_files_vec}" --combined_file ${combined_file}
 else 
-    echo mv "${output_files[0]}" ${combined_file}
+    echo "INFO - There is just one file; will change the name."
+    mv "${output_files[0]}" ${combined_file}
 fi
 
 status=$?

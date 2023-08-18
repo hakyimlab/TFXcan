@@ -11,7 +11,7 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list=option_list))
 
-#print(arguments)
+#print(opt)
 
 library(glue)
 library(glmnet)
@@ -63,7 +63,7 @@ model_predictions <- parallel::mclapply(valid_names, function(each_ind){
     link_pred <- predict(model, newx, s = "lambda.1se", type = 'link') |> as.vector()
     df <- cbind(locus, link_pred) |> as.data.frame() #new_dt[, c(1:2)] |> as.data.frame()
     colnames(df) <- c('locus', 'tfpred_score')
-    print(glue('INFO - Dimension of predictions is {dim(df)}'))
+    #print(glue('INFO - Dimension of predictions is {dim(df)}'))
 
     # merge by locus, and class => they should all be the same but this provides a sanity check
     return(df)
@@ -86,7 +86,7 @@ if(!dir.exists(dirname(opt$output_file))){
 }
 
 print(glue('INFO - Saving to {opt$output_file}'))
-data.table::fwrite(out_dt, file=opt$output_file, quote=FALSE, row.names=FALSE, compress = 'gzip')
+data.table::fwrite(out_dt, file=opt$output_file, quote=FALSE, row.names=FALSE, sep='\t', compress = 'gzip')
 
 summary_dt <- rbind(as.matrix(end_time - start_time), ncores = ncores, nindividuals=length(valid_names))
 # save summary
