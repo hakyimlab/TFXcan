@@ -9,7 +9,7 @@ option_list <- list(
 
 opt <- parse_args(OptionParser(option_list=option_list))
 
-print(opt)
+#print(opt)
 
 combine_predictions <- function(files, output_file){
     library(glue)
@@ -28,7 +28,7 @@ combine_predictions <- function(files, output_file){
 
     files_dt <- purrr::reduce(files_dt, dplyr::left_join, by=c('locus'))
     #files_dt <- files_dt %>% tibble::column_to_rownames('locus') %>% as.matrix()
-    data.table::fwrite(files_dt, file=output_file, quote=FALSE, row.names=FALSE, compress = 'gzip')
+    data.table::fwrite(files_dt, file=output_file, quote=FALSE, row.names=FALSE, compress = 'gzip', sep='\t')
 }
 
 
