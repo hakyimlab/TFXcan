@@ -21,22 +21,27 @@ create_genotype_dosage_and_snp_annot_files <- function(file_prefix, output_prefi
     library(tidyverse)
     library(data.table)
 
-    snp_annot <- fread(glue::glue("{file_prefix}.bim")) %>% 
+    snp_annot <- data.table::fread(glue::glue("{file_prefix}.bim")) %>% 
         setnames(.,names(.), c("chr", "snp", "CM", "pos", "alt_vcf", "ref_vcf")) %>%
         dplyr::mutate(rsid = paste(chr, pos, ref_vcf, alt_vcf, 'b38', sep=':')) %>%
         dplyr::mutate(maf = 0.01) %>%  
         dplyr::mutate(varID = str_replace_all(rsid,":","_")) %>%
         dplyr::select(chr, pos, varID, ref_vcf, alt_vcf, maf, rsid)
-    data.table::fwrite(snp_annot, file=glue("{output_prefix}.snp_annot.txt"), sep='\t', quote=F, row.names=F)
+    data.table::fwrite(snp_annot, file=glue("{output_prefix}.snp_annot.txt.gz"), sep='\t', quote=F, row.names=F, compress='gzip')
 
-    genotype <- readr::read_table(glue::glue("{file_prefix}.traw")) %>% 
+    genotype <- data.table::fread(glue::glue("{file_prefix}.traw")) %>% 
         tidyr::unite('varID', CHR, POS, COUNTED, ALT, sep = '_', remove=FALSE) %>%
         dplyr::mutate(varID = paste(varID, 'b38', sep='_')) %>%
         dplyr::select(-c(CHR,`(C)M`,POS, COUNTED, ALT, SNP)) %>% 
-        setnames(.,names(.),gsub("0_", "", colnames(.)))
-    genotype[genotype == 0] <- 2
-    genotype[genotype == 2] <- 0
-    data.table::fwrite(genotype, file=glue("{output_prefix}.geno.txt"), sep='\t', quote=F, row.names=F)
+        setnames(.,names(.),gsub("0_", "", colnames(.))) %>% 
+        dplyr::mutate(across(-varID, ~ case_when(
+                . == 0 ~ 2, 
+                . == 2 ~ 0,
+                TRUE ~ .
+        )))
+    # genotype[genotype == 0] <- 2
+    # genotype[genotype == 2] <- 0
+    data.table::fwrite(genotype, file=glue("{output_prefix}.geno.txt.gz"), sep='\t', quote=F, row.names=F, compress='gzip')
 }
 
 merge_genotype_dosage_and_snp_annot_files <- function(files_folder, output_folder, combine){
@@ -46,15 +51,15 @@ merge_genotype_dosage_and_snp_annot_files <- function(files_folder, output_folde
     library(data.table)
 
     valid_chr <- paste0('chr', c(1:22), sep='')
-    geno_files <- file.path(files_folder, glue('*{valid_chr}*.geno.txt')) |> Sys.glob() |> unique()
-    snpannot_files <- file.path(files_folder, glue('*{valid_chr}*.snp_annot.txt')) |> Sys.glob() |> unique()
-    print(glue('INFO - Found {length(geno_files)} genotype .txt files to merge.')) 
-    print(glue('INFO - Found {length(snpannot_files)} snp annotation .txt files to merge.'))
+    geno_files <- file.path(files_folder, glue('*{valid_chr}*.geno.txt.gz')) |> Sys.glob() |> unique()
+    snpannot_files <- file.path(files_folder, glue('*{valid_chr}*.snp_annot.txt.gz')) |> Sys.glob() |> unique()
+    print(glue('INFO - Found {length(geno_files)} genotype .txt.gz files to merge.')) 
+    print(glue('INFO - Found {length(snpannot_files)} snp annotation .txt.gz files to merge.'))
 
     #print(geno_files) ; print(snpannot_files)
 
     if(length(geno_files) == 0 | length(snpannot_files) == 0){
-        stop(glue('ERROR - Either there are no geno .txt files snp_annot .txt files or both in {files_folder}.'))
+        stop(glue('ERROR - Either there are no geno .txt.gz files snp_annot .txt.gz files or both in {files_folder}.'))
     } else {
 
         all_geno_files <- purrr::map(geno_files, function(gfile){
@@ -66,6 +71,7 @@ merge_genotype_dosage_and_snp_annot_files <- function(files_folder, output_folde
         }, .progress=TRUE)
         geno_file <- dplyr::bind_rows(all_geno_files)
         data.table::fwrite(geno_file, file=glue("{output_folder}/all_chrs.geno.txt"), sep='\t', quote=F, row.names=F)
+        data.table::fwrite(geno_file, file=glue("{output_folder}/all_chrs.geno.txt.gz"), sep='\t', quote=F, row.names=F, compress='gzip')
 
         rm('all_geno_files')
 
@@ -78,6 +84,8 @@ merge_genotype_dosage_and_snp_annot_files <- function(files_folder, output_folde
         }, .progress=TRUE)
         snpannot_file <- dplyr::bind_rows(all_snpannot_files)
         data.table::fwrite(snpannot_file, file=glue("{output_folder}/all_chrs.snp_annot.txt"), sep='\t', quote=F, row.names=F)
+        data.table::fwrite(snpannot_file, file=glue("{output_folder}/all_chrs.snp_annot.txt.gz"), sep='\t', quote=F, row.names=F, compress='gzip')
+        
         rm('all_snpannot_files')
 
         if(combine == 'yes'){
