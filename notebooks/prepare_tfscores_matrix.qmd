@@ -16,45 +16,36 @@ library(glue)
 ```
 
 ```{r}
-valid_chr <- paste0('chr', c(1:22, 'X'), sep='')
+valid_chr <- paste0('chr', c(1:22), sep='')
 valid_chr
 ```
 
-collect all genotypes into one
-```{r}
-dt_dir <- '/lus/grand/projects/TFXcan/imlab/data/GEUVADIS/formatted_geno'
-all_geno_files <- purrr::map(valid_chr[1:3], function(chrom){
-    ff <- glue('{dt_dir}/ALL.{chrom}.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.geno.txt')
-    if(file.exists(ff)){
-        dt <- data.table::fread(ff)
-        return(dt)
-    }
-}, .progress=TRUE)
 
-all_snpannot_files <- purrr::map(valid_chr[1:3], function(chrom){
-    ff <- glue('{dt_dir}/ALL.{chrom}.shapeit2_integrated_SNPs_v2a_27022019.GRCh38.phased.snp_annot.txt')
-    if(file.exists(ff)){
-        dt <- data.table::fread(ff)
-        return(dt)
-    }
-}, .progress=TRUE)
-```
-
+### Prepare to train on 1KG EUR individuals only
 
 ```{r}
-geno_file <- dplyr::bind_rows(all_geno_files)
-snpannot_file <- dplyr::bind_rows(all_snpannot_files)
+mtinfo <- data.table::fread('/project2/haky/Data/1000G/samples_information.txt')
+mtinfo[1:5, 1:8]
 ```
 
 ```{r}
-dt <- data.table::fread('/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/experiments/compare_predictors/tfpred_scores/aggByCollect_AR_Prostate_CWAS.linear.txt.gz')
-dim(dt)
+base_dir <- '/project2/haky/temi/projects/TFXcan/experiments/compare_predictors/tfpred_scores'
+```
+```{r}
+dt <- data.table::fread(file.path(base_dir, 'aggByCollect_AR_Prostate_1KG.linear.txt.gz'))
+dim(dt) ; dt[1:5, 1:5]
 ```
 
 ```{r}
-dt[1:5, 1:5]
+EUR_dt <- dt %>% 
+    dplyr::select(any_of(c('locus', mtinfo$`Sample name`[mtinfo$`Superpopulation code` == 'EUR']))) %>% dplyr::rename(NAME=locus)
+
+EUR_dt[1:5, 1:5] ; dim(EUR_dt)
 ```
 
 ```{r}
-dt[1, ][, -1] |> as.numeric() |> hist()
+EUR_dt %>% 
+    data.table::fwrite('/project2/haky/temi/projects/l-TFPred/data/geno_and_snps_annot/TFPred_scores_EUR.AR_Prostate.linear.txt', sep='\t', row.names=F, quote=F)
 ```
+
+

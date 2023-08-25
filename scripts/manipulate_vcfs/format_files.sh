@@ -30,7 +30,7 @@ for vfile in "${vcf_arr[@]}"; do
             --out ${plink_results_pattern}
     fi
 
-    if [ ! -f ${formatted_files_folder}/${pattern}.geno.txt ] && [ ! -f ${formatted_files_folder}/{pattern}.snp_annot.txt ]; then
+    if [ ! -f ${formatted_files_folder}/${pattern}.geno.txt.gz ] && [ ! -f ${formatted_files_folder}/{pattern}.snp_annot.txt.gz ]; then
         printf '\n%s\n' "INFO - preparing ${pattern}: R portion"
         ${rscript} ${utility_functions} --file_prefix ${plink_results_pattern} --output_prefix ${formatted_files_folder}/${pattern} --command "create_genotype_dosage_and_snp_annot_files"
     fi

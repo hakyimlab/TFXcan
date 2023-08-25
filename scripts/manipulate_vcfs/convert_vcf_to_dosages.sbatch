@@ -8,8 +8,8 @@
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=12
-#SBATCH --mem-per-cpu=32G
+#SBATCH --cpus-per-task=8
+#SBATCH --mem-per-cpu=24G
 #SBATCH --job-name=convert_vcf_to_dosages
 #SBATCH --account=pi-haky
 #SBATCH --output=/project2/haky/temi/projects/TFXcan/logs/convert_vcf_to_dosages.out
@@ -38,8 +38,8 @@ conda activate compbio-tools
 mpiexec="/opt/cray/pe/pals/1.1.7/bin/mpiexec"
 
 # 
-parent_folder=/project2/haky/Data/baca_cwas
-vcfs_path=${parent_folder}/imputed_vcf_hg38_snps_only
+parent_folder=/project2/haky/Data/1000G
+vcfs_path=${parent_folder}/vcf_snps_only
 plink_results_folder=${parent_folder}/plink_geno
 formatted_files_folder=${parent_folder}/formatted_geno
 

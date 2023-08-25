@@ -22,7 +22,7 @@ library(dplyr)
 ```{r}
 tdate <- '2023-08-17'
 
-base_dir <- '/beagle3/haky/users/temi/projects/TFXcan/baca_cwas'
+base_dir <- '/project2/haky/temi/projects/TFXcan/baca_cwas'
 data_dir <- '/project2/haky/Data/baca_cwas/cwas_weights'
 #project_dir <- '/lus/grand/projects/TFXcan/imlab/users/temi/projects/TFXcan/baca_cwas'
 output_dir <- glue('{base_dir}/data')
@@ -62,11 +62,19 @@ ar_files_locus[1:5]
 
 ```
 
+```{r}
+rdt <- new.env(parent = emptyenv())
+load(file.path(output_dir, transcription_factor, ar_files[1]), envir=rdt)
+```
+
 Next, read the files `.wgt` files
 ```{r}
-out <- purrr::map(.x=1:length(ar_files_locus), .f=function(i){
+# /project2/haky/temi/projects/TFXcan/baca_cwas
+out <- purrr::map(.x=seq_along(ar_files_locus), .f=function(i){
     locus <- ar_files_locus[i]
-    load(glue('{output_dir}/{transcription_factor}/{locus}.wgt.RDat'), rdt <- new.env())
+    #print(file.exists(glue('{output_dir}/{transcription_factor}/{locus}.wgt.RDat')))
+    rdt <- new.env(parent = emptyenv())
+    load(glue('{output_dir}/{transcription_factor}/{locus}.wgt.RDat'), envir=rdt)
     wgts <- as.data.frame(rdt$wgt.matrix) %>% 
         tibble::rownames_to_column('snp_id') %>% 
         dplyr::mutate(locus=locus)
@@ -76,8 +84,9 @@ out <- purrr::map(.x=1:length(ar_files_locus), .f=function(i){
         dplyr::select(all_of(c('V1', 'V3', 'V2', 'V4', 'V5'))) 
 
     colnames(snp_info) <- c('chr', 'snp_id', 'position', 'a1', 'a2')
-    dt <- merge(wgts, snp_info, by='snp_id') %>%
-        dplyr::relocate(dt, all_of(c('locus', 'chr', 'position', 'a1', 'a2')), .after=snp_id)
+
+    dt <- base::merge(wgts, snp_info, by='snp_id') %>% 
+        dplyr::relocate(all_of(c('locus', 'chr', 'position', 'a1', 'a2')), .after=snp_id)
     return(dt)
 }, .progress=T)
 
@@ -90,7 +99,8 @@ dim(cwas_db) ; cwas_db[1:5, ]
 # collect extra columns
 extra_dt <- purrr::map(.x=1:length(ar_files_locus), .f=function(i){
     locus <- ar_files_locus[i]
-    load(glue('{output_dir}/{transcription_factor}/{locus}.wgt.RDat'), rdt <- new.env())
+    rdt <- new.env(parent = emptyenv())
+    load(glue('{output_dir}/{transcription_factor}/{locus}.wgt.RDat'), envir=rdt)
     extra <- c(locus, transcription_factor, rdt$N.tot, rdt$N.as, rdt$cv.performance[c('rsq', 'pval'), c('lasso')] |> unname()) |> as.data.frame() |> t() |> unname()
     return(extra)
 }, .progress=T)
@@ -157,6 +167,8 @@ data.table::fwrite(hg38_cwas_extra, file=glue('{files_dir}/{transcription_factor
 
 ## Create databases
 
+
+Here I will write out two folders: one with `1...` and `chr1...`
 ```{r}
 library(RSQLite)
 library(dbplyr)
@@ -166,12 +178,17 @@ library(DBI)
 ```{r}
 db_folder <- glue('{base_dir}/db_folder')
 if(!dir.exists(db_folder)){dir.create(db_folder)}
+
+db_folder_chr <- glue('{base_dir}/db_folder_chr')
+if(!dir.exists(db_folder_chr)){dir.create(db_folder_chr)}
 ```
+
 
 ```{r}
 # write out the snps to a file
 baca_weights <- data.table::fread(glue('{files_dir}/{transcription_factor}_baca_cwas_weights_hg38_{tdate}.txt.gz'))
 baca_weights$varIDs <- with(baca_weights, paste0(chr, '_', position, '_', a1, '_', a2, '_', 'b38', sep=''))
+baca_weights$chr_varIDs <- with(baca_weights, paste0('chr', chr, '_', position, '_', a1, '_', a2, '_', 'b38', sep=''))
 baca_weights[1:5, ]
 ```
 
@@ -200,6 +217,14 @@ baca_weights_list <- purrr::map(.x=baca_models, function(each_m){
     dbWriteTable(each_db, "weights", model_weights, overwrite=T)
     dbDisconnect(each_db)
 
+    model_weights <- baca_weights %>% 
+        dplyr::select(gene=locus, rsid=snp_id, varID=chr_varIDs, ref_allele=a1, eff_allele=a2, weight=as.symbol(each_m)) %>% as.data.frame()
+
+    each_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder_chr}/baca_cwas_{each_m}.db'))
+    dbWriteTable(each_db, "extra", baca_extra, overwrite=T)
+    dbWriteTable(each_db, "weights", model_weights, overwrite=T)
+    dbDisconnect(each_db)
+
     return(0)
 })
 
@@ -207,9 +232,25 @@ names(baca_weights_list) <- baca_models
 ```
 
 
+
+
 Now you can look at one of them...
 ```{r}
 lasso_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder}/baca_cwas_lasso.db'))
+extra_dt <- tbl(lasso_db, 'extra') %>% as.data.frame()
+weights_dt <- tbl(lasso_db, 'weights') %>% as.data.frame()
+
+dbDisconnect(lasso_db)
+```
+
+```{r}
+extra_dt |> head() ; weights_dt |> head()
+```
+
+
+
+```{r}
+lasso_db <- DBI::dbConnect(RSQLite::SQLite(), glue('{db_folder_chr}/baca_cwas_lasso.db'))
 extra_dt <- tbl(lasso_db, 'extra') %>% as.data.frame()
 weights_dt <- tbl(lasso_db, 'weights') %>% as.data.frame()
 
