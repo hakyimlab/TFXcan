@@ -1,0 +1,518 @@
+
+
+
+```{r}
+library(yaml)
+library(tidyverse)
+library(data.table)
+library(Biostrings)
+library(GenomicRanges)
+library(BSgenome)
+library(BSgenome.Hsapiens.NCBI.GRCh38)
+```
+
+
+```{r}
+configyaml <- yaml.load_file("/beagle3/haky/users/temi/projects/TFPred-snakemake/metadata/enpact_models_to_train.yaml")
+```
+
+```{r}
+motifs <- lapply(configyaml, function(x) {
+  x[['motifFiles']] %>% paste0(collapse = ",")
+}) %>% 
+  do.call(rbind, .) %>%
+  as.data.table(keep.rownames = "transcription_factor") %>%
+  tidyr::separate_rows(V1, sep = ",") %>%
+  dplyr::rename(motif_file = V1) %>%
+  dplyr::mutate(name = gsub(".motif", "", motif_file))
+
+motifs %>%
+  data.table::fwrite("/beagle3/haky/users/temi/projects/Enpact/files/enpact_motifs.tsv", sep = "\t", quote = FALSE)
+```
+
+```{r}
+motif_directory <- "/beagle3/haky/users/temi/software/homer/motifs"
+```
+
+
+## Step 1: Create fasta sequences
+
+```{r}
+genome <- '/project2/haky/Data/hg_sequences/hg38/Homo_sapiens_assembly38.fasta'
+```
+
+```{r}
+gfile <- Biostrings::readDNAStringSet(genome)
+```
+
+```{r}
+# create a granges object
+locus_grange <- GenomicRanges::GRanges(seqnames = 2, IRanges::IRanges(start = 111135519 - 100000, end = 111135519 + 100000))
+ext <- BSgenome::getSeq(BSgenome.Hsapiens.NCBI.GRCh38, locus_grange)
+names(ext) <- "chr2:111135519"
+ffile <- '/beagle3/haky/users/temi/projects/Enpact/misc/chr2_111135519.fasta'
+ext_str <- toString(ext)
+
+# write to fasta
+Biostrings::writeXStringSet(ext, ffile, append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+```
+
+```{r}
+# create a granges object
+locus_grange <- GenomicRanges::GRanges(seqnames = c(22, 3), IRanges::IRanges(
+  start = c(43104206 - 500, 141421524 - 500), 
+  end = c(43104206 + 500, 141421524 + 500)))
+ext <- BSgenome::getSeq(BSgenome.Hsapiens.NCBI.GRCh38, locus_grange)
+names(ext) <- c("chr22_43004206", "chr3_141421524")
+ffile <- '/beagle3/haky/users/temi/projects/Enpact/misc/component_6.fasta'
+ext_str <- toString(ext)
+
+# write to fasta
+Biostrings::writeXStringSet(ext, ffile, append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+```
+
+## Step 2: Find the motifs within this window
+
+```{r}
+cmd = glue::glue("sbatch /beagle3/haky/users/temi/projects/Enpact/misc/findMotifs.sbatch component_6 {motifs$name} {motif_directory}/{motifs$motif_file} {ffile}")
+cmd
+```
+
+```{r}
+for(command in cmd){
+  system(command)
+}
+```
+
+
+## Step 3: read and combine motif files
+
+```{r}
+match_pattern <- paste0(motifs$name, ".txt", collapse = "|")
+```
+
+```{r}
+motif_files <- list.files("/beagle3/haky/users/temi/projects/Enpact/data/tfxcan_motifs/component_6", full.names = TRUE, recursive = TRUE, pattern = match_pattern)
+```
+
+```{r}
+list_found_motifs <- lapply(motif_files, function(x) {
+  dt <- read.table(x, header = TRUE, sep = "\t") %>%
+    dplyr::mutate(transcription_factor = gsub(".txt", "", basename(x)))
+  if(nrow(dt) == 0){
+    cnames <- colnames(dt)
+    dt <- data.table::data.table(matrix(NA, nrow = 1, ncol = length(cnames)))
+    colnames(dt) <- cnames
+    dt <- dt %>% 
+      dplyr::mutate(transcription_factor = gsub(".txt", "", basename(x)))
+  }
+  return(dt)
+}) 
+
+names(list_found_motifs) <- gsub(".txt", "", basename(motif_files))
+
+found_motifs <- dplyr::bind_rows(list_found_motifs)
+found_motifs <- found_motifs[complete.cases(found_motifs), ]
+```
+
+```{r}
+
+# c("CTCF", "MYC", "YY1", "FOSL2", "ZNF317", 'RUNX1', 'ZFX', 'CUX1', 'STAT1', 'ZFX')
+count_found_motifs <- found_motifs %>%
+  dplyr::full_join(motifs, by = c("transcription_factor" = "name")) %>%
+  dplyr::rename(motif_name = transcription_factor, transcription_factor =  transcription_factor.y) %>%
+  dplyr::group_by(FASTA.ID, transcription_factor) %>%
+  dplyr::summarize(n_motifs = n(), avg_score = mean(MotifScore)) %>%
+  dplyr::arrange(desc(n_motifs)) %>%
+  dplyr::filter(!is.na(avg_score)) %>%
+  dplyr::arrange(desc(avg_score)) %>%
+  dplyr::ungroup() 
+
+# highlight some transcription_factors
+count_found_motifs <- count_found_motifs %>%
+  dplyr::mutate(transcription_factor = forcats::fct_reorder(transcription_factor, avg_score, .desc = TRUE)) %>%
+  dplyr::mutate(highlight = ifelse(transcription_factor %in% c("NR3C1", "AR", "FOXA1", "ESRRA", "NANOG", 'ESR1', 'ETV1', 'GATA2', 'ERG', 'GATA3'), 'yes', "no"))
+
+count_found_motifs %>% View()
+```
+
+```{r}
+# text
+txt <- "Presence of TF motif within 400kb of chr2:111135519"
+
+# plot
+count_found_motifs %>%
+  ggplot(aes(x = transcription_factor, y = avg_score, fill = highlight)) +
+  geom_col(col = 'black', linewidth=0.05) +
+  theme_minimal() +
+  labs(title = txt, x = "Transcription factor", y = "Average motif score", subtitle = 'Red bars are top TFs driving factor 4') +
+  scale_fill_manual( values = c( "yes" = "red", "no"="gray94" ), guide = 'none' ) +
+  theme_simple +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~FASTA.ID, nrow = 2, scales = "free")
+  #annotate("text", x=50, y=11, label= txt)
+```
+
+
+# Systematic analysis of the motifs
+
+```{r}
+component_drivers <- readRDS("/beagle3/haky/users/temi/projects/Enpact/files/component_drivers.rds")
+```
+
+# create a granges object
+locus_grange <- GenomicRanges::GRanges(seqnames = c(22, 3), IRanges::IRanges(
+  start = c(43104206 - 500, 141421524 - 500), 
+  end = c(43104206 + 500, 141421524 + 500)))
+ext <- BSgenome::getSeq(BSgenome.Hsapiens.NCBI.GRCh38, locus_grange)
+names(ext) <- c("chr22_43004206", "chr3_141421524")
+ffile <- '/beagle3/haky/users/temi/projects/Enpact/misc/component_6.fasta'
+ext_str <- toString(ext)
+
+# write to fasta
+Biostrings::writeXStringSet(ext, ffile, append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+
+```{r}
+# given a candidate, create granges
+create_granges_from_candidate_vectors <- function(candidates, append_width = 256){
+  cd <- strsplit(candidates, ":") %>% do.call(rbind, .) %>% as.data.table() %>% dplyr::mutate(V2 = as.numeric(V2), V3 = as.numeric(gsub("chr", '', V1)))
+  grange <- with(cd, GenomicRanges::GRanges(seqnames = V3, IRanges::IRanges(
+    start = V2 - append_width, 
+    end = V2 + append_width)))
+  
+  nn <- paste0(cd$V1, "_", cd$V2)
+  return(list(grange, nn))
+}
+
+```
+
+```{r}
+
+commands <- list()
+
+for(k in names(component_drivers)){
+  k_granges <- create_granges_from_candidate_vectors(component_drivers[[k]]$candidates)
+  k_ext <- BSgenome::getSeq(BSgenome.Hsapiens.NCBI.GRCh38, k_granges[[1]])
+  names(k_ext) <- k_granges[[2]]
+  
+  # write to fasta
+  ffile <- paste0('/beagle3/haky/users/temi/projects/Enpact/misc/', k, '.fasta')
+  ee <- Biostrings::writeXStringSet(k_ext, ffile, append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+
+  k_motifs <- motifs %>% 
+    dplyr::filter(transcription_factor %in% component_drivers[[k]]$driver_factors | transcription_factor %in% component_drivers[[k]]$nondriver_factors)
+
+  cmd = glue::glue("sbatch /beagle3/haky/users/temi/projects/Enpact/misc/findMotifs.sbatch {k} {k_motifs$name} {motif_directory}/{k_motifs$motif_file} {ffile}")
+
+  commands[[k]] <- cmd
+}
+```
+
+```{r}
+# how many commands do I have to run
+sapply(commands, length) |> sum() # this is feasible. I think the maximum is 1000
+```
+
+```{r}
+for(command in commands){
+  for(cmd in command){
+    system(cmd)
+  }
+  Sys.sleep(10)
+}
+```
+
+```{r}
+k6_granges <- create_granges_from_candidate_vectors(component_drivers$k6$candidates)
+k6_ext <- BSgenome::getSeq(BSgenome.Hsapiens.NCBI.GRCh38, k6_granges[[1]])
+names(k6_ext) <- k6_granges[[2]]
+
+# write to fasta
+ffile <- '/beagle3/haky/users/temi/projects/Enpact/misc/component_6.fasta'
+Biostrings::writeXStringSet(k6_ext, ffile, append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+```
+
+```{r}
+# filter to only component 6 motifs
+k6_motifs <- motifs %>% 
+  dplyr::filter(transcription_factor %in% component_drivers$k6$driver_factors | transcription_factor %in% component_drivers$k6$nondriver_factors) 
+```
+
+
+```{r}
+cmd = glue::glue("sbatch /beagle3/haky/users/temi/projects/Enpact/misc/findMotifs.sbatch component_6 {k6_motifs$name} {motif_directory}/{k6_motifs$motif_file} {ffile}")
+cmd
+```
+
+```{r}
+for(command in cmd){
+  system(command)
+}
+```
+
+```{r}
+match_pattern <- paste0(k6_motifs$name, ".txt", collapse = "|")
+```
+
+```{r}
+motif_files <- list.files("/beagle3/haky/users/temi/projects/Enpact/data/tfxcan_motifs/component_6", full.names = TRUE, recursive = TRUE, pattern = match_pattern)
+```
+
+```{r}
+list_found_motifs <- lapply(motif_files, function(x) {
+  dt <- read.table(x, header = TRUE, sep = "\t") %>%
+    dplyr::mutate(transcription_factor = gsub(".txt", "", basename(x)))
+  if(nrow(dt) == 0){
+    cnames <- colnames(dt)
+    dt <- data.table::data.table(matrix(NA, nrow = 1, ncol = length(cnames)))
+    colnames(dt) <- cnames
+    dt <- dt %>% 
+      dplyr::mutate(transcription_factor = gsub(".txt", "", basename(x)))
+  }
+  return(dt)
+}) 
+
+names(list_found_motifs) <- gsub(".txt", "", basename(motif_files))
+
+found_motifs <- dplyr::bind_rows(list_found_motifs)
+found_motifs <- found_motifs[complete.cases(found_motifs), ]
+```
+
+```{r}
+
+# c("CTCF", "MYC", "YY1", "FOSL2", "ZNF317", 'RUNX1', 'ZFX', 'CUX1', 'STAT1', 'ZFX')
+count_found_motifs <- found_motifs %>%
+  dplyr::full_join(motifs, by = c("transcription_factor" = "name")) %>%
+  dplyr::rename(motif_name = transcription_factor, transcription_factor =  transcription_factor.y) %>%
+  dplyr::group_by(FASTA.ID, transcription_factor) %>%
+  dplyr::summarize(n_motifs = n(), avg_score = mean(MotifScore)) %>%
+  dplyr::arrange(desc(n_motifs)) %>%
+  dplyr::filter(!is.na(avg_score)) %>%
+  dplyr::arrange(desc(avg_score)) %>%
+  dplyr::ungroup() 
+
+# highlight some transcription_factors
+count_found_motifs <- count_found_motifs %>%
+  dplyr::mutate(transcription_factor = forcats::fct_reorder(transcription_factor, avg_score, .desc = TRUE)) %>%
+  dplyr::mutate(driver = ifelse(transcription_factor %in% component_drivers$k6$driver_factors, 'yes', "no"))
+
+count_found_motifs %>% View()
+```
+
+```{r}
+# text
+txt <- "Presence of TF motif within 400kb of chr2:111135519"
+
+# plot
+count_found_motifs %>%
+  ggplot(aes(x = transcription_factor, y = avg_score, fill = driver)) +
+  geom_col(col = 'black', linewidth=0.05) +
+  theme_minimal() +
+  labs(title = txt, x = "Transcription factor", y = "Average motif score", subtitle = 'Red bars are top TFs driving factor 4') +
+  scale_fill_manual( values = c( "yes" = "red", "no"="gray94" ), guide = 'none' ) +
+  theme_simple +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~FASTA.ID, nrow = 2, scales = "free")
+  #annotate("text", x=50, y=11, label= txt)
+```
+
+```{r}
+# text
+txt <- "Presence of TF motif within 400kb of chr2:111135519"
+
+# plot
+count_found_motifs %>%
+  ggplot(aes(x = driver, y = avg_score)) +
+  geom_boxplot() +
+  theme_minimal() +
+  theme_simple +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  facet_wrap(~FASTA.ID, nrow = 2, scales = "free")
+```
+
+```{r}
+count_found_motifs %>%
+  dplyr::group_by(FASTA.ID, driver) %>%
+  dplyr::summarize(sum_motifs = sum(n_motifs)) %>%
+  ggplot(aes(x = driver, y = sum_motifs)) +
+  geom_col(fill = 'brown', col ='black') +
+  theme_minimal() +
+  theme_simple +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1)) +
+  facet_wrap(~FASTA.ID, nrow = 2, scales = "free") +
+  labs(title = "Number of motifs found in the 1kb window", x = "Driver Transcription factor", y = "Number of Motifs")
+```
+
+
+
+```{r}
+ggplot() +
+  geom_bar(aes(x = count_found_motifs$transcription_factor, y=count_found_motifs$avg_score), stat = "identity")
+```
+
+```{r}
+# significant motifs
+count_found_motifs %>%
+  dplyr::filter(transcription_factor %in% c("GRHL2", "RUNX1", "ETV1", "GATA2", "MYC", "NANOG", "FOXP1", "ERG", "GABPA", "NR3C1", "FOXA1", "VDR", "AR", "RUNX2"))
+```
+
+
+```{r}
+# non-significant motifs
+count_found_motifs %>%
+  dplyr::filter(!transcription_factor %in% c("GRHL2", "RUNX1", "ETV1", "GATA2", "MYC", "NANOG", "FOXP1", "ERG", "GABPA", "NR3C1", "FOXA1", "VDR", "AR", "RUNX2"))
+```
+
+
+```{r}
+# the fasta file 
+fasta_sequences <- "/beagle3/haky/users/temi/projects/Enpact/misc/chr_test.fa"
+fasta_sequences <- readr::read_lines(fasta_sequences)#[[2]]
+nchar(fasta_sequences)
+```
+
+```{r}
+list_found_motifs['ctcf']
+```
+
+```{r}
+str_sequences <- stringr::str_split(fasta_sequences, pattern = "", simplify = FALSE)[[2]]
+str_sequences[1:5]
+```
+
+```{r}
+length(str_sequences)
+```
+
+
+```{r}
+str_sequences[10001]
+```
+
+
+```{r}
+str_sequences[9928:9949]
+```
+
+# GWAS loci to motif distance matrix
+
+```{r}
+Y_mat <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.matrix.rds")
+Y_mat[1:5, 1:5]; dim(Y_mat)
+```
+
+
+```{r}
+gwas_loci <- rownames(Y_mat) %>% strsplit(":") %>% do.call('rbind', .) %>% data.table::as.data.table()
+```
+
+```{r}
+tfs <- colnames(Y_mat) %>% strsplit("_") %>% sapply(., getElement, 1) %>% unique()
+```
+
+```{r}
+# write to a list
+write(tfs, file = "/beagle3/haky/users/temi/projects/Enpact/misc/list_of_enpact_transcription_factors.txt")
+```
+
+```{r}
+homer_path <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/homer_instances'
+```
+
+```{r}
+tf_motifs <- data.table::fread(file.path(homer_path, 'AR', 'merged_motif_file.txt'))
+```
+
+```{r}
+valid_chr <- paste('chr', 1:22, sep = '')
+```
+
+```{r}
+granges.tf_motifs <- with(tf_motifs, GenomicRanges::GRanges(seqnames = V2, IRanges::IRanges(start = V3, end = V4), score = V6)) %>%
+  plyranges::filter(seqnames %in% valid_chr)
+```
+
+```{r}
+granges.gwas_loci <- with(gwas_loci, GenomicRanges::GRanges(seqnames = V1, IRanges::IRanges(start = as.numeric(V2), end = as.numeric(V2)))) %>%
+  plyranges::filter(seqnames %in% valid_chr)
+
+granges.gwas_loci
+```
+
+```{r}
+dd <- IRanges::distanceToNearest(granges.gwas_loci, granges.tf_motifs)
+```
+
+```{r}
+aa <- granges.tf_motifs[subjectHits(dd)] %>% as.data.table() %>% dplyr::mutate(motif_site = paste0(seqnames, '_', start, '_', end)) %>% dplyr::select(motif_site, score)
+
+bb <- granges.gwas_loci[queryHits(dd)] %>% as.data.table() %>%
+  dplyr::mutate(gwas_loci = paste0(seqnames, '_', start), distance = elementMetadata(dd)$distance) %>% dplyr::select(gwas_loci, distance)
+
+bind_cols(aa, bb)
+```
+
+
+```{r}
+dt_distance <- purrr::map(tfs, function(tf){
+  ff <- file.path(homer_path, tf, 'merged_motif_file.txt')
+  motifs <- data.table::fread(ff)
+
+  granges.tf_motifs <- with(motifs, GenomicRanges::GRanges(seqnames = V2, IRanges::IRanges(start = V3, end = V4), score = V6)) %>% 
+    plyranges::filter(seqnames %in% valid_chr)
+
+  dd <- IRanges::distanceToNearest(granges.gwas_loci, granges.tf_motifs)
+
+  aa <- granges.tf_motifs[subjectHits(dd)] %>% 
+    as.data.table() %>% 
+    dplyr::mutate(motif_site = paste0(seqnames, '_', start, '_', end)) %>% 
+    dplyr::select(motif_site, score)
+
+  bb <- granges.gwas_loci[queryHits(dd)] %>% 
+    as.data.table() %>%
+    dplyr::mutate(gwas_loci = paste0(seqnames, '_', start), distance = elementMetadata(dd)$distance) %>% 
+    dplyr::select(gwas_loci, distance)
+
+  dt <- bind_cols(aa, bb) %>% dplyr::mutate(transcription_factor = tf)
+  return(dt)
+}, .progress = TRUE)
+```
+
+```{r}
+tfs_list <- "/beagle3/haky/users/temi/projects/Enpact/misc/list_of_enpact_transcription_factors.txt"
+
+output_basename <- '/beagle3/haky/users/temi/projects/Enpact/misc/distance/prca_risk.gwas_loci'
+```
+
+```{r}
+cmd <- glue::glue('sbatch /beagle3/haky/users/temi/projects/Enpact/src/calculateDistanceToMotifs.sbatch {output_basename} {tfs_list}')
+print(cmd)
+```
+
+
+
+```{r}
+distance_dt <- purrr::map(list.files(dirname(output_basename), full.names = T), data.table::fread) %>% dplyr::bind_rows()
+```
+
+
+```{r}
+distance_matrix <- distance_dt %>% 
+  dplyr::select(gwas_loci, distance, transcription_factor) %>%
+  tidyr::pivot_wider(names_from = transcription_factor, values_from = distance)
+```
+
+
+```{r}
+distance_matrix[1:5, 1:5]
+```
+
+
+```{r}
+
+```
