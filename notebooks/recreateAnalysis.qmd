@@ -1,0 +1,4637 @@
+---
+title: TFXcan paper figures (main and supplementary)
+date: "2024-11-21"
+date-modified: today
+author: Temi
+fig-format: png
+fig-dpi: 800
+---
+
+::: {.callout-warning}
+This notebook is complete but changes may be made to the figures and tables.
+:::
+
+# Introduction 
+
+A notebook for the figures used in the TFXcan paper. Many of these analysis were done in other notebooks and the results saved in the `data` folder. The aim of this notebook is to do a few analysis as possible and focus on the figures.
+
+::: {.callout-note}
+## Software and packages for this notebook
+If you can use conda to create an R environment, that would be best. Otherwise, you are free to install package your preferred way.
+Here is an environment yaml file you can use: `https://uchicago.box.com/shared/static/0qxuj0384k51ip54jv5pr5xj20t2kx2i.yaml`
+Run the following:
+
+1. conda env create --file ./r-env.yaml --name r-env #or a name you want
+
+2. conda activate r-env
+
+3. r #or R or radian
+:::
+
+```{r}
+knitr::opts_chunk$set(cache.rebuid = TRUE, fig.width = 4, fig.height = 4, fig.format = 'png', fig.dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE <- list()
+
+ALL_FIGURES <- list()
+```
+
+## Initial definitions library loading
+```{r initial definitions}
+suppressMessages(library(tidyverse))
+suppressMessages(library(glue))
+
+# # this `PRE` should be edited accordingly 
+
+# # PRE = '/Users/temi/Library/CloudStorage/Box-Box/imlab-data/data-Github/web-data'
+# PRE = '/Users/temidayoadeluwa/Library/CloudStorage/Box-Box/imlab-data/data-Github/web-data'
+# #PRE = "/Users/haekyungim/Library/CloudStorage/Box-Box/LargeFiles/imlab-data/data-Github/web-data"
+
+# SLUG <- "tfxcan-paper-analysis"
+# bDATE <- '2024-05-16'
+# data_dir <- glue("{PRE}/{bDATE}-{SLUG}/data")
+# if(!file.exists(data_dir)) system(glue::glue("mkdir {data_dir}"))
+# ##system(glue("open {DATA}")) ## this will open the folder 
+# #2024-05-16-tfxcan-paper-analysis
+
+#data_dir <- '/project2/haky/temi/projects/Enpact-figures/data'
+data_dir <- enpact_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/data'
+suppdata_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/supplementary'
+models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
+updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
+```
+
+- [X] Temi: please add in this folder (the equivalent on your computer) all the reasonably sized data (<200MB) and minimal code to reproduce your figures here? `/Users/haekyungim/Library/CloudStorage/Box-Box/LargeFiles/imlab-data/data-Github/web-data/2024-05-16-tfxcan-paper-analysis`
+
+```{r message=F, warning=F}
+library(glue)
+library(GenomicRanges)
+library(R.utils)
+library(data.table)
+library(tidyverse)
+# library(pROC)
+library(qvalue)
+library(VennDiagram)
+# library(ggVennDiagram)
+library(ggpubr)
+library(qqman)
+library(rstatix)
+library(EnsDb.Hsapiens.v86)
+library(gridExtra)
+# library(locuszoomr)
+library(ggplot2)
+library(glmnet)
+library(patchwork)
+library(locuszoomr)
+library(cowplot)
+library(gprofiler2)
+library(openxlsx)
+library(AnnotationHub)
+```
+
+I use some of the functions in these gists;
+
+```{r warning=F, message=F}
+devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
+devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
+devtools::source_gist('https://gist.github.com/TemiPete/e7214eb308c4116e2f10ee96401be0c2')
+devtools::source_gist('https://gist.github.com/TemiPete/b309a46e25ecec93127fb6756e68fb14')
+devtools::source_gist('https://gist.github.com/TemiPete/9c487a30e2c1a27a1d46b68128c82d10')
+
+devtools::source_gist("https://gist.github.com/TemiPete/d303781c7ddd9b6d8b4d0163804e80c2")
+```
+
+
+```{r}
+logitsToProbabilities <- function(x){
+    if(any(is.na(x))){
+        stop('ERROR - There are NAs in your supplied x. Remove them first.')
+    }
+    out <- exp(x)/(1 + exp(x))
+    return(out)
+}
+```
+
+```{r}
+theme_simple <- theme_bw() + theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(family = 'Helvetica', colour = 'black', size = 9.33),
+    text=element_text(size=9.33, colour = 'black', family = 'Helvetica'),
+    axis.text = element_text(hjust = 1), 
+    axis.text.x = element_text( hjust=0.5), 
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5)
+)
+```
+
+```{r}
+SUPPLEMENTARY_TABLES <- list()
+```
+
+```{r}
+# mappings
+dt_mapping <- data.table::fread(file.path(enpact_data_dir, 'enformer-tracks-annotated-resaved-2.txt')) %>%
+    dplyr::select(target, assay, feature_names) %>%
+    dplyr::mutate(target = case_when(
+        target == "" ~ assay,
+        TRUE ~ target
+    ))
+dt_mapping[1:5, ]
+```
+
+```{r}
+# organ and slims annotation
+dt_slims <- data.table::fread(file.path(enpact_data_dir, "enpact_slims.txt")) %>%
+    dplyr::mutate(index = index + 1, feature = paste0("f_", index)) %>%
+    dplyr::select(-c(index, genome, identifier, file, clip, scale, sum_stat))
+dt_slims[1:5, 1:5]
+```
+
+```{r}
+dt_merged <- dplyr::inner_join(dt_mapping, dt_slims, by = c("feature_names" = "feature"))
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 1']] <- dt_merged
+```
+
+# FIGURE 2
+
+```{r}
+FIGURE_2 <- list()
+```
+
+```{r}
+# these weird tissues should be removed 
+weird_tissues <- c("endometrioidadenocarcinoma", "HCT116", "HeLacontaminant", "Headandneck", "LNCaPcells", "PeritonealEffusion")
+
+#performance_file <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/statistics/ENPACT_734_2024-07-26.compiled_stats.txt'
+performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
+performance <- data.table::fread(performance_file)
+
+tf_tissues_removed <- performance %>%
+    dplyr::filter(type == 'test') %>%
+    dplyr::filter(is.na(auc) | context %in% weird_tissues | auc < 0.7)
+
+performance <- performance %>%
+    dplyr::filter(!model %in% tf_tissues_removed$model)
+```
+
+How many experiments pass the filtering thresholds?
+
+```{r}
+performance %>%
+    dplyr::filter(type == 'test') %>%
+    dplyr::pull(num_training_files) %>%
+    sum()
+```
+
+```{r}
+valid_tf_tissues <- performance %>%
+    dplyr::filter(type == 'test') %>%
+    dplyr::pull(model) %>%
+    unique()
+
+length(valid_tf_tissues)
+```
+
+
+```{r}
+weights_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz'
+weights <- data.table::fread(weights_file)
+weights <- weights %>%
+    dplyr::select(all_of(c('feature', valid_tf_tissues))) 
+```
+
+```{r}
+dim(weights)
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 2']] <- weights
+SUPPLEMENTARY_TABLES[['Supplementary Table 3']] <- performance
+```
+
+```{r}
+# FIGURE_2 <- list()
+SUPPLEMENTARY_FIGURE_1 <- list()
+```
+
+Read in the weights
+
+```{r}
+ar_prostate <- data.frame(beta = weights$AR_Prostate, feature = paste0('f_', 1:nrow(weights))) %>%
+    dplyr::left_join(dt_mapping, by = c('feature' = 'feature_names')) %>%
+    dplyr::left_join(dt_slims, by = c('feature' = 'feature')) %>%
+    dplyr::select(feature, beta, target, assay, organ_slims, developmental_slims, cell_slims) %>%
+    dplyr::relocate(feature)
+```
+
+```{r}
+test_performance <- performance[type == 'test', ]
+train_performance <- performance[type == 'train', ]
+```
+
+## Distribution of tf-tissue pairs trained
+
+Number of unique transcription factors and tissues trained on each tissue
+```{r}
+train_performance$assay |> unique() |> length();
+train_performance$context |> unique() |> length()
+```
+
+```{r}
+test_performance$assay |> unique() |> length();
+test_performance$context |> unique() |> length()
+```
+
+```{r}
+# SUPPLEMENTARY_TABLES[["1: TF tissue pairs trained using Enpact"]] <- performance
+# SUPPLEMENTARY_TABLES[["2: TF tissue pairs removed from Enpact"]] <- tf_tissues_removed
+```
+
+```{r}
+gg_qq_empirical <- function(a, b, quantiles = seq(0, 1, 0.01), name=NULL, btype='normal', mlog10_p_thres=30, neglog10 = TRUE)
+{
+  a_lab <- deparse(substitute(a))
+  n <- length(a)
+  p_thres = 10^{-mlog10_p_thres}
+    if( sum( a < p_thres) ){
+        warning(paste("thresholding p to ", p_thres) )
+        a = pmax(a, p_thres)
+    }
+
+
+  if(missing(b)) {
+    if(btype == 'normal'){
+        b <- rnorm(length(a), mean(a), sd(a))
+        b_lab <- "normal distribution"
+    } else if(btype == 'uniform'){
+        b <- qunif(ppoints(n), min=0, max=1)[order(order(a))]
+        b_lab <- "uniform distribution"
+    }
+  } 
+
+  else b_lab <- deparse(substitute(b))
+  # paste(deparse(substitute(a)), "quantiles")
+  
+  ggplot(mapping = aes(x = -log10(b), 
+                       y = -log10(a))) + 
+    geom_point() +
+    geom_abline(aes(slope = 1, intercept = 0), linetype = 2, col = 'grey')
+}
+
+```
+
+### Tf/tissue pairs with aucs > 0.7
+
+```{r}
+test_performance %>%
+    dplyr::filter(auc >= 0.7) %>%
+    dim()
+```
+
+```{r}
+test_performance %>%
+    dplyr::filter(auc < 0.7) %>%
+    dim()
+```
+
+### Enpact models performance; AUROC and t-test p-values
+
+#### Histogram of AUCs
+
+```{r}
+auc_hist <- test_performance %>%
+    dplyr::filter(auc >= 0.7) %>%
+    ggplot(.) + aes(x = auc) + 
+    geom_histogram(binwidth = 0.01, fill = 'skyblue', col = 'black') +
+    labs(x = 'AUROC', y = 'Number of TF-tissue Predictors') + theme_simple +
+    xlim(c(0.70,1)) 
+    # +
+    # scale_x_continuous(labels = seq(0.70, 1, by = 0.1), breaks = seq(0.70, 1, by = 0.1))
+
+auc_hist
+```
+
+```{r}
+# how many are bonferonni significant
+test_performance %>%
+    dplyr::filter(auc >= 0.7) %>%
+    dplyr::mutate(bf_signif = ttest_pvalue < (0.05/length(.$ttest_pvalue))) %>%
+    dplyr::pull(bf_signif) %>%
+    table() %>% prop.table()
+
+test_performance %>%
+    dplyr::filter(auc >= 0.7) %>%
+    dplyr::mutate(bf_signif = ttest_pvalue < (0.05/length(.$ttest_pvalue))) %>%
+    dplyr::pull(bf_signif) %>%
+    table()
+```
+
+```{r}
+FIGURE_2$auc_histogram <- auc_hist
+```
+
+#### QQ plot of test performance p-values
+
+```{r}
+qqplot_performance_pvalues <- gg_qq_empirical(test_performance$ttest_pvalue[!is.na(test_performance$ttest_pvalue)],btype = 'uniform') + theme_simple +
+    labs(x = expression("Expected -log"[10]*"P (if null)"), 
+         y = expression("Observed -log"[10]*"P")) 
+
+qqplot_performance_pvalues
+```
+
+```{r}
+FIGURE_2$qqplot_performance_pvalues <- qqplot_performance_pvalues
+```
+
+## Relative contribution of epigenetic features to all weights (average)
+
+```{r}
+# avg_weights <- weights %>% tibble::column_to_rownames('feature') %>% as.matrix() %>% abs() %>% rowMeans() %>% as.data.frame() %>% tibble::rownames_to_column('feature') %>% setNames(c('feature', 'avg_beta'))
+```
+
+```{r}
+avg_weights <- weights %>% tibble::column_to_rownames('feature') %>% as.matrix() %>% abs() %>% as.data.frame() %>% tibble::rownames_to_column('feature') #%>% setNames(c('feature', 'avg_beta'))
+```
+
+```{r}
+dt_weights <- dplyr::inner_join(dt_mapping, avg_weights, by = c("feature_names" = "feature"))
+```
+
+```{r}
+# merge ATAC and dnase => Chromatin Acc.
+dt_qqplots <- dt_weights %>%
+    dplyr::mutate(assay = case_when(
+        assay == "ATAC-seq" ~ "Chromatin Acc",
+        assay == "DNase-seq" ~ "Chromatin Acc",
+        TRUE ~ assay
+    ))
+```
+
+```{r}
+# feautures 
+categories <- dt_qqplots$assay |> unique()
+categories <- categories[!categories == ""]
+qqdt <- list()
+
+for(category in categories){
+
+    ydt <- dt_qqplots %>% dplyr::filter(assay == category) %>% dplyr::select(-target, -assay, -feature_names) %>% as.matrix()
+    xdt <- dt_qqplots %>% dplyr::select(-target, -assay, -feature_names) %>% as.matrix()
+    qq <- qqplot(xdt, ydt, plot.it = F)
+    qqdt[[category]] <- data.frame(x = qq$x, y = qq$y, category = category)
+}
+
+qqdt <- do.call(rbind, qqdt)
+```   
+
+```{r}
+# to make plotting easier, I sample
+set.seed(2025)
+sampled.qqdt <- qqdt %>% group_by(category) %>% sample_n(2000)
+```
+
+```{r, fig.width = 7, fig.height = 3}
+qqplot_all_weights <- ggplot(sampled.qqdt, aes(x = x, y = y, color = category)) +
+    geom_abline(intercept = 0, slope = 1 , color = "grey", linewidth = 0.5, lty = "dashed") +
+    geom_point(size = 2) +
+    labs(y = "Category |weights|", x = "All Categories |weights|", subtitle = "All weights of TF binding in tissues") +
+    theme_simple +
+    ggplot2::guides(col = guide_legend(title = 'Category', override.aes = list(size = 1), byrow = FALSE)) +
+    scale_color_brewer(palette = "Set1")
+
+qqplot_all_weights
+```
+
+```{r}
+ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_all_weights.png', qqplot_all_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+#FIGURE_2$qqplot_all_weights <- qqplot_all_weights
+```
+
+
+```{r}
+# aa <- weights %>% dplyr::select(feature, AR_Prostate, AR_Breast, AR_EmbryonicKidney, AR_MammaryGland) 
+
+# bb <- dt_slims %>% dplyr::select(feature, description)
+
+# cc <- dplyr::full_join(aa, bb, by = 'feature')
+```
+
+```{r}
+# cc %>% dplyr::arrange(desc(abs(AR_EmbryonicKidney))) %>% head() |> View()
+```
+
+### For AR_Prostate
+
+```{r}
+ar_weights <- weights %>% tibble::column_to_rownames('feature') %>% dplyr::select(AR_Prostate) %>% as.matrix() %>% abs() %>% as.data.frame() %>% tibble::rownames_to_column('feature')
+```
+
+```{r}
+dt_ar_weights <- dplyr::inner_join(dt_mapping, ar_weights, by = c('feature_names' = 'feature')) %>% dplyr::select(-feature_names)
+
+# merge ATAC and dnase => Chromatin Acc.
+dt_ar_qqplots <- dt_ar_weights %>%
+    dplyr::mutate(assay = case_when(
+        assay == "ATAC-seq" ~ "Chromatin Acc",
+        assay == "DNase-seq" ~ "Chromatin Acc",
+        TRUE ~ assay
+    ))
+
+dt_ar_qqplots[1:5, ]
+```
+
+```{r}
+# feautures 
+categories <- dt_ar_qqplots$assay |> unique()
+categories <- categories[!categories == ""]
+qqdt <- list()
+
+for(category in categories){
+
+    ydt <- dt_ar_qqplots %>% 
+        dplyr::filter(assay == category) %>% 
+        dplyr::select(AR_Prostate) %>% 
+        as.matrix()
+    xdt <- dt_ar_qqplots %>% 
+        dplyr::select(AR_Prostate) %>% 
+        as.matrix()
+    qq <- qqplot(xdt, ydt, plot.it = F)
+    qqdt[[category]] <- data.frame(x = qq$x, y = qq$y, category = category)
+}
+
+qqdt <- do.call(rbind, qqdt)
+```   
+
+```{r, fig.width = 5, fig.height = 3}
+# legend.title = element_text(size = 3), 
+#                legend.text = element_text(size = 3),
+
+qqplot_ar_prostate_weights <- ggplot(qqdt, aes(x = x, y = y, color = category)) +
+    geom_abline(intercept = 0, slope = 1 , color = "grey", linewidth = 0.5, lty = "dashed") +
+    geom_point(size = 2) +
+    labs(x = "All Categories |weights|", y = "Category |weights|", subtitle = "Weights of AR binding \nin prostate tissues") +
+    theme_simple  +
+    ggplot2::guides(col = guide_legend(title = 'Category', override.aes = list(size = 1), byrow = FALSE)) +
+    scale_color_brewer(palette = "Set1")
+
+qqplot_ar_prostate_weights
+```
+
+```{r}
+ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_ar_prostate_weights.png', qqplot_ar_prostate_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+# qqplots_weights <- patchwork::wrap_plots(qqplot_ar_prostate_weights, qqplot_all_weights) + plot_layout(axes = 'collect', guides = "collect")
+```
+
+```{r}
+# ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_weights.png', qqplots_weights, width = 8000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+FIGURE_2$qqplot_ar_prostate_weights <- qqplot_ar_prostate_weights
+```
+
+
+### For other TFs
+
+```{r}
+list_of_tfs <- c('FOXA1_Lung', 'HOXB13_Colon', 'GATA2_Blood', 'GATA3_Brain', 'CTCF_Kidney', 'REST_Liver')
+
+# qqdt_list <- list()
+
+qqplots_many <- purrr::map(list_of_tfs, function(tf){
+    tf_weights <- weights %>% 
+        tibble::column_to_rownames('feature') %>% 
+        dplyr::select(all_of(tf)) %>%  as.matrix() %>% abs() %>% as.data.frame() %>% tibble::rownames_to_column('feature')
+
+    dt_tf_weights <- dplyr::inner_join(dt_mapping, tf_weights, by = c('feature_names' = 'feature')) %>% 
+        dplyr::select(-feature_names)
+
+        # merge ATAC and dnase => Chromatin Acc.
+    dt_tf_qqplots <- dt_tf_weights %>%
+        dplyr::mutate(assay = case_when(
+            assay == "ATAC-seq" ~ "Chromatin Acc",
+            assay == "DNase-seq" ~ "Chromatin Acc",
+            TRUE ~ assay
+        ))
+    
+    # feautures 
+    categories <- dt_tf_qqplots$assay |> unique()
+    categories <- categories[!categories == ""]
+    qqdt <- list()
+
+    for(category in categories){
+
+        ydt <- dt_tf_qqplots %>% 
+            dplyr::filter(assay == category) %>% 
+            dplyr::select(all_of(tf)) %>% 
+            as.matrix()
+        xdt <- dt_tf_qqplots %>% 
+            dplyr::select(all_of(tf)) %>% 
+            as.matrix()
+        qq <- qqplot(xdt, ydt, plot.it = F)
+        qqdt[[category]] <- data.frame(x = qq$x, y = qq$y, category = category)
+    }
+
+    qqdt <- do.call(rbind, qqdt)
+
+    # qqdt_list[[tf]] <<- dt_tf_weights
+
+    qqplot_tf_prostate_weights <- ggplot(qqdt, aes(x = x, y = y, color = category)) +
+        geom_abline(intercept = 0, slope = 1 , color = "grey", linewidth = 0.5, lty = "dashed") +
+        geom_point(size = 2) +
+        labs(x = "All Categories |weights|", y = "Category |weights|", subtitle = glue::glue("{tf}")) +
+        theme_simple  +
+        ggplot2::guides(col = guide_legend(title = 'Category', override.aes = list(size = 1), byrow = FALSE)) +
+        scale_color_brewer(palette = "Set1")
+
+    qqplot_tf_prostate_weights
+
+})
+```
+
+```{r, fig.width = 9, fig.height =5}
+qqplot_other_examples <- patchwork::wrap_plots(qqplots_many, ncol = 3, axes = 'collect') + plot_layout(guides = "collect")
+
+qqplot_other_examples
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_1$C <- qqplot_other_examples
+```
+
+```{r}
+ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_other_examples.png', qqplot_other_examples, width = 8000, height = 5000, dpi = 800, units = 'px')
+```
+
+```{r}
+# qqplots_weights <- patchwork::wrap_plots(qqplot_ar_prostate_weights, qqplot_all_weights) + plot_layout(axes = 'collect', guides = "collect")
+```
+
+```{r}
+# ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_weights.png', qqplots_weights, width = 8000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+FIGURE_2$qqplot_ar_prostate_weights <- qqplot_ar_prostate_weights
+```
+
+
+```{r}
+# how many bonferonni significant
+test_performance %>%
+    dplyr::filter(auc >= 0.7) %>%
+    dplyr::mutate(bf_signif = ttest_pvalue < (0.05/length(test_performance$ttest_pvalue))) %>%
+    dplyr::pull(bf_signif) %>%
+    table() %>% prop.table()
+```
+
+## SUPPLEMENTARY FIGURES
+Distribution of Chip experiments per Tf/tissue pair
+
+How many have chip experiments <= 2?
+```{r}
+sum(test_performance$num_training_files <= 2)/nrow(test_performance)
+```
+
+### How many unique TFs and tissues from Enformer vs Cistrome
+```{r}
+enformers_tfs <- dt_merged %>% dplyr::filter(assay == "TF ChIP-seq") %>% dplyr::pull(target) %>% unique()
+enformers_tfs <- gsub(".*-", '', enformers_tfs) %>% unique()
+length(enformers_tfs)
+# enformers_tfs[enformers_tfs %in% c("200)", "EZH2phosphoT487")
+
+# dt_merged %>% dplyr::filter(assay == "TF ChIP-seq") %>% dplyr::pull(organ_slims) %>% unique() %>% length()
+```
+
+```{r}
+cistrome_db <- data.table::fread("/project2/haky/Data/TFXcan/cistrome/raw/human_factor_full_QC.txt") %>%
+    dplyr::filter(!Tissue_type %in% weird_tissues)
+
+cistrome_db %>% dplyr::pull("Factor") %>% unique() %>% length()
+cistrome_db %>% dplyr::pull("Tissue_type") %>% unique() %>% length()
+```
+
+
+```{r}
+cistrome_db %>% dplyr::filter(Factor %in% enformers_tfs) %>% pull(Factor) %>% unique() %>% length()
+```
+
+### Performance of incremental AR models across the genome: AUC
+#### AUC vs number of training data for AR:Prostate
+```{r}
+experiment_dir <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_incremental50_2025-04-26'
+incremental_experiment_summary <- data.table::fread(file.path(experiment_dir, 'statistics', 'ENPACT_incremental50_2025-04-26.compiled_stats.txt'))
+
+# test_performance
+incremental_test_performance <- incremental_experiment_summary[type == 'test', ]
+```
+
+```{r, fig.width = 6, fig.height = 3}
+# the performance of the AR model used in the paper trained on 206 AR ChIP-Seq experiments
+auc_206 <- base::subset(test_performance, model == "AR_Prostate")$auc
+
+# boxplot per number of training files
+incremental_samples_performance_barplot <- incremental_test_performance %>%
+    ggplot(aes(x = num_training_files, y = auc)) + 
+    geom_point() + geom_line() +
+    labs(y = 'AUROC', x = 'Number of AR ChIP-Seq experiments from CistromeDB') + theme_simple +
+    coord_cartesian(ylim= c(0.90, 1)) +
+    geom_hline(yintercept = auc_206, col = 'grey', lty = 'dashed')
+
+incremental_samples_performance_barplot
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_1$A <- incremental_samples_performance_barplot
+```
+
+```{r}
+ggplot2::ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1A.png', incremental_samples_performance_barplot, width = 6000, height = 3000, dpi = 800, units = 'px')
+
+# ggplot2::ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1A.pdf", incremental_samples_performance_barplot, units = "px")
+```
+
+```{r}
+names(SUPPLEMENTARY_FIGURE_1)
+```
+
+```{r}
+# incremental_test_performance %>%
+#   ggplot(.) + aes(x=model, y=probability) + 
+#   geom_violin(trim=FALSE, linewidth=0.09, position=position_dodge(0.75), aes(fill=binding_class)) +
+#   geom_boxplot(width=0.1, alpha=0.7, outlier.shape=NA, position=position_dodge(0.75), aes(fill=binding_class)) +
+#   scale_fill_manual(values = c("#DAE8FC", "#E1D5E7")) +
+#   labs(title='', y='Enpact Score', x='', fill = 'Binding') +
+#   scale_x_discrete(labels=labeller) +
+#   scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + 
+#   theme_simple + 
+#   theme(legend.position =c(0.1,0.9), 
+#     axis.text.x=element_blank(), 
+#     axis.ticks.x = element_blank()) +
+#   theme() +
+#   ggpubr::stat_pvalue_manual(
+#     sub.ttest_dt, label = "p", 
+#     tip.length = 0, label.size = 2.5)
+
+# boxplot_ar_prostate_performance
+```
+
+### Performance of AR Model on individuals by sample: use correlation
+
+I now test the correlation of these with the AR model trained on 206 AR ChIP-Seq experiments
+
+```{r}
+ar_prostate_corr <- data.table::fread('/project2/haky/temi/projects/Enpact-figures/data/AR_Prostate.correlation_observed.txt.gz') %>%
+    dplyr::pull(r)
+
+max_r <- max(abs(ar_prostate_corr))
+mean_r <- mean(abs(ar_prostate_corr))
+median_r <- median(abs(ar_prostate_corr))
+```
+
+```{r}
+cortest_df <- data.table::fread('/project2/haky/temi/projects/Enpact-figures/data/incremental50_AR_Prostate.correlation_observed.txt.gz') %>%
+    dplyr::mutate(nExp = as.numeric(gsub('AR|_Prostate', '', model)))
+
+cortest_df[1:5, ]; dim(cortest_df)
+```
+
+```{r}
+mean_abscor <- cortest_df %>%
+    dplyr::filter(is.infinite(r) == F) %>%
+    dplyr::group_by(model) %>%
+    dplyr::summarize(mean_abs_correlation = mean(abs(r)), n = n(), max_correlation = max(abs(r))) %>%
+    dplyr::arrange(desc(mean_abs_correlation)) %>%
+    dplyr::arrange(match(model, gtools::mixedsort(model))) %>%
+    dplyr::mutate(nExp = as.numeric(gsub('AR|_Prostate', '', model))) 
+
+mean_abscor
+```
+
+```{r, fig.width = 10, fig.height = 3}
+# point plots of correlation
+incremental_samples_performance_dotplot <- mean_abscor %>%
+    ggplot(.) + aes(x = nExp, y = max_correlation) + 
+    geom_line() +
+    geom_point() +
+    labs(y = 'Maximum |Pearson\'s r|', x = 'Number of AR ChIP-Seq experiments from CistromeDB') + theme_simple +
+    scale_x_continuous(breaks=seq(1, 50, 1), expand = c(0,0.5)) +
+    geom_hline(yintercept = max_r, col = 'grey', lty = 'dashed')
+
+incremental_samples_performance_dotplot
+```
+
+```{r,eval=FALSE}
+# use a violin plot instead
+# bad idea : too many points and differences are very subtle you cannot see them
+# cortest_df %>%
+#     dplyr::mutate(nExp = factor(nExp)) %>%
+#     ggplot(.) + aes(x = nExp, y = abs(r)) + 
+#     geom_violin(trim=FALSE) +
+#     geom_boxplot(width=0.1, alpha=0.7, outlier.shape=NA) +
+#     geom_jitter(width=0.2, size=0.5, alpha = 0.2) +
+#     labs(y = '|Pearson\'s r|', x = 'Number of AR ChIP-Seq experiments from CistromeDB') + theme_simple +
+#     scale_x_continuous(breaks=seq(1, 50, 1)) +
+#     geom_hline(yintercept = max_r, col = 'grey', lty = 'dashed')
+```
+
+```{r}
+# FIGURE_2$incremental_samples_performance_dotplot <- incremental_samples_performance_dotplot
+```
+
+```{r, fig.width = 10, fig.height = 3}
+# SUPPLEMENTARY FIGURE
+# point plots of correlation
+incremental_samples_performance_dotplot <- mean_abscor %>%
+    ggplot(.) + aes(x = nExp, y = mean_abs_correlation) + 
+    geom_line() +
+    geom_point() +
+    labs(y = 'Mean |Pearson\'s r|', x = 'Number of AR ChIP-Seq experiments from CistromeDB') + theme_simple +
+    scale_x_continuous(breaks=seq(1, 50, 1)) +
+    geom_hline(yintercept = mean_r, col = 'grey', lty = 'dashed')
+
+incremental_samples_performance_dotplot
+```
+
+### AUC vs number of training data (all models)
+```{r}
+# number of training and test sets
+ntraining_data <- test_performance %>% 
+    dplyr::select(auc, num_training_files) %>% 
+    dplyr::filter(!is.na(num_training_files))
+
+whichmore <- ntraining_data %>%
+    dplyr::group_by(num_training_files) %>%
+    dplyr::tally() %>%
+    dplyr::filter(n > 1)
+
+ntraining_data <- ntraining_data %>%
+    dplyr::filter(num_training_files %in% whichmore$num_training_files)
+```
+
+```{r, fig.width = 6, fig.height = 3}
+# boxplot per number of training files
+boxplot_training_data <- ntraining_data %>% 
+    dplyr::mutate(num_training_files = as.factor(num_training_files)) %>%
+    ggplot(aes(x = num_training_files, y = auc, group = num_training_files)) + 
+    geom_boxplot(outlier.shape = NA) + 
+    geom_jitter(width=0.2, size=0.5, alpha = 0.2) +
+    theme_minimal() + 
+    labs(y = 'AUC', x = 'Number of Training Experiments from CistromeDB') + theme_simple
+
+boxplot_training_data
+```
+
+```{r}
+# SUPPLEMENTARY_FIGURE_1$A <- boxplot_training_data
+```
+
+### Transcription factor distribution
+
+```{r}
+tf_tissue_pairs_distribution <- test_performance %>%
+    dplyr::select(assay, context) %>%
+    dplyr::filter(!context %in% weird_tissues) %>%
+    dplyr::group_by(context) %>%
+    dplyr::tally() %>%
+    dplyr::arrange(desc(n)) %>%
+    ggplot(aes(x = reorder(context, -n), y = n, label = n)) +
+    geom_col(fill = 'skyblue', col = 'black') +
+    theme_simple +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(x = 'Tissue', y = 'Number of Transcription Factors') +
+    geom_text(size = 3, vjust=-0.2)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_1$B <- tf_tissue_pairs_distribution
+```
+
+
+```{r}
+#FIGURE_2$boxplot_training_data <- boxplot_training_data
+```
+
+### Performance (t-test) of specific models
+
+```{r}
+models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
+updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
+```
+```{r}
+focus_tfs <- c('FOXA1', 'AR', 'HOXB13', 'GATA2')
+tissue <- 'Prostate'
+four_performance <- performance %>%
+    dplyr::filter(assay %in% focus_tfs, context == tissue, type == 'test') %>%
+    dplyr::select(assay, context, auc, low, upp)
+four_performance <- four_performance %>%
+    dplyr::mutate(model = paste0(assay, '_', context)) %>%
+    dplyr::mutate(model = factor(model, levels=rev(model))) %>%
+    dplyr::rename(auc=auc, lower = low, upper = upp) %>%
+    dplyr::arrange(desc(model))
+four_performance
+```
+
+```{r}
+tfs_tissues <- as.character(four_performance$model)
+tfs_tissues
+```
+
+```{r}
+rundate <- '2025-04-24'
+predictions <- lapply(tfs_tissues, function(each_tft){
+  one_ex <- glue('{updated_data_dir}/{each_tft}_{rundate}.logistic.test_eval.txt.gz') #|> Sys.glob()
+  if(file.exists(one_ex)){
+    dt <- data.table::fread(one_ex) 
+    return(dt)
+  } else {
+    return(NULL)
+  }
+})
+predictions <- Filter(Negate(is.null), predictions)
+names(predictions) <- tfs_tissues
+# sort by AUC
+predictions <- predictions[tfs_tissues]
+```
+
+
+```{r}
+# t-test
+tstatistic <- vector(mode = 'numeric', length = length(predictions))
+tpvalue <- vector(mode = 'numeric', length = length(predictions))
+
+for(i in seq_along(predictions)){
+    ttest_result <- with(predictions[[i]], t.test(TFPred_score ~ binding_class, alternative = 'less'))
+    tstatistic[i] <- ttest_result$statistic
+    tpvalue[i] <- ttest_result$p.value
+}
+```
+
+```{r}
+eval_dt <- lapply(seq_along(predictions), function(i){
+    predictions[[i]]$model <- names(predictions)[i]
+    return(predictions[[i]])
+}) %>%
+    do.call('rbind', .)
+```
+
+```{r}
+eval_dt <- eval_dt %>%
+  dplyr::mutate(binding_class = factor(binding_class), model=factor(model, levels = tfs_tissues))
+# ttest
+ttest_dt <- eval_dt %>%
+  dplyr::group_by(model) %>%
+  rstatix::t_test(TFPred_score ~ binding_class) %>%
+  rstatix::add_significance("p") %>%
+  dplyr::mutate(p = ifelse(
+    p < 1.e-2,
+    sprintf("p = %2.1e", as.numeric(p)),
+    sprintf("p = %5.4f", as.numeric(p))))
+ttest_dt <- ttest_dt %>%
+  rstatix::add_xy_position(x = "model", dodge = 0.8)
+ttest_dt
+```
+
+```{r}
+# for AR_Prostate alone
+labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+names(labeller) <- unique(eval_dt$model)
+
+# modify the y.position on the probability scale
+sub.ttest_dt <- subset(ttest_dt, model == "AR_Prostate") %>%
+    dplyr::mutate(y.position = 1.2)
+
+boxplot_ar_prostate_performance <- eval_dt %>% 
+  dplyr::filter(model == 'AR_Prostate') %>%
+  ggplot(.) + aes(x=model, y=probability) + 
+  geom_violin(trim=FALSE, linewidth=0.09, position=position_dodge(0.75), aes(fill=binding_class)) +
+  geom_boxplot(width=0.1, alpha=0.7, outlier.shape=NA, position=position_dodge(0.75), aes(fill=binding_class)) +
+  scale_fill_manual(values = c("#DAE8FC", "#E1D5E7")) +
+  labs(title='', y='Probability', x='', fill = 'Binding') +
+  scale_x_discrete(labels=labeller) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + 
+  theme_simple + 
+  theme(legend.position =c(0.1,0.9), 
+    axis.text.x=element_blank(), 
+    axis.ticks.x = element_blank()) +
+  theme() +
+  ggpubr::stat_pvalue_manual(
+    sub.ttest_dt, label = "p", 
+    tip.length = 0, label.size = 2.5)
+
+boxplot_ar_prostate_performance
+```
+
+```{r}
+#FIGURE_2$boxplot_ar_prostate_performance <- boxplot_ar_prostate_performance
+```
+
+#### Supplementary: Performance of other models
+
+```{r}
+ttest_others <- eval_dt %>%
+  dplyr::filter(model != 'AR_Prostate') %>%
+  dplyr::group_by(model) %>%
+  rstatix::t_test(TFPred_score ~ binding_class) %>%
+  rstatix::add_significance("p") %>%
+  dplyr::mutate(p = ifelse(
+    p < 1.e-2,
+    sprintf("p = %2.1e", as.numeric(p)),
+    sprintf("p = %5.4f", as.numeric(p))))
+ttest_others <- ttest_others %>%
+  rstatix::add_xy_position(x = "model", dodge = 0.8)
+ttest_others
+```
+
+
+```{r, plots_performance_other_models_violin-logits, fig.height = 4, fig.width=8}
+# colors from: https://emilhvitfeldt.github.io/r-color-palettes/discrete/ggsci/legacy_tron/
+# trim=F, adjust = 2, alpha=0.01, linewidth=0.09
+
+labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+names(labeller) <- unique(eval_dt$model)
+labeller <- labeller[!labeller == 'AR Prostate']
+
+ttest_others <- ttest_others %>% dplyr::mutate(y.position = 1.2)
+
+auc_others <- eval_dt %>%
+  dplyr::filter(model != 'AR_Prostate') %>%
+  ggplot(.) + aes(x=model, y=probability) + 
+  geom_violin(trim=F, linewidth=0.09, position=position_dodge(0.75), aes(fill=binding_class)) +
+  geom_boxplot(width=0.1, alpha=0.7, outlier.shape=NA, position=position_dodge(0.75), aes(fill=binding_class)) +
+  theme_bw() +
+  scale_fill_manual(values = c("#DAE8FC", "#E1D5E7")) +
+  labs(title='', y='Probability', x='', fill = 'Binding') +
+  scale_x_discrete(labels=labeller) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + 
+  theme_simple +
+  ggpubr::stat_pvalue_manual(
+    ttest_others, label = "p", 
+    tip.length = 0, label.size = 2.5)
+
+# auc_others
+```
+
+```{r, plots_performance_other_models_violin-probs, fig.height = 3, fig.width=8}
+# colors from: https://emilhvitfeldt.github.io/r-color-palettes/discrete/ggsci/legacy_tron/
+# trim=F, adjust = 2, alpha=0.01, linewidth=0.09
+# c("#D0DFE6FF", "#95CC5EFF")
+ttest_dt <- ttest_dt %>%
+    dplyr::mutate(y.position = 1.1)
+
+labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+names(labeller) <- unique(eval_dt$model)
+ep <- eval_dt %>%
+  ggplot(.) + aes(x=model, y=probability) + 
+  geom_violin(trim=F, linewidth=0.09, position=position_dodge(0.75), aes(fill=binding_class)) +
+  geom_boxplot(width=0.1, alpha=0.7, outlier.shape=NA, position=position_dodge(0.75), aes(fill=binding_class)) +
+  theme_bw() +
+  scale_fill_manual(values = c("#DAE8FC", "#E1D5E7")) +
+  labs(title='', y='Probability', x='', fill = 'Binding') +
+  scale_x_discrete(labels=labeller) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + 
+  theme(text=element_text(size=9.33, colour = 'black', family = 'Helvetica'), 
+    axis.text = element_text(hjust = 1, colour = 'black'), 
+    axis.text.x = element_text(hjust=0.5, colour = 'black'),
+    legend.box.background = element_rect(colour = "black"),
+    legend.position = 'top',
+    legend.text = element_text(size=9.33)) +
+  ggpubr::stat_pvalue_manual(
+    ttest_dt, label = "p", 
+    tip.length = 0, label.size = 2.5)
+
+ep
+```
+
+```{r}
+# auc of test performance in a column ploty
+# not needed, too big
+```
+
+
+### Relative contribution of epigenetic features to  weights
+
+```{r}
+# ar_prostate_weights <- weights %>% dplyr::select(feature, AR_Prostate) %>%
+#     tibble::column_to_rownames('feature') %>% as.matrix() %>% abs() %>% rowMeans() %>% as.data.frame() %>% tibble::rownames_to_column('feature') %>% setNames(c('feature', 'AR_Prostate'))
+
+# prostate_features <- dplyr::inner_join(dt_merged, ar_prostate_weights, by = c("feature_names" = "feature"))
+# non_prostate_features <- dplyr::inner_join(dt_merged, ar_prostate_weights, by = c("feature_names" = "feature"))
+```
+
+#### Pioneer vs non pioneer Transcription factors
+
+```{r}
+dt_pioneer <- data.table::fread('/project2/haky/temi/github/analysis-temi/posts/2024-10-03-enpact-and-pioneer-factors/pioneer-tfs.tsv')
+dt_pioneer |> head()
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 4']] <- dt_pioneer[,1]
+```
+
+```{r}
+
+#Check how many known or predicted pioneer factors are in the weights.
+# (dt_pioneer$known %in% dt_merged$target) %>% table()
+# (dt_pioneer$predicted %in% dt_merged$target) %>% table()
+
+# perhaps better to use the combination
+pioneer_list <- c(dt_pioneer$known) |> unique()
+pioneer_list <- pioneer_list[pioneer_list != ""]
+```
+
+```{r}
+weights_pioneer <- dt_merged %>%
+    dplyr::filter(target %in% pioneer_list)
+mat_pioneer <- weights %>% 
+    dplyr::filter(feature %in% weights_pioneer$feature_names) %>%
+    dplyr::select(-feature) %>%
+    as.matrix()
+dim(mat_pioneer)
+```
+
+```{r}
+weights_non_pioneer <- dt_merged %>%
+    dplyr::filter(!target %in% pioneer_list)
+mat_non_pioneer <- weights %>%
+    dplyr::filter(feature %in% weights_non_pioneer$feature_names) %>%
+    dplyr::select(-feature) %>%
+    as.matrix()
+dim(mat_non_pioneer)
+```
+
+```{r}
+
+pioneer_weights_plot <- ~{
+    qqplot(y = abs(mat_pioneer), x = abs(mat_non_pioneer), xlab = 'Non-Pioneer TFs Features |weights|', ylab = 'Pioneer TFs Features |weights|')
+    abline(0, 1, col = 'grey', lty = 'dashed')
+    mtext('Pioneer vs non-pioneer TFs', adj = 0)
+}
+
+pw_plot <- patchwork::wrap_plots(cowplot::ggdraw(pioneer_weights_plot), nrow = 1)
+
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1D.png'), pw_plot, width = 4000, height = 4000, units = 'px', dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_1$E <- pw_plot
+```
+
+
+```{r}
+# png(filename='/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1C.png', width = 6000, height = 6000, units = "px", res = 800)
+
+# qqplot(y = abs(mat_pioneer), x = abs(mat_non_pioneer), xlab = 'Non-Pioneer TFs Features |weights|', ylab = 'Pioneer TFs Features |weights|')
+# abline(0, 1, col = 'grey', lty = 'dashed')
+
+# dev.off()
+
+```
+
+#### Feature enrichment for prostate tissues
+```{r}
+# prostate gland
+# c('blood, bodily fluid', 'bodily fluid, blood')
+prostate_features <- dt_merged %>% dplyr::filter(organ_slims %in% c('prostate gland')) %>% dplyr::pull(feature_names)
+non_prostate_features <- dt_merged %>% dplyr::filter(!organ_slims %in% c('prostate gland')) %>% dplyr::pull(feature_names)
+```
+
+```{r}
+prostate_weights <- weights %>% dplyr::select(feature, ends_with('_Prostate')) %>% dplyr::filter(feature %in% prostate_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+
+non_prostate_weights <- weights %>% dplyr::select(feature, ends_with('_Prostate')) %>% dplyr::filter(feature %in% non_prostate_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+```
+
+```{r}
+dim(prostate_weights); dim(non_prostate_weights)
+```
+
+```{r}
+# qqplot(abs(prostate_weights), abs(non_prostate_weights), ylab = 'Non-Prostate Features', xlab = 'Prostate Features')
+# abline(0, 1, col = 'grey', lty = 'dashed')
+```
+
+
+#### Feature enrichment for blood tissues
+```{r}
+# prostate gland
+# c('blood, bodily fluid', 'bodily fluid, blood')
+blood_features <- dt_merged %>% dplyr::filter(organ_slims %in% c('blood, bodily fluid', 'bodily fluid, blood')) %>% dplyr::pull(feature_names)
+non_blood_features <- dt_merged %>% dplyr::filter(!organ_slims %in% c('blood, bodily fluid', 'bodily fluid, blood')) %>% dplyr::pull(feature_names)
+```
+
+```{r}
+blood_weights <- weights %>% dplyr::select(feature, ends_with('_Blood')) %>% dplyr::filter(feature %in% blood_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+non_blood_weights <- weights %>% dplyr::select(feature, ends_with('_Blood')) %>% dplyr::filter(feature %in% non_blood_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+```
+
+```{r}
+dim(blood_weights); dim(non_blood_weights)
+```
+
+```{r}
+# qqplot(abs(blood_weights), abs(non_blood_weights), ylab = 'Non-Blood Features', xlab = 'Blood Features')
+# abline(0, 1, col = 'grey', lty = 'dashed')
+```
+
+#### Feature enrichment for kidney tissues
+```{r}
+# prostate gland
+# c('blood, bodily fluid', 'bodily fluid, blood')
+kidney_features <- dt_merged %>% dplyr::filter(organ_slims %in% c('kidney, endocrine gland', 'kidney')) %>% dplyr::pull(feature_names)
+non_kidney_features <- dt_merged %>% dplyr::filter(!organ_slims %in% c('kidney, endocrine gland', 'kidney')) %>% dplyr::pull(feature_names)
+```
+
+```{r}
+kidney_weights <- weights %>% dplyr::select(feature, ends_with('_Kidney')) %>% dplyr::filter(feature %in% kidney_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+non_kidney_weights <- weights %>% dplyr::select(feature, !ends_with('_Kidney')) %>% dplyr::filter(feature %in% non_kidney_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+```
+
+```{r}
+dim(kidney_weights); dim(non_kidney_weights)
+```
+
+```{r}
+# qqplot(abs(kidney_weights), abs(non_kidney_weights), ylab = 'Non-Kidney Features', xlab = 'Kidney Features')
+# abline(0, 1, col = 'grey', lty = 'dashed')
+```
+
+#### Feature enrichment for lung tissues
+```{r}
+# prostate gland
+# c('blood, bodily fluid', 'bodily fluid, blood')
+lung_features <- dt_merged %>% dplyr::filter(organ_slims %in% c('lung, connective tissue', 'lung, embryo', 'lung, bronchus', 'lung')) %>% dplyr::pull(feature_names) 
+non_lung_features <- dt_merged %>% dplyr::filter(!organ_slims %in% c('lung, connective tissue', 'lung, embryo', 'lung, bronchus', 'lung')) %>% dplyr::pull(feature_names)
+```
+
+```{r}
+lung_weights <- weights %>% dplyr::select(feature, ends_with('_Lung')) %>% dplyr::filter(feature %in% lung_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+non_lung_weights <- weights %>% dplyr::select(feature, !ends_with('_Lung')) %>% dplyr::filter(feature %in% non_lung_features) %>% dplyr::select(-feature) %>% as.matrix() %>% abs()
+```
+
+```{r}
+dim(lung_weights); dim(non_lung_weights)
+```
+
+```{r}
+lung_enrichment <- ~{
+    par(mar = c(4,4,1,1))
+    qqplot(y = lung_weights, x = non_lung_weights, xlab = '', ylab = '')
+    abline(0, 1, col = 'grey', lty = 'dashed')
+    mtext("Lung features vs non-lung features", adj = 0)
+    mtext('Non-Lung Features |weights|', line=2, side = 1)
+    mtext('Lung Features |weights|', line=2, side = 2)
+}
+
+prostate_enrichment <- ~{
+    par(mar = c(4,4,1,1))
+    qqplot(y = prostate_weights, x = non_prostate_weights, xlab = '', ylab = '')
+    abline(0, 1, col = 'grey', lty = 'dashed')
+    mtext("Prostate features vs non-prostate features", adj = 0)
+    mtext('Non-Prostate Features |weights|', line=2, side = 1)
+    mtext('Prostate Features |weights|', line=2, side = 2)
+}
+
+kidney_enrichment <- ~{
+    par(mar = c(4,4,1,1))
+    qqplot(y = kidney_weights, x = non_kidney_weights, xlab = '', ylab = '')
+    abline(0, 1, col = 'grey', lty = 'dashed')
+    mtext("Kidney features vs non-kidney features", adj = 0)
+    mtext('Non-Kidney Features |weights|', line=2, side = 1)
+    mtext('Kidney Features |weights|', line=2, side = 2)
+}
+
+blood_enrichment <- ~{
+    par(mar = c(4,4,1,1))
+    qqplot(y = blood_weights, x = non_blood_weights, xlab = '', ylab = '')
+    abline(0, 1, col = 'grey', lty = 'dashed')
+    mtext("Blood features vs non-blood features", adj = 0)
+    mtext('Non-Blood Features |weights|', line=2, side = 1)
+    mtext('Blood Features |weights|', line=2, side = 2)
+}
+```
+
+
+```{r}
+# qqplot(y = rowSums(abs(blood_weights)), x = rowSums(abs(non_blood_weights)), xlab = 'Non-Blood Features |weights|', ylab = 'Blood Features |weights|')
+# abline(0, 1, col = 'grey', lty = 'dashed')
+```
+
+```{r}
+# cowplot::plot_grid(plotlist = lapply(c(lung_enrichment, blood_enrichment, prostate_enrichment, kidney_enrichment), ggdraw), ncol = 2, nrow = 2, rel_widths = c(1, 1), rel_heights = c(1,1))
+```
+
+```{r}
+tissue_enrichment_plot <- patchwork::wrap_plots(lapply(c(lung_enrichment, blood_enrichment, prostate_enrichment, kidney_enrichment), ggdraw), ncol = 2, nrow = 2)
+```
+
+```{r, fig.width = 6, fig.height = 6}
+SUPPLEMENTARY_FIGURE_1$D <- tissue_enrichment_plot
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1C.png'), tissue_enrichment_plot, width = 7000, height = 7000, units = 'px', dpi = 800)
+```
+
+```{r}
+# SUPPLEMENTARY_FIGURE_1$D <- tissue_enrichment_plot
+```
+
+
+```{r}
+suppfigure1 <- rlang::duplicate(SUPPLEMENTARY_FIGURE_1)
+names(suppfigure1)
+```
+
+```{r}
+top_plot <- patchwork::wrap_plots(suppfigure1$A, suppfigure1$B, nrow = 2, ncol = 1) +
+    plot_annotation(tag_levels = list(c('A', 'B'))) & theme(plot.tag = element_text(family = 'Helvetica', size = 9.33))
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1AB.png'), top_plot, width = 10000, height = 6000, units = 'px', dpi = 800)
+```
+
+```{r}
+# dsg <- "
+# AAB
+# AA#"
+# bottom_plot <- patchwork::wrap_plots(suppfigure1$D, suppfigure1$C, ncol = 2) +
+#     plot_layout(design = dsg) +
+#     plot_annotation(tag_levels = list(c('C'))) & theme(plot.tag = element_text(family = 'Helvetica', size = 9.33))
+```
+
+```{r}
+# ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1CD.png'), bottom_plot, width = 10000, height = 7000, units = 'px', dpi = 800)
+```
+
+```{r}
+# dsg <- "
+# AAAA
+# BBBB"
+
+# s1 <- patchwork::wrap_plots(top_plot, bottom_plot, nrow = 2) +
+#     plot_layout(design = dsg, heights = c(1, 1), widths = c(0.5, 1))
+```
+
+```{r}
+# ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1.png'), s1, width = 7000, height = 7000, units = 'px', dpi = 800)
+```
+
+
+```{r}
+# png(filename='/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1.png', width = 7000, height = 7000, units = "px", res = 800)
+
+# tissue_enrichment_plot
+
+# dev.off()
+
+```
+
+### Create and save Figure 2
+Copy or duplicate the list
+```{r}
+figure_2 <- rlang::duplicate(FIGURE_2)
+```
+```{r}
+names(figure_2)
+```
+
+```{r, fig.height=7, fig.width=10}
+f2 <- patchwork::wrap_plots(figure_2, nrow=1) + 
+    patchwork::plot_layout(design = "ABC") + 
+    patchwork::plot_annotation(tag_levels = list(c("A", "B", "C"))) & 
+    theme(plot.tag = element_text(family = 'Helvetica', size = 9.33))
+
+f2
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/figure2.png'), f2, width = 8000, height = 2500, units = 'px', dpi = 800)
+```
+
+### Create and save supplementary figure 1
+
+```{r}
+supplementary_figure_1 <- rlang::duplicate(SUPPLEMENTARY_FIGURE_1)
+supplementary_figure_1 <- supplementary_figure_1[LETTERS[1:5]]
+names(supplementary_figure_1)
+
+
+supplementary_figure_1 <- lapply(supplementary_figure_1, ggplotify::as.ggplot)
+```
+
+```{r}
+first_3 <- patchwork::wrap_plots(supplementary_figure_1[1:3], ncol=1) +
+    patchwork::plot_layout(design = "A
+                                     B
+                                     C") + 
+    patchwork::plot_annotation(tag_levels = list(c("A", "B", "C"))) & 
+    theme(plot.tag = element_text(family = 'Helvetica', size = 9.33))
+number_4 <- patchwork::wrap_plots(supplementary_figure_1[[4]]) +
+    patchwork::plot_annotation(tag_levels = list(c("D")))
+number_5 <- patchwork::wrap_plots(supplementary_figure_1[[5]]) +
+    patchwork::plot_annotation(tag_levels = list(c("E")))
+```
+
+```{r}
+s1 <- patchwork::wrap_plots(first_3, number_4, number_5, ncol=1, heights = c(0.3, 0.3, 1, 1, 0.5)) +
+    patchwork::plot_annotation(tag_levels = list(c("A", "B", "C", 'D', 'E'))) & 
+    theme(plot.tag = element_text(family = 'Helvetica', size = 9.33))
+```
+
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1.png'), s1, width = 10000, height = 20000, units = 'px', dpi = 800)
+```
+
+```{r}
+ALL_FIGURES[['Figure 2']] <- f2
+```
+
+
+
+# FIGURE 3: AR/Prostate predicts well across individuals
+
+The analysis notebook is here: 
+
+```{r}
+FIGURE_3 <- list()
+```
+
+## Performance of AR Enpact model across individuals
+
+- data: enpact and cwas scores, and observed peak intensities for CWAS AR loci
+
+```{r}
+cwas_mat <- data.table::fread(file.path('/beagle3/haky/users/temi/projects/Enpact/data/baca_cwas/output/top1.hg38', 'baca_cwas_predict.txt')) %>% 
+    dplyr::select(-FID) %>%
+    tibble::column_to_rownames('IID') %>% as.matrix() %>% t()
+cwas_mat[1:5, 1:5]
+```
+
+```{r}
+# these files were formatted in a separated notebook
+#/beagle3/haky/users/temi/projects/Enpact/data/lenpact
+# gt_mat <- data.table::fread(file.path(data_dir, 'baca.observed_binding.txt.gz')) %>% tibble::column_to_rownames('V1') %>% as.matrix()
+# # cwas_mat <- data.table::fread(file.path(data_dir, 'baca.cwas_scores.txt.gz')) %>%  tibble::column_to_rownames('V1') %>% as.matrix()
+# enpact_mat <- data.table::fread(file.path('/beagle3/haky/users/temi/projects/Enpact/data/lenpact', 'Baca.AR_Prostate.enpact_scores.txt')) %>%  tibble::column_to_rownames('NAME') %>% as.matrix()
+```
+
+```{r}
+#read in the matrix of enpact scores
+enpact_mat <- data.table::fread(file.path(data_dir, 'baca.enpact_scores.AR_Prostate.txt.gz')) %>% 
+    tibble::column_to_rownames("V1") %>%
+    as.matrix()
+
+gt_mat_binarized <- data.table::fread(file.path(data_dir, 'baca.observed_binding.binarized.txt.gz')) %>%
+    tibble::column_to_rownames("V1") %>%
+    as.matrix()
+
+cwas_mat <- data.table::fread(file.path(data_dir, 'baca.cwas_scores.AR_Prostate.txt.gz')) %>%
+    tibble::column_to_rownames("V1") %>%
+    as.matrix()
+```
+
+- another way is to binarize the binding: if there is a peak > 1, else, 0
+- then you run a t-test
+```{r}
+# gt_mat_binarized <- gt_mat[,]
+# gt_mat_binarized[gt_mat_binarized > 0] <- 1
+# gt_mat_binarized[is.na(gt_mat_binarized)] <- 0
+```
+
+```{r}
+enpact_mat[1:2, 1:2]; cwas_mat[1:2, 1:2]; gt_mat_binarized[1:2, 1:2]
+```
+
+
+### t-test of Enpact vs observed binding
+
+You only need to read in the results of the correlation test or t-test
+
+```{r}
+dt_enpact_observed <- data.table::fread(file.path(data_dir, 'baca.enpact_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
+dt_cwas_observed <- data.table::fread(file.path(data_dir, 'baca.cwas_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
+```
+
+
+```{r}
+dim(dt_enpact_observed); dim(dt_cwas_observed)
+```
+
+```{r}
+# select common ARBS
+common_loci <- intersect(dt_enpact_observed$locus, dt_cwas_observed$locus)
+dt_enpact_observed <- dt_enpact_observed %>% dplyr::filter(locus %in% common_loci)
+dt_cwas_observed <- dt_cwas_observed %>% dplyr::filter(locus %in% common_loci)
+```
+
+```{r}
+dim(dt_enpact_observed); dim(dt_cwas_observed)
+```
+
+Bind the enpact and cwas data
+
+```{r}
+# inner join
+dt_enpact_cwas_observed <- dplyr::inner_join(dt_enpact_observed, dt_cwas_observed, by = 'locus', suffix = c('.enpact', '.cwas'))
+dt_enpact_cwas_observed |> head() ; dim(dt_enpact_cwas_observed)
+```
+
+```{r}
+obs.signif <- dt_enpact_cwas_observed %>% dplyr::filter(pval.enpact <= 0.05) 
+# where is the t statistic positive? i.e mean_0 < mean_1  akin to negative correlation test
+(obs.signif$tstatistic.enpact <= 0) |> table() |> prop.table()
+```
+
+```{r}
+obs.signif <- dt_enpact_cwas_observed %>% dplyr::filter(pval.cwas <= 0.05)
+
+# where is the t statistic positive? i.e mean_0 < mean_1  akin to negative correlation test
+(obs.signif$tstatistic.cwas <= 0) |> table() |> prop.table()
+
+# xt <- data.frame(
+#         grp = c(rep(0, times = 20), rep(1, times = 20)),
+#         y = runif(40, 0, 1))
+# head(xt);
+# with(xt, t.test(y ~ grp))
+```
+
+```{r}
+# md <- lm(dt_enpact_cwas_observed$tstatistic.enpact ~ dt_enpact_cwas_observed$tstatistic.cwas)
+plot(y = dt_enpact_cwas_observed$tstatistic.enpact, x = dt_enpact_cwas_observed$tstatistic.cwas, pch = '.', xlab = 't-statistic CWAS', ylab = 't-statistic Enpact')
+
+abline(v = 0, h = 0, col = 'grey', lty = 2)
+# abline(md, lty = 2, col = 'grey')
+```
+
+```{r}
+with(dt_enpact_cwas_observed, 
+    smoothScatter(y = -log10(pval.enpact), x = -log10(pval.cwas), pch = '.', xlab = 'pval CWAS', ylab = 'pval Enpact'))
+```
+
+```{r}
+with(dt_enpact_cwas_observed, cor.test(y = pval.enpact, x = pval.cwas));
+with(dt_enpact_cwas_observed, cor.test(y = tstatistic.enpact, x = tstatistic.cwas))
+```
+
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 5']] <- dt_enpact_cwas_observed %>% dplyr::select(-c(nsample.cwas, nsample.enpact, comparison.enpact, comparison.cwas)) %>% dplyr::rename(arbs = locus)
+```
+
+```{r}
+all(complete.cases(dt_enpact_cwas_observed) == T)
+```
+
+```{r}
+pvalues <- dt_enpact_cwas_observed$pval.enpact
+pvalues <- sort(pvalues)
+
+# Number of p-values
+n <- length(pvalues)
+
+# Expected p-values under the null hypothesis (uniform distribution)
+expected <- (1:n) / (n + 1)
+qqplot_data_enpact <- data.frame(expected = expected, observed = pvalues)
+qqplot_data_enpact$method <- 'Enpact'
+```
+
+```{r}
+pvalues <- dt_enpact_cwas_observed$pval.cwas
+pvalues <- sort(pvalues)
+
+# Number of p-values
+n <- length(pvalues)
+
+# Expected p-values under the null hypothesis (uniform distribution)
+expected <- (1:n) / (n + 1)
+qqplot_data_cwas <- data.frame(expected = expected, observed = pvalues)
+qqplot_data_cwas$method <- 'CWAS'
+```
+
+```{r}
+qqplot_data <- rbind(qqplot_data_enpact, qqplot_data_cwas)
+dim(qqplot_data); qqplot_data[1:5, ]
+```
+
+```{r}
+qqplot_enpact_expected <- qqplot_data %>%
+    dplyr::filter(method == 'Enpact') %>%
+    ggplot(., aes(x = -log10(expected), y = -log10(observed))) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1, color = 'grey', linetype = "dashed") +
+    labs(x = expression("Expected -log"[10]*"P"), y = expression("Observed -log"[10]*"P"), subtitle = 'Enpact-predicted \nvs. Observed Binding') +
+    theme_simple
+
+# title = 'Enpact-predicted \nvs. Observed Binding'
+
+qqplot_enpact_expected
+```
+
+```{r}
+ggplot_enpact_cwas_pvalues <- ggplot() +
+    geom_point(aes(y = sort(-log10(dt_enpact_observed$pval)), x = sort(-log10(dt_cwas_observed$pval)))) +
+    geom_abline(intercept = 0, slope = 1, color = 'grey', linetype = "dashed") +
+    theme_simple +
+    labs(x = expression("-log"[10]*"P (CWAS vs. Observed)"), y = expression("-log"[10]*"P (Enpact vs. Observed)"), subtitle = "Enpact- or CWAS-predicted \nvs. Observed Binding")
+
+ggplot_enpact_cwas_pvalues
+```
+
+```{r}
+FIGURE_3$ggplot_enpact_cwas_pvalues <- ggplot_enpact_cwas_pvalues
+FIGURE_3$qqplot_enpact_expected <- qqplot_enpact_expected
+```
+
+Multiple testing correction
+
+```{r}
+pdt <- dt_enpact_cwas_observed %>%
+    dplyr::mutate(
+        enpact_signif = qvalue::qvalue(pval.enpact, fdr.level = 0.05)$significant, 
+        cwas_signif = qvalue::qvalue(pval.cwas, fdr.level = 0.05)$significant) %>%
+    dplyr::arrange(pval.enpact)
+pdt |> head()
+```
+
+```{r}
+table(pdt$enpact_signif); table(pdt$cwas_signif)
+```
+
+- qvalue
+```{r}
+# If we look at Enpact results, how many of those in CWAS are likely to be true?
+# if number of observation are too small, use qvalue_truncp
+1 - with(pdt, qvalue::qvalue(pval.enpact))$pi0
+
+# If we look at CWAS results, how many in Enpact are likely to be true?
+1 - with(pdt, qvalue::qvalue(pval.cwas))$pi0
+```
+
+
+- are there overlaps?
+
+```{r}
+ft <- subset(pdt, enpact_signif == TRUE)
+fdr.5.enpact_pvec <- ft$pval.enpact
+names(fdr.5.enpact_pvec) <- ft$locus
+
+ft <- subset(pdt, cwas_signif == TRUE)
+fdr.5.cwas_pvec <- ft$pval.cwas
+names(fdr.5.cwas_pvec) <- ft$locus
+```
+
+### Examples
+```{r}
+# read in the matrix of enpact scores
+# enpact_mat <- data.table::fread(file.path(data_dir, 'baca.enpact_scores.AR_Prostate.txt.gz')) %>% 
+#     tibble::column_to_rownames("V1") %>%
+#     as.matrix()
+
+# gt_mat_binarized <- data.table::fread(file.path(data_dir, 'baca.observed_binding.binarized.txt.gz')) %>%
+#     tibble::column_to_rownames("V1") %>%
+#     as.matrix()
+```
+```{r}
+# top 16, not 12
+top12_signif_diff <- pdt %>%
+    dplyr::filter(enpact_signif == TRUE) %>%
+    dplyr::arrange(pval.enpact) %>%
+    dplyr::select(locus, pval=pval.enpact) %>%
+    head(n=12)
+
+print(top12_signif_diff)
+
+```
+
+```{r}
+top12_escore <- t(enpact_mat)[, top12_signif_diff$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='enpact_score')
+
+top12_gscore <- t(gt_mat_binarized)[, top12_signif_diff$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='observed_binding')
+
+top12_ect <- dplyr::inner_join(top12_escore, top12_gscore, by=c('locus' = 'locus', 'sample' = 'sample')) %>%
+    dplyr::mutate(locus = factor(locus, levels = top12_signif_diff$locus))
+top12_ect[1:5, ]
+```
+
+
+```{r}
+gc_ttest <- top12_ect %>%
+  dplyr::group_by(locus) %>%
+  rstatix::t_test(enpact_score ~ observed_binding) %>%
+  rstatix::add_significance("p") %>%
+  rstatix::add_xy_position(scales = 'free') %>% 
+  dplyr::mutate(p = ifelse(
+    p < 1.e-2,
+    sprintf("p = %2.1e", as.numeric(p)),
+    sprintf("p = %5.4f", as.numeric(p))))
+gc_ttest
+```
+
+```{r, fig.width=12, fig.height=8}
+# labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+# names(labeller) <- unique(eval_dt$model)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+scatterplot_top12_enpact_observed <- top12_ect %>%
+    dplyr::mutate(observed_binding = as.factor(observed_binding)) %>%
+    ggplot(aes(y=enpact_score, x = observed_binding)) + 
+    geom_boxplot(aes(fill = observed_binding), colour = "grey50", outlier.shape = NA) +
+    geom_point(position = jitter, size = 0.1) + 
+    facet_wrap(.~locus, scales='free') + 
+    scale_fill_manual(values = c("#D0DFE6FF", "#E1D5E7")) +
+    labs(title='', y='Enpact Score', x='Observed Binding') +
+    theme_simple + 
+    geom_text(data = gc_ttest, mapping = aes(x = -Inf, y = Inf, label = p), hjust = -0.1, vjust = 1.1, lineheight = 1, size = 2.5, color = 'red') +
+    guides(fill="none")
+
+scatterplot_top12_enpact_observed
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure2A.png'), scatterplot_top12_enpact_observed, width = 8000, height = 6000, units = 'px', dpi = 800)
+```
+
+```{r}
+tbest <- 'chr13_51458464_51459164' #'chr1_11071893_11072393' #'chr12_79863970_79864670'
+tname <- sub('_', ':', tbest) %>% sub('_', '-', .)
+
+tt <- gc_ttest %>% dplyr::filter(locus == tbest)
+# geom_jitter(position = position_jitter(width = 0.1, height = 0.1)) + 
+
+#jitter <- position_jitter(width = 0.1, height = 0.1)
+ht <- top12_ect %>%
+    dplyr::filter(locus == tbest) %>%
+    dplyr::mutate(observed_binding = as.factor(observed_binding), probability = logitsToProbabilities(enpact_score))
+```
+```{r, pos-cor-enpact-observed-logits, fig.width = 6, fig.height = 6}
+# cherrypicked_scatterplot_enpact_observed <- ht %>% 
+#     ggplot(aes(y=enpact_score, x = observed_binding)) + 
+#     geom_violin(aes(fill = observed_binding), width=0.7, colour = "grey50", position = position_dodge(0.03)) +
+#     geom_boxplot(aes(fill = observed_binding), colour = "grey50", width = 0.05, outlier.shape = NA, position = position_dodge(0.9)) +
+#     theme_bw() +
+#     labs(title=tname, x='Observed Binding', y = 'Enpact Score') +
+#     scale_fill_manual(values = c("#D0DFE6FF", "#E1D5E7")) +
+#     theme(text=element_text(size=9.33, colour = 'black', family = 'Helvetica'),
+#         legend.position="none",
+#         panel.background = element_rect(color = 'black')) +
+#     geom_text(data=tt, mapping=aes(x = -Inf, y = Inf, label = p), hjust = -1.5, vjust = 2, lineheight = 1, size = 2.5, color = 'black') 
+
+
+# cherrypicked_scatterplot_enpact_observed
+```
+
+```{r, pos-cor-enpact-observed-probs}
+cherrypicked_scatterplot_enpact_observed <- ht %>% 
+    ggplot(aes(y=probability, x = observed_binding)) + 
+    geom_violin(aes(fill = observed_binding), width=0.7, colour = "grey50", position = position_dodge(0.03)) +
+    geom_boxplot(aes(fill = observed_binding), colour = "grey50", width = 0.05, outlier.shape = NA, position = position_dodge(0.9)) +
+    theme_bw() +
+    labs(x='Observed Binding', y = 'Probability', subtitle=glue("Observed vs. predicted binding \nat {tname}")) +
+    scale_fill_manual(values = c("#D0DFE6FF", "#E1D5E7")) +
+    theme_simple + 
+    theme(legend.position="none") +
+    geom_text(data=tt, mapping=aes(x = -Inf, y = Inf, label = p), hjust = -1.5, vjust = 2, lineheight = 1, size = 2.5, color = 'black')
+
+# title=glue("Observed vs. predicted binding \nat {tname}"), 
+
+cherrypicked_scatterplot_enpact_observed
+```
+
+```{r}
+FIGURE_3$cherrypicked_scatterplot_enpact_observed <- cherrypicked_scatterplot_enpact_observed
+```
+
+```{r}
+# figure_3 <- rlang::duplicate(FIGURE_3)
+```
+
+```{r, fig.height=12, fig.width=6}
+# reorder the plots
+# figure_3 <- figure_3[c('qqplot_enpact_expected', 'ggplot_enpact_cwas_pvalues', 'cherrypicked_scatterplot_enpact_observed')]
+
+# patchwork::wrap_plots(figure_3, ncol = 3) + patchwork::plot_annotation(tag_levels = list(c("A", "B", 'C')))
+
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.png", width = 6000, height = 3000, units = "px", dpi = 800)
+
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.svg", width = 1000, height = 500, units = "px")
+```
+
+### Correlation of Enpact and CWAS scores (aiming at the genetic component)
+
+```{r}
+# FIGURE_4 <- list()
+```
+
+```{r}
+cor_enp_cwas <- data.table::fread(file.path(data_dir, 'baca.enpact_cwas_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
+cor_null <- data.table::fread(file.path(data_dir, 'baca.null_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
+```
+
+```{r}
+gencor.signif <- cor_enp_cwas %>%
+    dplyr::filter(pvalue <= (0.05)) %>% dplyr::pull(r)
+
+table(gencor.signif >= 0) |> prop.table()
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 6']] <- cor_enp_cwas %>% dplyr::rename(arbs = locus) %>% dplyr::select(-comparison)
+```
+
+```{r}
+dim(cor_enp_cwas); dim(cor_null)
+```
+
+```{r}
+# plot the histogram of r 
+# histogram_cor_enp_cwas <- ggplot() +
+#     geom_histogram(aes(cor_null$r), fill = 'grey', color="black", alpha=1) +
+#     geom_histogram(aes(cor_enp_cwas$r), color="black", fill="blue", alpha=0.5)  +
+#     labs(x = "Pearson r for Enpact- vs. \nCWAS-predicted binding scores", y = "Number of ARBS", subtitle = "Enpact- vs.\nCWAS-predicted Binding") +
+#     theme_simple
+
+bcol <- adjustcolor('blue', alpha.f = 0.5)
+histogram_cor_enp_cwas <- ggplot() +
+    geom_histogram(aes(cor_null$r, fill = 'grey'), color="black", alpha=1) +
+    geom_histogram(aes(cor_enp_cwas$r, fill=bcol), color="black")  +
+    labs(x = "Pearson r for Enpact- vs. \nCWAS-predicted binding scores", y = "Number of ARBS", subtitle = "Enpact- vs.\nCWAS-predicted Binding") +
+    scale_fill_manual(values = c(bcol, "grey"), name = "", labels= c('null Pearson r', 'observed Pearson r')) +
+    theme_simple +
+    guides(alpha = 'none') +
+    theme(legend.position = c(0.8, 0.8), 
+        legend.background = element_rect(fill = 'transparent'),
+        legend.text = element_text(size = 4))
+
+histogram_cor_enp_cwas
+```
+
+```{r}
+FIGURE_3$histogram_cor_enp_cwas <- histogram_cor_enp_cwas
+```
+
+```{r, qqplot-obs-exp-lEnpact-CWAS}
+pvalues <- cor_enp_cwas$pvalue
+pvalues <- sort(pvalues)
+# Number of p-values
+n <- length(pvalues)
+
+# Expected p-values under the null hypothesis (uniform distribution)
+expected <- (1:n) / (n + 1)
+# Create the Q-Q plot
+
+qqplot_data <- data.frame(expected = expected, observed = pvalues)
+
+qqplot_cor_enp_cwas <- ggplot(qqplot_data, aes(x = -log10(expected), y = -log10(observed))) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1, color = 'grey', linetype = "dashed") +
+    labs(x = expression("Expected -log"[10]*"P"), y = expression("Observed -log"[10]*"P"), subtitle = 'Enpact- vs. \nCWAS-predicted Binding') +
+    theme_simple
+# , 
+qqplot_cor_enp_cwas
+```
+
+```{r}
+FIGURE_3$qqplot_cor_enp_cwas <- qqplot_cor_enp_cwas
+```
+
+#### Examples (positive and negative correlations separately)
+
+```{r}
+# enpact_mat <- data.table::fread(file.path(data_dir, 'baca.enpact_scores.AR_Prostate.txt.gz')) %>% 
+#     tibble::column_to_rownames("V1") %>%
+#     as.matrix()
+
+# cwas_mat <- data.table::fread(file.path(data_dir, 'baca.cwas_scores.AR_Prostate.txt.gz')) %>% 
+#     tibble::column_to_rownames("V1") %>%
+#     as.matrix()
+```
+
+```{r}
+gc_dt <- cor_enp_cwas %>%
+    dplyr::mutate(signif = qvalue::qvalue(pvalue, fdr.level=0.05)$significant)
+
+gc_dt$signif |> table() ; gc_dt$signif |> table() %>% prop.table()
+```
+
+```{r}
+# pi1 statistic
+pi1 <- 1 - qvalue::qvalue(cor_enp_cwas$pvalue, fdr.level=0.05)$pi0
+pi1
+```
+
+```{r}
+# distrinution of posivite and negative correlations
+(cor_enp_cwas$r >= 0) |> table() |> prop.table()
+```
+
+```{r}
+# top 16, not 12
+positives <- gc_dt %>%
+    dplyr::filter(signif == TRUE) %>%
+    dplyr::filter(r > 0) %>%
+    dplyr::arrange(pvalue, desc(r))
+
+negatives <- gc_dt %>%
+    dplyr::filter(signif == TRUE) %>%
+    dplyr::filter(r < 0) %>%
+    dplyr::arrange(pvalue, desc(r))
+
+top12_signif_positive_cor <- positives %>%
+    dplyr::arrange(pvalue) %>%
+    dplyr::select(locus, r, pvalue) %>%
+    head(n=12)
+
+top12_signif_negative_cor <- negatives %>%
+    dplyr::arrange(pvalue) %>%
+    dplyr::select(locus, r, pvalue) %>%
+    head(n=12)
+```
+
+#### Plot 12 positive correlations
+```{r}
+top12_escore <- t(enpact_mat)[, top12_signif_positive_cor$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='enpact_score')
+
+top12_cscore <- t(cwas_mat)[, top12_signif_positive_cor$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='cwas_score')
+
+top12_ect <- dplyr::inner_join(top12_escore, top12_cscore, by=c('locus' = 'locus', 'sample' = 'sample')) %>%
+    dplyr::mutate(locus = factor(locus, levels = top12_signif_positive_cor$locus))
+top12_ect[1:5, ]
+```
+
+```{r}
+usecorvalues <- top12_ect %>%
+  dplyr::group_by(locus) %>%
+  dplyr::summarise(cor = round(as.numeric(unname(cor.test(enpact_score, cwas_score, method = 'pearson')$estimate)), 3))
+
+gc_cortest <- top12_ect %>%
+  dplyr::group_by(locus) %>%
+  rstatix::cor_test(enpact_score, cwas_score, method = 'pearson') %>%
+  rstatix::add_significance("p") %>%
+    dplyr::select(-cor)
+
+#  merge
+gc_cortest <- dplyr::left_join(gc_cortest, usecorvalues, by = 'locus') %>%
+  dplyr::mutate(p = ifelse(
+    p < 1.e-2,
+    sprintf("p = %2.1e", as.numeric(p)),
+    sprintf("p = %5.4f", as.numeric(p))),
+    cp = paste('Pearson r =', cor),
+    label = paste(cp, p, sep = '\n')) %>%
+    dplyr::arrange(desc(abs(cor))) 
+gc_cortest
+```
+
+
+```{r, fig.width=12, fig.height=8}
+# labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+# names(labeller) <- unique(eval_dt$model)
+scatterplot_top12_enpact_cwas <- top12_ect %>%
+  ggplot(.) + 
+  geom_point(aes(x=cwas_score, y=enpact_score), size=2, bg='red', pch=21, col='black') + 
+  facet_wrap(.~locus, scales='free') + 
+  theme_minimal() +
+  scale_fill_manual(values = c("#D0DFE6FF", "#95CC5EFF")) +
+  labs(title='', y='Enpact Score', x='CWAS Score', fill = 'Binding') +
+  theme_simple +
+  geom_text(data = gc_cortest, mapping = aes(x = -Inf, y = Inf, label = label), hjust = -0.1, vjust = 1.1, lineheight = 1, size=2.5) 
+
+
+scatterplot_top12_enpact_cwas
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure2B.png'), scatterplot_top12_enpact_cwas, width = 8000, height = 6000, units = 'px', dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE$positive_enpact_cwas <- scatterplot_top12_enpact_cwas
+```
+
+
+One example (for the main paper)
+
+```{r, pos-cor-Enpact-cwas-probabilities, fig.width = 6, fig.height = 6}
+
+#tbest <- 'chr5_102010496_102011196' #'chr12_79863970_79864670'
+tbest <- "chr7_92044736_92045236"#"chr11_15532204_15533254"
+#tbest <- "chr7_73832070_73832670"
+tname <- sub('_', ':', tbest) %>% sub('_', '-', .)
+
+tt <- gc_cortest %>% dplyr::filter(locus == tbest)
+
+pp_individual_correlation <- top12_ect %>%
+    dplyr::filter(locus == tbest) %>%
+    dplyr::mutate(locus = as.factor(locus), probability = logitsToProbabilities(enpact_score)) %>%
+    ggplot(.) + aes(x=cwas_score, y=probability, group=locus) +
+    geom_point(size=2, bg='black', pch=21) + theme_minimal() +
+    labs(x='CWAS Score', y = 'Enpact Binding Score\n(Probability)', title=glue("Enpact- vs. CWAS-predicted binding \nat {tname}")) +
+    theme_simple +
+    theme(legend.position="none") +
+    geom_text(data=tt, mapping=aes(x = -Inf, y = Inf, label = label, col = 'red'), hjust = -0.1, vjust = 2, lineheight = 1, size = 2.5)
+#  
+print(pp_individual_correlation)
+```
+
+```{r, pos-cor-Enpact-cwas-logits, fig.width = 6, fig.height = 6}
+
+#tbest <- 'chr5_102010496_102011196' #'chr12_79863970_79864670'
+tbest <- "chr7_92044736_92045236"#"chr11_15532204_15533254"
+#tbest <- "chr7_73832070_73832670"
+tname <- sub('_', ':', tbest) %>% sub('_', '-', .)
+
+tt <- gc_cortest %>% dplyr::filter(locus == tbest)
+
+ttplot <- top12_ect %>%
+    dplyr::filter(locus == tbest) %>%
+    dplyr::mutate(locus = as.factor(locus), enpact_score = enpact_score) %>%
+    ggplot(.) + aes(x=cwas_score, y=enpact_score, group=locus) +
+    geom_point(size=2, bg='black', pch=21) + theme_minimal() +
+    labs(x='CWAS Score', y = 'Enpact Binding Score', title=glue("Enpact- vs. CWAS-predicted binding \nat {tname}")) +
+    theme_simple +
+    theme(legend.position="none") +
+    geom_text(data=tt, mapping=aes(x = -Inf, y = Inf, label = label, col = 'red'), hjust = -0.1, vjust = 2, lineheight = 1, size = 2.5)
+#  
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/logits.figure3F.png'), ttplot, width = 3000, height = 3000, units = 'px', dpi = 800)
+```
+
+```{r}
+FIGURE_3$pp_individual_correlation <- ttplot
+```
+
+#### Plot 12 negative correlations
+```{r}
+top12_escore <- t(enpact_mat)[, top12_signif_negative_cor$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='enpact_score')
+
+top12_cscore <- t(cwas_mat)[, top12_signif_negative_cor$locus] |> t() %>% as.data.frame() %>% tibble::rownames_to_column('locus') %>% tidyr::pivot_longer(cols=!locus, names_to='sample', values_to='cwas_score')
+
+top12_ect <- dplyr::inner_join(top12_escore, top12_cscore, by=c('locus' = 'locus', 'sample' = 'sample')) %>%
+    dplyr::mutate(locus = factor(locus, levels = top12_signif_negative_cor$locus))
+top12_ect[1:5, ]
+```
+
+
+```{r}
+gc_cortest <- top12_ect %>%
+  dplyr::group_by(locus) %>%
+  rstatix::cor_test(enpact_score, cwas_score, method = 'pearson') %>%
+  rstatix::add_significance("p") %>%
+  dplyr::mutate(p = ifelse(
+    p < 1.e-2,
+    sprintf("p = %2.1e", as.numeric(p)),
+    sprintf("p = %5.4f", as.numeric(p))),
+    cp = paste('Pearson r =', cor),
+    label = paste(cp, p, sep = '\n')) %>%
+    dplyr::arrange(desc(abs(cor)))
+gc_cortest
+```
+
+```{r, fig.width=12, fig.height=8}
+# labeller <- unique(eval_dt$model) %>% gsub('_', ' ', .)
+# names(labeller) <- unique(eval_dt$model)
+scatterplot_top12_negative_enpact_cwas <- top12_ect %>%
+  ggplot(.) + 
+  geom_point(aes(x=cwas_score, y=enpact_score), size=2, bg='red', pch=21, col='black') + 
+  facet_wrap(.~locus, scales='free') + 
+  theme_minimal() +
+  scale_fill_manual(values = c("#D0DFE6FF", "#95CC5EFF")) +
+  labs(title='', y='Enpact Score', x='CWAS Score', fill = 'Binding') +
+  theme_simple +
+  geom_text(data = gc_cortest, mapping = aes(x = -Inf, y = Inf, label = label), hjust = -0.1, vjust = 1.1, lineheight = 1, size=2.5) 
+
+scatterplot_top12_negative_enpact_cwas
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE$negative_enpact_cwas <- scatterplot_top12_negative_enpact_cwas
+```
+
+```{r}
+figure_3 <- rlang::duplicate(FIGURE_3)
+```
+
+```{r}
+figure_3 <- lapply(figure_3, ggplotify::as.ggplot)
+```
+
+```{r}
+# rearragne
+figure_3 <- figure_3[c('qqplot_enpact_expected', 'ggplot_enpact_cwas_pvalues', 'cherrypicked_scatterplot_enpact_observed', 'histogram_cor_enp_cwas', 'qqplot_cor_enp_cwas', 'pp_individual_correlation')]
+```
+
+```{r, fig.height=6, fig.width=9}
+upper_plot <- patchwork::wrap_plots(figure_3[1:3], ncol = 3, nrow = 1) + plot_annotation(tag_levels = list(c('A', 'B', 'C'))) & theme(plot.tag = element_text(size = 9.33, family = 'Helvetica'), plot.title = element_text(size = 9.33, family = 'Helvetica'), plot.title.position = "plot")
+
+```
+```{r, fig.height=6, fig.width=9}
+lower_plot <- patchwork::wrap_plots(figure_3[4:6], ncol = 3, nrow = 1) + plot_annotation(tag_levels = list(c('D', 'E', 'F'))) & theme(plot.tag = element_text(size = 9.33, family = 'Helvetica'), plot.title = element_text(size = 9.33, family = 'Helvetica'))
+
+```
+
+```{r, fig.height=7, fig.width=10}
+f3 <- cowplot::plot_grid(upper_plot, lower_plot, nrow = 2)
+
+#patchwork::wrap_plots(upper_plot, lower_plot, ncol = 1, nrow = 2) #& theme(plot.tag = element_text(size = 9.33, family = 'Helvetica'))
+
+f3
+```
+
+
+```{r, fig.height=6, fig.width=9}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.png", f3, width = 8000, height = 5500, units = "px", dpi = 800)
+
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.pdf", f3, units = "px")
+```
+
+```{r}
+ALL_FIGURES[['Figure 3']] <- f3
+```
+
+# FIGURE 4 : Linearization
+
+```{r}
+FIGURE_4 <- list()
+```
+
+### Performance
+```{r}
+# /beagle3/haky/users/temi/projects/Enpact/models/lenpact/EUR_AR_Prostate_logistic/models/database
+model_summary <- data.table::fread(file.path("/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/database", 'Model_summary.txt')) %>%
+    dplyr::rename(gene_name = genename, n_snps_in_model = n.snps.in.model, zscore_pval = cv_zscore_pval)
+model_summary[1:5, 1:5]; dim(model_summary)
+```
+
+
+```{r}
+# library(RSQLite)
+# mydb <- dbConnect(RSQLite::SQLite(), "/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db")
+# alldat <- lapply(setNames(nm = dbListTables(mydb)), dbReadTable, conn = mydb)
+# dbDisconnect(mydb)
+
+# # write out the model summary
+# alldat$extra %>% data.table::fwrite(file.path("/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/database", 'Model_summary.txt'), sep = '\t', row.names = F, col.names = T, quote = F)
+
+# alldat$weights %>% data.table::fwrite(file.path("/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/database", 'Weight_summary.txt'), sep = '\t', row.names = F, col.names = T, quote = F)
+```
+
+
+```{r}
+# model_summary <- model_summary %>%
+#     dplyr::mutate(
+#         signif = qvalue::qvalue(zscore_pval, fdr.level = 0.01)$significant,
+#     )
+
+model_summary %>% dplyr::filter(abs(rho_avg) < 0.5) %>% nrow()
+```
+
+```{r}
+dim(model_summary[complete.cases(model_summary), ]) ; dim(model_summary)
+```
+
+```{r, hist-r-lEnpact-CWAS, fig.height = 4, fig.width=4}
+# par(mfrow = c(1,1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+histogram_r_genetic_component <- ggplot(model_summary, aes(rho_avg)) +
+    geom_histogram(color="black", fill="grey") +
+    labs(x = "Pearson r\n(SNP-Enpact- \nvs. Enpact-predicted binding)", y = "Number of ARBS") +
+    theme_simple
+
+histogram_r_genetic_component
+```
+
+```{r}
+FIGURE_4$histogram_r_genetic_component <- histogram_r_genetic_component
+```
+
+```{r}
+model_summary$rho_avg %>% summary() %>% round(., 4) %>% cbind()
+```
+
+```{r, nsnps_used, fig.height=4, fig.weight=4}
+#par(mar = c(5, 5, 4, 2), oma=c(4,4,2,2), mai = c(1, 0.5, 0.1, 0.1), pty = 's')
+#par(mar = c(8, 1, 1, 1), pty = 's')
+
+# par(mar = c(3, 1, 1, 1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+# layout.matrix <- matrix(c(1:2), nrow = 1, ncol = 2, byrow=T)
+# layout(mat = layout.matrix,
+#        heights = c(2, 2), # Heights of the two rows
+#        widths = c(2, 2)) # Widths of the two columns
+
+nsnps_used <- model_summary %>%
+    pull(n_snps_in_model)
+
+histogram_nsnps_used <- ggplot() +
+    geom_histogram(aes(nsnps_used), fill = 'grey17', color="black", alpha=1) +
+    theme_simple +
+    geom_vline(xintercept = median(nsnps_used), color = 'grey', linetype = 'dashed') +
+    labs(x = "Number of SNPs used in \nPrediction Database", y = "Number of ARBS")
+
+histogram_nsnps_used
+```
+
+```{r}
+FIGURE_4$histogram_nsnps_used <- histogram_nsnps_used
+```
+
+```{r, fracsnps_used, fig.height=4, fig.weight=4}
+frac_used <- model_summary %>%
+    dplyr::select(gene, n_snps_in_window, n_snps_in_model) %>%
+    dplyr::mutate(frac_snps_used = n_snps_in_model/n_snps_in_window) %>%
+    pull(frac_snps_used)
+
+histogram_fracsnps_used <- ggplot() +
+    geom_histogram(aes(frac_used), fill = 'grey17', color="black", alpha=1) +
+    theme_simple +
+    geom_vline(xintercept = median(frac_used), color = 'grey', linetype = 'dashed') +
+    labs(x = "Fraction of SNPs used in \nPrediction Database", y = "Number of ARBS")
+
+histogram_fracsnps_used
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure3A.png'), histogram_fracsnps_used, width = 3000, height = 3000, units = 'px', dpi = 800)
+```
+
+```{r}
+summary_nsps_used <- summary(nsnps_used) |> round(3) |> cbind() 
+summary_frac_used <- summary(frac_used) |> round(3) |> cbind() 
+
+summary_frac_used; summary_nsps_used
+```
+
+### Compare with CWAS
+
+```{r}
+hg38_maps <- data.table::fread(file.path(data_dir, 'baca_cwas_loci_hg38.bed')) 
+hg38_maps <- setnames(hg38_maps, c('chr', 'start', 'end', 'hg19_locus')) %>%
+    tidyr::unite('hg38_locus', chr:end, sep='_')
+cwas_models <- readxl::read_excel(file.path(data_dir, 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
+    dplyr::select(ID, CHR, P0, P1, R2=MODELCV.R2, pvalue=MODELCV.PV)
+cwas_models <- dplyr::inner_join(cwas_models, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
+    dplyr::select(locus=hg38_locus, R2, pvalue)
+```
+
+```{r}
+tfxcan_models <- model_summary %>% dplyr::select(locus = gene_name, R = rho_avg, pvalue = cv_pval_est) %>% dplyr::mutate(R2 = R) %>% dplyr::select(-R) 
+
+models_dt <- dplyr::inner_join(cwas_models, tfxcan_models, by = 'locus', suffix = c('.cwas', '.tfxcan'))
+```
+
+```{r}
+# qqplot(-log10(models_dt$pvalue.cwas), -log10(models_dt$pvalue.tfxcan))
+# abline(0, 1, col = 'grey', lty = 2)
+```
+
+```{r, scatterplot-r2-cwas-tfxcan-5580, fig.height = 6, fig.width = 6}
+# par(mar = c(3, 1, 1, 1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+# with(models_dt, smoothScatter(R2.cwas, R2.tfxcan, nrpoints = 0))
+# par(mfrow = c(1,1))
+```
+
+### Distance and location of cis-QTLs
+
+- For the next set of analysis, I will filter down to loci that I could predict well (Bonferroni < 0.05) and call them ePeaks
+
+```{r}
+ePeaks <- model_summary %>%
+    dplyr::filter(zscore_pval < 0.01, rho_avg > 0) %>%
+    dplyr::select(gene_name) %>%
+    tidyr::separate_wider_delim('gene_name', names=c('chr', 'start', 'end'), delim='_') %>% 
+    dplyr::mutate(across(c(start, end), as.numeric), chr=as.numeric(gsub('chr', '', chr))) %>%
+    tidyr::unite('locus', chr:end, sep = '_', remove = F)
+ePeaks
+```
+
+```{r}
+dim(ePeaks)
+```
+
+```{r}
+distance_from_center <- data.table::fread(file.path('/beagle3/haky/users/temi/projects/Enpact/files', 'snp_weights_distance.txt.gz'))
+```
+
+```{r}
+mm <- mean(distance_from_center$beta)
+ss <- sd(distance_from_center$beta)
+ww <- which(!dplyr::between(distance_from_center$beta, left=mm - (1*ss), right=mm+(1*ss)))
+length(ww)
+```
+
+```{r}
+smaller_dt <- distance_from_center[ww, ] %>% dplyr::arrange(desc(distance))
+# dist_intervals <- with(smaller_dt, seq(min(distance), max(distance), by=100000))
+dist_intervals <- with(smaller_dt, seq(min(distance), max(distance), length.out=6))
+dist_intervals <- append(dist_intervals, 0, after = 3)
+dist_intervals
+```
+
+```{r, weights_by_distance, fig.height=4, fig.width=4}
+scatterplot_weights_distance <- ggplot(smaller_dt, aes(x = distance, y = beta)) +
+    geom_point(pch = '.') +
+    labs(x = 'Distance (bp) from ARBS', y = 'Beta') +
+    theme_simple
+scatterplot_weights_distance
+```
+
+```{r}
+FIGURE_4$scatterplot_weights_distance <- scatterplot_weights_distance
+```
+
+```{r}
+figure_4 <- rlang::duplicate(FIGURE_4)
+```
+
+```{r, fig.height=6, fig.width=12}
+f4 <- patchwork::wrap_plots(figure_4, ncol = 3) + plot_annotation(tag_levels = list(c('A', 'B', 'C'))) & theme(plot.tag = element_text(size = 9.33, family = 'Helvetica'))
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure4.png", f4, width = 6000, height = 2000, units = "px", dpi = 800)
+
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure4.pdf", f4, units = "px")
+```
+
+```{r}
+ALL_FIGURES[['Figure 4']] <- f4
+```
+
+```{r}
+#par(mar=c(5,5,2,2), pty="s")
+# par(mfrow = c(1,1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+# smaller_dt %>% 
+#     with(plot(x=distance, y=beta, frame.plot=T, pch='.', xaxt = "n", xlab='Distance (bp)', ylab = 'Beta'))
+# axis(1, at = dist_intervals, labels = formatC(dist_intervals, format='e', digits=1))
+# # mtext("Effect size of SNPs by the distance the center of the locus", side=3, line=2, adj=0.05, cex=1.5)
+# # mtext("points shown are 1 s.d away from the mean", side=3, line=1, adj=0.05, cex=1.5)
+# par(mfrow=c(1,1))
+```
+
+```{r hist_weights_by_distance, fig.height=6, fig.width=6}
+# distance_from_center %>% with(hist(x=distance, xaxt = "n", xlab='distance (bp)', main=''))
+# axis(1, at = dist_intervals)
+# mtext("Distribution of predictor SNP distances", side=3, line=2, adj=0.05, cex=1.5)
+#mtext("plotted here are 1 s.d away from the mean", side=3, line=1, adj=0.05, cex=0.8)
+```
+
+
+
+- how many with |effect size| > 1?
+```{r}
+# distance_from_center %>%
+#     dplyr::filter(abs(beta) > 1) %>%
+#     dplyr::group_by(chr, start, end) %>%
+#     dplyr::tally() %>%
+#     dplyr::arrange(desc(n)) %>%
+#     dplyr::pull(n) %>%
+#     base::mean()
+```
+
+
+- how many snps with 10, 20, 30 40, 50 kb... of peak center?
+```{r}
+segmented_distances <- distance_from_center %>%
+    dplyr::mutate(bin = cut(abs(distance_from_center$distance), seq(0, 1000000, by = 20000), na.rm=F, labels = F)) %>%  
+    dplyr::filter(!is.na(bin)) %>% dplyr::pull(bin) %>% table() 
+segmented_distances_prop <- (segmented_distances / sum(segmented_distances)) * 100 #%>% prop.table() %>% as.matrix()
+#segmented_distances_prop <- segmented_distances_prop[1:10, ]
+segmented_distances_prop
+```
+
+```{r}
+coordinate_labels <- cut(seq(1, 1000000, by = 20000), seq(0, 1000000, by = 20000), na.rm=F, dig.lab=10)
+```
+
+```{r}
+peak_center_distances_distribution <- ggplot() +
+    geom_bar(aes(x = coordinate_labels, y = segmented_distances_prop), stat = 'identity') +
+    labs(x = 'Genomic window (bp) from peak center', y = '% of SNPs used within window') +
+    theme_simple +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure3B.png'), peak_center_distances_distribution, width = 8000, height = 3000, units = 'px', dpi = 800)
+```
+
+```{r}
+dt_20kb <- distance_from_center %>% dplyr::filter(dplyr::between(distance, -20000, 20000))
+```
+
+```{r}
+nrow(dt_20kb) / nrow(distance_from_center)
+```
+
+
+- how many peaks have SNPs in them
+
+```{r}
+snplocation <- distance_from_center %>%
+    dplyr::mutate(snpInPeak = case_when(
+        between(pos, start, end) ~ 'snpWithin',
+        !between(pos, start, end) ~ 'snpOutside'
+    )) %>% dplyr::group_by(chr, start, end, snpInPeak) %>%
+        dplyr::tally() %>% dplyr::ungroup() %>% 
+        tidyr::pivot_wider(id_cols = c(chr, start, end), names_from = snpInPeak, values_from = n, values_fill = 0) %>%
+        tidyr::unite('locus', chr:end, sep = '_', remove = F)
+
+snplocation   
+```
+
+```{r}
+# how many ARBS have at least 1 SNP in them
+table(snplocation$snpWithin > 0)
+table(snplocation$snpWithin > 0) |> prop.table()
+```
+
+```{r}
+max(snplocation$snpWithin)
+```
+
+```{r}
+snplocation %>% dplyr::filter(locus %in% ePeaks$locus) %>% arrange(snpOutside, snpWithin)
+```
+
+- how many loci don't have a SNP within?
+
+```{r}
+snplocation$snpOutside |> table() |> prop.table() |> head()
+```
+
+::: {.callout-note}
+## The message here:
+Using SNPs, we can predict the genetic component of AR binding. Linearization works!
+:::
+
+# FIGURE 5: SNP-predictors of Enpact scores recapitulate CWAS results on Prostate cancer risk
+
+```{r}
+FIGURE_5 <- list()
+```
+
+```{r}
+dt_gexpr <- data.table::fread(file.path(data_dir, 'prostate_cancer_risk.gexpr.spredixcan.txt.gz'))
+dt_tfxcan <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/data/tfxcan/AR_Prostate.logistic.TFXcan.prostate_cancer_risk.csv')
+cwas_74 <- data.table::fread(file.path(data_dir, 'CWAS_significant_prostate_cancer_risk_associations.top74.txt.gz'))
+ldblocks <- data.table::fread(file.path(data_dir, 'hg38_fourier_ls-all.bed'), header=F, col.names=c('chrom', 'start', 'end'))
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 7']] <- dt_tfxcan %>% dplyr::rename(arbs = gene) %>% dplyr::select(-gene_name)
+
+#SUPPLEMENTARY_TABLES[['Supplementary Table 8']] <- dt_gexpr
+```
+
+
+-- map the loci of the dt_cwas (74 significantly associated loci) to hg38
+
+```{r}
+hg38_maps <- data.table::fread(file.path(data_dir, 'baca_cwas_loci_hg38.bed')) 
+hg38_maps <- setnames(hg38_maps, c('chr', 'start', 'end', 'hg19_locus')) %>%
+    tidyr::unite('hg38_locus', chr:end, sep='_')
+
+cwas_sign_pc_assoc <- dplyr::inner_join(cwas_74, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
+    dplyr::select(locus=hg38_locus, CWAS.Z, CWAS.P) 
+# cwas_pc_assoc <- dplyr::inner_join(cwas_5580, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
+#     dplyr::select(locus=hg38_locus, CWAS.Z=TWAS.Z, CWAS.P=TWAS.P)
+```
+
+```{r}
+dt_tfxcan$pvalue |> hist()
+```
+
+```{r}
+# for controlling false positives, I use fdr at 0.01 here
+alpha_threshold <- 0.05
+dt_corrected <- dt_tfxcan %>%
+    dplyr::mutate(
+        fdr_p05 = qvalue::qvalue(pvalue)$qvalue <= alpha_threshold, 
+        bonf_signif = pvalue <= (alpha_threshold/nrow(.))) #pvalue <= alpha_threshold/nrow(.))
+
+```
+
+### How many significant at fdr < 0.05
+
+```{r}
+xfdr <- dt_corrected %>%
+    dplyr::filter(fdr_p05 == TRUE) %>%
+    dplyr::select(locus = gene_name, TFXcan.Z = zscore, TFXcan.P = pvalue)
+
+# merge with cwas' 74 significantly associated loci
+dt_xfdr <- xfdr %>%
+    dplyr::full_join(cwas_sign_pc_assoc, by = c('locus' = 'locus')) %>%
+    dplyr::filter(!is.na(CWAS.P))
+
+# how many at fdr < 0.05
+is.na(dt_xfdr$TFXcan.Z) |> table()
+is.na(dt_xfdr$TFXcan.Z) |> table() |> prop.table()
+    
+```
+
+```{r}
+tfxcan_sign_pc_assoc <- dt_corrected %>%
+    dplyr::filter(bonf_signif == TRUE) %>%
+    dplyr::select(locus = gene_name, TFXcan.Z = zscore, TFXcan.P = pvalue)
+
+# merge with cwas' 74 significantly associated loci
+dt_compare <- tfxcan_sign_pc_assoc %>%
+    dplyr::full_join(cwas_sign_pc_assoc, by = c('locus' = 'locus'))
+
+# how many at bonferroni < 0.05
+dt_compare %>% 
+    dplyr::filter(!is.na(CWAS.P))
+```
+
+```{r}
+# how many significnt arbs
+num.signif <- dt_corrected$bonf_signif |> table()
+prop.signif <- num.signif |> prop.table()
+
+num.signif; prop.signif
+```
+
+
+
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 8']] <- dt_compare %>% dplyr::rename(arbs = locus)
+```
+
+- how are these split across LD blocks?
+
+- CWAS
+```{r}
+cwas_assoc <- dt_compare %>%
+    dplyr::filter(!is.na(CWAS.Z)) %>%
+    tidyr::separate(locus, into = c('chrom', 'start', 'end'), sep = '_') %>%
+    dplyr::mutate(across(c(start, end), as.numeric)) %>%
+    dplyr::select(chrom, start, end)
+cwas_assoc |> head()
+```
+
+```{r}
+# overlap with LD blocks
+ldgranges <- GenomicRanges::GRanges(seqnames = ldblocks$chrom, IRanges::IRanges(start = ldblocks$start, end = ldblocks$end))
+cwasgranges <- GenomicRanges::GRanges(seqnames = cwas_assoc$chrom, IRanges::IRanges(start = cwas_assoc$start, end = cwas_assoc$end))
+
+ldblock_hits <- GenomicRanges::findOverlaps(query = cwasgranges, subject = ldgranges)
+```
+
+```{r}
+# ldblocks[subjectHits(ldblock_hits), ] %>%
+#     dplyr::group_by(chrom) %>% 
+#     dplyr::arrange(desc(n)) %>%
+#     ggplot(.) + aes(x=reorder(chrom, n), y=n) + geom_bar(stat='identity') + theme_minimal() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title='Number of ARBS in LD blocks', x='Chromosome', y='Number of ARBS')
+```
+
+```{r}
+cwas_jt <- data.table::data.table(
+    ldblock = ldblocks[subjectHits(ldblock_hits), ] %>% tidyr::unite('locus', chrom:end, sep='_') %>% dplyr::pull(locus),
+    arbs = cwas_assoc[queryHits(ldblock_hits), ] %>% tidyr::unite('locus', chrom:end, sep='_') %>% dplyr::pull(locus)
+) %>%
+    dplyr::group_by(ldblock) %>%
+    dplyr::tally() %>%
+    dplyr::mutate(chrom = sub('_.*', '', ldblock)) %>%
+    dplyr::mutate(chrom = factor(chrom, levels = paste0('chr', c(1:22))))
+```
+
+```{r, fig.width = 8, fig.height = 4}
+cwas_ldblock_distribution <- cwas_jt %>%
+    ggplot(.) + aes(x=chrom, y=n, label = n) + 
+    geom_bar(position="stack", stat="identity", fill = NA, color = 'black') + 
+    theme_simple + 
+    labs(title='', x='Chromosome', y='Number of ARBS') +
+    geom_text(size = 3, position = position_stack(vjust = 0.5))
+
+cwas_ldblock_distribution
+```
+
+
+
+- TFXcan
+```{r}
+tfxcan_assoc <- dt_compare %>%
+    dplyr::filter(!is.na(TFXcan.Z)) %>%
+    tidyr::separate(locus, into = c('chrom', 'start', 'end'), sep = '_') %>%
+    dplyr::mutate(across(c(start, end), as.numeric)) %>%
+    dplyr::select(chrom, start, end)
+tfxcan_assoc |> head()
+```
+
+```{r}
+# overlap with LD blocks
+ldgranges <- GenomicRanges::GRanges(seqnames = ldblocks$chrom, IRanges::IRanges(start = ldblocks$start, end = ldblocks$end))
+tfxcangranges <- GenomicRanges::GRanges(seqnames = tfxcan_assoc$chrom, IRanges::IRanges(start = tfxcan_assoc$start, end = tfxcan_assoc$end))
+
+ldblock_hits <- GenomicRanges::findOverlaps(query = tfxcangranges, subject = ldgranges)
+```
+
+```{r}
+# ldblocks[subjectHits(ldblock_hits), ] %>%
+#     dplyr::group_by(chrom) %>% 
+#     dplyr::arrange(desc(n)) %>%
+#     ggplot(.) + aes(x=reorder(chrom, n), y=n) + geom_bar(stat='identity') + theme_minimal() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title='Number of ARBS in LD blocks', x='Chromosome', y='Number of ARBS')
+```
+
+```{r}
+tfxcan_jt <- data.table::data.table(
+    ldblock = ldblocks[subjectHits(ldblock_hits), ] %>% tidyr::unite('locus', chrom:end, sep='_') %>% dplyr::pull(locus),
+    arbs = tfxcan_assoc[queryHits(ldblock_hits), ] %>% tidyr::unite('locus', chrom:end, sep='_') %>% dplyr::pull(locus)
+) %>%
+    dplyr::group_by(ldblock) %>%
+    dplyr::tally() %>%
+    dplyr::mutate(chrom = sub('_.*', '', ldblock)) %>%
+    dplyr::mutate(chrom = factor(chrom, levels = paste0('chr', c(1:22))))
+```
+
+```{r, fig.width = 8, fig.height = 4}
+tfxcan_ldblock_distribution <- tfxcan_jt %>%
+    ggplot(.) + aes(x=chrom, y=n, label = n) + 
+    geom_bar(position="stack", stat="identity", fill = NA, color = 'black') + 
+    theme_simple + 
+    labs(title='', x='Chromosome', y='Number of ARBS') +
+    geom_text(size = 3, position = position_stack(vjust = 0.5))
+
+tfxcan_ldblock_distribution
+```
+
+```{r}
+cwas_jt$method <- 'CWAS'
+tfxcan_jt$method <- 'Enpact-based Association'
+
+jt <- rbind(cwas_jt, tfxcan_jt) 
+# %>%
+#     tidyr::pivot_wider(names_from = method, values_from = n) 
+
+ldblock_distribution <- jt %>%
+    ggplot(.) + aes(x=chrom, y=n, fill = method) + 
+    geom_bar(position="stack", stat="identity", color = 'black') + 
+    theme_simple + 
+    labs(title='', x='Chromosome', y='Number of ARBS') +
+    facet_wrap(.~method) +
+    geom_text(aes(label = n), size = 3, position = position_stack(vjust = 0.5)) +
+    scale_fill_brewer(palette = 'Dark2') +
+    guides(fill='none') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+jt %>% 
+    dplyr::group_by(method) %>%
+    dplyr::tally()
+```
+
+```{r}
+ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4A.png'), ldblock_distribution, width = 10000, height = 4000, units = 'px', dpi = 800)
+```
+
+```{r}
+subjectHits(ldblock_hits) |> table() |> sum()
+```
+
+```{r}
+# ntests <- 5580 # CWAS carried out 5580 test i.e. 5580 ARBS that their models were confident in
+# cutoff <- 0.05 / ntests
+
+ext <- dplyr::filter(dt_compare, !is.na(TFXcan.P) & !is.na(CWAS.P))
+
+# If we look at CWAS results, how many of those in TFXcan are likely to be true?
+ttrue <- with(ext, 1 - qvalue_truncp(TFXcan.P[!is.na(CWAS.P)])$pi0)
+
+# If we look at TFXcan results, how many of those in CWAS are likely to be true?
+ctrue <- with(ext, 1 - qvalue_truncp(CWAS.P[!is.na(TFXcan.P)])$pi0)
+
+pi_true <- c(ttrue, ctrue, 1 - ttrue, 1 - ctrue)
+ptests <- cbind(
+    rbind(ttrue, 1 - ttrue),
+    rbind(ctrue, 1 - ctrue)
+)
+colnames(ptests) <- c('TFXcan', 'CWAS')
+rownames(ptests) <- c('pi1', 'pi0')
+ptests
+```
+
+
+```{r}
+vlist <- list(`TFXcan`=dt_compare[!is.na(TFXcan.P)]$locus, `CWAS`=dt_compare[!is.na(CWAS.P)]$locus)
+
+v1 <- vlist[[1]] |> length()
+v2 <- vlist[[2]] |> length() #setdiff(vlist[[1]], vlist[[2]]) |> length()
+vboth <- intersect(vlist[[1]], vlist[[2]]) |> length()
+```
+
+```{r}
+p_venn <- draw.pairwise.venn(
+    v1, v2, vboth,
+    c("Enpact-based\ntest", "CWAS-based\ntest"),
+    fill = c("white"),
+    alpha = c(0.7, 0.7),
+    ind = FALSE,
+    cat.dist = c(-0.1, -0.05),
+    compression = "lzw",
+    cex=9.33/12,
+    cat.cex = 9.33/12,
+    cat.pos = c(-50, 30),
+    cat.fontfamily = "Helvetica",
+    lwd=1,
+    main=NULL,
+    units = 'pt'
+) 
+
+# plot venn diagram and add some margin and enclosing box
+vennplot <- ggdraw(p_venn)
+```
+
+```{r}
+FIGURE_5$vennplot_overlaps <- vennplot
+```
+
+```{r}
+(119/165) * 100
+```
+
+- out of the 5580 that they tested, how many do we find?
+```{r}
+# these have been mapped from hg19 to hg38 already
+cwas_5580 <- data.table::fread(file.path(data_dir, 'CWAS_significant_prostate_cancer_risk_associations.top5580.txt.gz'))
+cwas_5580
+```
+
+```{r}
+sum(dt_compare$locus[!is.na(dt_compare$TFXcan.P)] %in% cwas_5580$locus) ; 
+sum(!dt_compare$locus[!is.na(dt_compare$TFXcan.P)] %in% cwas_5580$locus)
+```
+
+So, we find 72 that were tested in the 5580, but they did not test 92 of these ones we found. The overlap is 41. 
+
+We can say that we find many more because they lacked to power to test exhaustively, to start with.
+
+
+### TFXcan zscores and TWAS zscores
+
+-- CWAS also has association zscores and pvalues for some 5568 models (ARBS)
+
+```{r}
+cwas_5580 <- readxl::read_excel(file.path(data_dir, 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
+    dplyr::select(ID, CHR, P0, P1, TWAS.Z, TWAS.P)
+cwas_5580 <- dplyr::inner_join(cwas_5580, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
+    dplyr::select(locus=hg38_locus, CWAS.Z=TWAS.Z, CWAS.P=TWAS.P)
+
+# merge with TFXcan
+xdt <- dt_tfxcan %>%
+    dplyr::select(locus = gene_name, TFXcan.Z = zscore, TFXcan.P = pvalue)
+
+commonly_identified <- intersect(dt_compare[!is.na(CWAS.P)]$locus, dt_compare[!is.na(TFXcan.P)]$locus)
+cwas_found_only <- setdiff(dt_compare[!is.na(CWAS.P)]$locus, commonly_identified)
+
+dt_comp <- dplyr::inner_join(cwas_5580, xdt, by=c('locus')) %>%
+    dplyr::mutate(found = case_when(
+            locus %in% cwas_found_only ~ 'cwas', 
+            locus %in% commonly_identified ~ 'both',
+            .default = 'tfxcan')
+    )
+```
+
+
+- and if you plot absolute z-scores
+```{r}
+#par(mfrow = c(1,1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+dt_zscores <- dt_comp %>%
+    dplyr::mutate(bg = case_when(
+        found == 'both' ~ 'blue',
+        .default = 'grey'
+    )) %>%
+    dplyr::mutate(CWAS.Z = abs(CWAS.Z), TFXcan.Z = abs(TFXcan.Z)) %>%
+    dplyr::select(locus, CWAS.Z, TFXcan.Z, found, bg) 
+
+# %>%
+#     tidyr::pivot_longer(cols = c(CWAS.Z, TFXcan.Z), names_to = 'method', values_to = 'zscore')
+```
+
+```{r, fig.width = 4, fig.height = 4}
+plotzscores <- dt_zscores %>%
+    ggplot(.) + aes(x=CWAS.Z, y = TFXcan.Z) + 
+    geom_point(aes(fill = bg), shape=21, size = 2) + 
+    theme_simple + 
+    labs(x='CWAS |z-score|', y='Enpact-based \nPrCa Association |z-score|') +
+    scale_fill_manual(values=c("blue", "grey")) +
+    geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed') +
+    theme(legend.position="none")
+
+plotzscores
+```
+
+```{r}
+FIGURE_5$plotzscores <- plotzscores
+```
+
+
+- for gene expression 
+
+```{r}
+# get gene annoations and coordinates
+# genes_annotations <- genes(EnsDb.Hsapiens.v86) %>% 
+#     as.data.frame() %>%
+#     dplyr::filter(gene_biotype == 'protein_coding', symbol %in% dt_gexpr$gene_name, seqnames %in% c(1:22)) %>%
+#     dplyr::select(seqnames, start, end, width, gene_name, strand) %>%
+#     tibble::rownames_to_column('gene_id') %>% dplyr::rename(chrom=seqnames)
+```
+
+
+- for TFXcan 
+```{r}
+trunc_p <- 30
+man.dt_tfxcan <- dt_tfxcan %>%
+    tidyr::separate_wider_delim(gene, delim = '_', names = c('chrom', 'start', 'end')) %>% dplyr::mutate(across(c(start, end), as.numeric), pos = (end + start) / 2, chrom = as.numeric(gsub('chr', '', chrom))) %>%
+    dplyr::select(chrom, pos, pvalue, gene_name) %>%
+    dplyr::mutate(truncP = ifelse(-log10(pvalue) < -log10(10e-30), pvalue, 10e-30))
+```
+
+```{r}
+# qqman::manhattan(x = man.dt_tfxcan, chr = 'chrom', bp = 'pos', snp = 'gene_name', p = 'truncP', ylim = c(0, 32))
+# mtext('*p-values are truncated', adj = 0.1, line = -1, col = 'green')
+```
+
+
+
+#### SNP-AR:Prostate and PrCa risk association manhattan plot
+
+```{r, fig.height = 6, fig.width = 12}
+# qqman::manhattan(x = man.dt_tfxcan, chr = 'chrom', bp = 'pos', snp = 'gene_name', p = 'pvalue', suggestiveline = F)
+```
+
+```{r}
+##par(mfrow = c(1,1), xpd = F, pty='s', family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+
+# qqm_tfxcan <- function(){
+
+#     yat <- pretty(-log10(man.dt_tfxcan$pvalue), n = 20)
+#     yat[yat == 170] <- 165
+#     yat <- yat[!between(yat, 0, 150)]
+#     xlab <- ifelse(yat > 150, yat, yat)
+
+#     par(mar=c(0.1,4,0.2,1.2), fig=c(0,1,0.8,0.95), new=FALSE, family = 'sans', ps = 9.33, cex.axis = 0.8, ps = 9.33)
+
+#     qqman::manhattan(x = man.dt_tfxcan, chr = 'chrom', bp = 'pos', snp = 'gene_name', p = 'pvalue', ylim = c(160, 165), suggestiveline = FALSE, xaxt = 'n', ylab = '', xlab = '', yaxt = 'n', font.main = 1, family = 'sans', genomewideline = FALSE)
+
+#     # adding the slashes
+#     axis(2, at=yat, labels=xlab, las = 2, cex.axis = 0.8)
+#     mtext('Enpact-based AR:Prostate binding-PrCa risk association', side = 3, adj = 0, outer = FALSE, font.main = 1, family = 'sans', cex = 0.8)
+
+#     par(mar=c(3,4,1.2,1.2), fig=c(0,1,0,0.8), new=TRUE, family = 'sans', ps = 9.33, cex.axis = 1, cex.lab = 1)
+
+#     qqman::manhattan(x = man.dt_tfxcan, chr = 'chrom', bp = 'pos', snp = 'gene_name', p = 'pvalue', ylim = c(0, 80), suggestiveline = F, xlab = '', ylab = '', genomewideline = -log10(0.05/nrow(man.dt_tfxcan)), font.main = 1, family = 'sans', cex.axis = 0.8)
+
+#     mtext("Chromosome", side = 1, line = 2, outer = FALSE, font.main = 1, family = 'sans', cex = 0.8)
+#     mtext("-log10(p-value)", side = 2, line = 2.5, outer = FALSE, adj = 0.8, font.main = 1, family = 'sans', cex = 0.8)
+
+# }
+```
+
+#### CWAS prostate cancer risk manhattan plot
+
+```{r}
+man.dt_cwas <- cwas_5580 %>%
+    tidyr::separate_wider_delim(locus, delim = '_', names = c('chrom', 'start', 'end'), cols_remove = F) %>% 
+    dplyr::mutate(across(c(start, end), as.numeric), pos = (end + start) / 2, chrom = as.numeric(gsub('chr', '', chrom))) %>%
+    dplyr::select(chrom, pos, pvalue = CWAS.P, locus) %>%
+    dplyr::mutate(truncP = ifelse(-log10(pvalue) < -log10(10e-30), pvalue, 10e-30)) %>%
+    dplyr::arrange(desc(pvalue))
+```
+
+```{r, fig.height = 6, fig.width = 12}
+# this plot has a lot of space between some of the p-values
+# qqman::manhattan(x = man.dt_cwas, chr = 'chrom', bp = 'pos', snp = 'locus', p = 'pvalue', suggestiveline = F)
+```
+
+
+```{r}
+# qqm_cwas <- function(){
+#     cwas_diff <- -log10(man.dt_cwas$pvalue) %>% diff()
+#     mxx <- which.max(abs(cwas_diff))
+
+#     remove_space <- round(-log10(man.dt_cwas$pvalue)[c(mxx, mxx+1)])
+#     maxlogp <- -log10(man.dt_cwas$pvalue) %>% max()
+#     yat <- pretty(c(remove_space[2], maxlogp), n = 3)
+#     # yat <- pretty(-log10(man.dt_cwas$pvalue), n = 50)
+#     # yat[yat == 170] <- 165
+#     # yat <- yat[!between(yat, 0, remove_space[2])]
+#     xlab <- yat #ifelse(yat > 150, yat, yat)
+
+#     par(mar=c(0.1,4,0.2,1.2), fig=c(0,1,0.8,0.95), new=FALSE, family = 'Helvetica', ps = 9.33)
+
+#     qqman::manhattan(x =  man.dt_cwas, chr = 'chrom', bp = 'pos', snp = 'locus', p = 'pvalue', ylim = c(min(yat), max(yat)), suggestiveline = FALSE, xaxt = 'n', ylab = '', xlab = '', yaxt = 'n', genomewideline = FALSE, cex = 0.8)
+#     # adding the slashes
+#     axis(2, at=yat, labels=xlab, las = 2, cex.axis = 0.8)
+#     mtext('CWAS-based AR:Prostate binding-PrCa risk association', side = 3, adj = 0, outer = FALSE, cex = 0.8)
+
+#     par(mar=c(3,4,1.2,1.2), fig=c(0,1,0,0.8), new=TRUE, family = 'Helvetica', ps = 9.33, cex.axis = 0.8)
+#     qqman::manhattan(x =  man.dt_cwas, chr = 'chrom', bp = 'pos', snp = 'locus', p = 'pvalue', ylim = c(0, remove_space[1] + 10), suggestiveline = F, xlab = '', ylab = '', genomewideline = -log10(0.05/nrow(man.dt_cwas)), cex = 0.8)
+
+#     mtext("Chromosome", side = 1, line = 2, outer = FALSE, font.main = 1, family = 'sans', cex = 0.8)
+#     mtext("-log10(p-value)", side = 2, line = 2.5, outer = FALSE, adj = 0.8, font.main = 1, family = 'sans', cex = 0.8)
+# }
+```
+
+
+```{r}
+# ggplotify::as.ggplot(qqm_tfxcan) #+ theme_simple
+
+# ggdraw(qqm_tfxcan)
+```
+
+```{r, fig.height = 5, fig.width = 13, fig.format = 'png', fig.dpi = 800}
+qqm_tfxcan <- ggmanh::manhattan_plot(x = man.dt_tfxcan, chr.colname = 'chrom', pos.colname = 'pos', pval.colname = 'pvalue', signif = 0.05/nrow(man.dt_tfxcan), preserve.position = TRUE, point.size = 1) + annotate("text", x=1, y=170, label= "Enpact-based PrCa Association", hjust = 0)
+
+qqm_cwas <- ggmanh::manhattan_plot(x = man.dt_cwas, chr.colname = 'chrom', pos.colname = 'pos', pval.colname = 'pvalue', signif = 0.05/nrow(man.dt_cwas), preserve.position = TRUE, point.size = 1) + annotate("text", x=1, y=170, label= "CWAS") 
+
+qqm_tfxcan; qqm_cwas
+```
+
+Now I need to grab these plots and collate them into a single figure
+
+```{r}
+figure_5 <- rlang::duplicate(FIGURE_5)
+```
+
+```{r, fig.format = 'png', fig.dpi = 800}
+manhattan_plots <- cowplot::plot_grid(qqm_tfxcan, qqm_cwas, ncol = 1, nrow = 2, labels = c('A'), rel_widths = c(1, 1), rel_heights = c(1,1), label_fontfamily = "Helvetica", label_fontface = "plain", label_size = 8) 
+
+zplots <- cowplot::plot_grid(figure_5$vennplot_overlaps, figure_5$plotzscores, ncol = 1, nrow = 2, labels = c('B', 'C'), label_fontfamily = "Helvetica", label_fontface = "plain", label_size = 8)
+```
+
+```{r}
+# cowplot::plot_grid(manhattan_plots, zplots, ncol = 2, nrow = 1, rel_widths = c(3, 1), rel_heights = c(1,1))
+```
+
+```{r, fig.height = 14, fig.width = 20, fig.format = 'png', fig.dpi = 800}
+# cowplot::plot_grid(qqm_tfxcan, figure_6$plotzscores, qqm_cwas, figure_6$vennplot_overlaps, ncol = 2, nrow = 2, rel_widths = c(3, 1), rel_heights = c(1,1), labels = c('A', 'B', 'C', 'D'))
+
+f5 <- cowplot::plot_grid(manhattan_plots, zplots, ncol = 2, nrow = 1, rel_widths = c(3, 1), rel_heights = c(1,1)) 
+```
+
+```{r, fig.height = 6, fig.width = 12, fig.format = 'png', fig.dpi = 800}
+f5 <- ggplotify::as.ggplot(f5)
+f5
+```
+
+```{r, fig.format = 'png', fig.dpi = 800}
+# ggsave has trouble saving base R plots and other non ggplot objects
+
+png(filename="/beagle3/haky/users/temi/projects/Enpact/figures/figure5.png", width = 8000, height = 4000, units = "px", res = 800)
+f5
+dev.off()
+
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure6.png", width = 6000, height = 6000, units = "px", dpi = 800)
+```
+
+```{r}
+# save the figure
+# pdf(file="/beagle3/haky/users/temi/projects/Enpact/figures/figure5.pdf", width = 10, height = 6)
+# f5
+# dev.off()
+```
+
+```{r}
+ALL_FIGURES[['Figure 5']] <- f5
+```
+
+#### Functional classification of genes near exclusive Enpact-based and CWAS-based ARBS
+
+I have decided to look at genes within 1 mb of the ARBS.
+
+```{r}
+# getting genes using annotation hub
+library(AnnotationHub)
+```
+
+```{r}
+## Load the annotation resource.
+ah <- AnnotationHub()
+## Query for available H.Sapiens EnsDb databases
+ahDb <- query(ah, pattern = c("Homo Sapiens", "EnsDb"))
+```
+
+```{r}
+ensdb <- ah[['AH119325']] # AH119325 | Ensembl 113 EnsDb for Homo sapiens
+
+# filter for chromosomes 1:22
+ensdb <- ensembldb::addFilter(ensdb, SeqNameFilter(c(1:22)))
+# filter for only protein coding genes
+filtr <- GeneBiotypeFilter('protein_coding', condition = "==")
+# create genes_Granges
+genes_granges <- genes(ensdb, filter = filtr) 
+# convert to data table
+dt_genes <- genes_granges %>% 
+    as.data.table() %>%
+    dplyr::select(seqnames, start, end, width, gene_name, strand) %>%
+    dplyr::rename(chrom=seqnames)
+```
+
+```{r}
+tfxcan_granges <- with(man.dt_tfxcan, GenomicRanges::GRanges(chrom, IRanges::IRanges(start = pos, end = pos)))
+nearest_genes <- GenomicRanges::findOverlaps(tfxcan_granges, genes_granges, maxgap = 1000000) 
+nearest_genes
+# %>% 
+#     as.data.frame() %>% dplyr::mutate(tfxcan_index = queryHits, gene_index = subjectHits)
+```
+
+```{r}
+# dt.nearest_genes_distance <- as.data.table(nearest_genes) %>% 
+#     dplyr::filter(distance <= 50000)
+# dt.nearest_genes_distance
+```
+
+```{r}
+# how many unique genes
+# dt.nearest_genes_distance$subjectHits |> unique() |> length()
+
+subjectHits(nearest_genes) |> unique() |> length()
+
+queryHits(nearest_genes) |> unique() |> length()
+
+# 6922 genes
+```
+
+```{r}
+GG <- genes_granges[subjectHits(nearest_genes), ] %>%
+    as.data.table() %>%
+    dplyr::select(gene_chrom = seqnames, gene_start=start, gene_end=end, gene_name, gene_id) 
+
+TT <- man.dt_tfxcan[queryHits(nearest_genes), ] %>%
+    dplyr::select(tfxcan_chrom = chrom, tfxcan_pos = pos, tfxcan_pvalue = pvalue, arbs = gene_name)
+```
+
+```{r}
+arbs.nearest_genes <- dplyr::bind_cols(TT, GG) %>% dplyr::arrange(tfxcan_pvalue)
+arbs.nearest_genes
+```
+
+Multiple ARBS can be near the same gene, so we need to group by gene and count the number of ARBS near each gene.
+```{r}
+arbs.nearest_genes %>%
+    dplyr::filter(gene_name != "") %>%
+    dplyr::group_by(gene_name) %>%
+    dplyr::tally() %>%
+    dplyr::arrange(desc(n)) 
+```
+
+
+```{r}
+tfxcan_exclusive_arbs <- man.dt_tfxcan %>% dplyr::filter(
+    gene_name %in% (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & is.na(CWAS.P)) %>% dplyr::pull(locus))
+) 
+```
+
+```{r}
+dt.tfxcan_exclusive <- man.dt_tfxcan %>% dplyr::filter(
+    gene_name %in% (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & is.na(CWAS.P)) %>% dplyr::pull(locus))
+) %>% 
+    dplyr::select(tfxcan_loci = gene_name) %>%
+    dplyr::inner_join(arbs.nearest_genes, by=c('tfxcan_loci' = 'arbs')) %>%
+    dplyr::filter(gene_name != "")
+
+# arbs.nearest_genes %>% dplyr::filter(arbs %in%
+#     (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & is.na(CWAS.P)) %>% dplyr::pull(locus))
+# ) %>% dplyr::select(gene_id) %>% distinct() %>% pull(gene_id)
+
+granges.tfxcan_exclusive <- dt.tfxcan_exclusive %>% with(., GenomicRanges::GRanges(seqnames = tfxcan_chrom, IRanges(start = tfxcan_pos, end = tfxcan_pos)))
+
+dt.cwas_exclusive <- man.dt_tfxcan %>% dplyr::filter(
+    gene_name %in% (dt_compare %>% dplyr::filter(is.na(TFXcan.P) & !is.na(CWAS.P)) %>% dplyr::pull(locus))
+) %>% 
+    dplyr::select(cwas_loci = gene_name) %>%
+    dplyr::inner_join(arbs.nearest_genes, by=c('cwas_loci' = 'arbs')) %>%
+    dplyr::filter(gene_name != "")
+
+granges.cwas_exclusive <- dt.cwas_exclusive %>% with(., GenomicRanges::GRanges(seqnames = tfxcan_chrom, IRanges(start = tfxcan_pos, end = tfxcan_pos)))
+
+dt.common <- man.dt_tfxcan %>% dplyr::filter(
+    gene_name %in% (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & !is.na(CWAS.P)) %>% dplyr::pull(locus))
+) %>%
+    dplyr::select(common_loci = gene_name) %>%
+    dplyr::inner_join(arbs.nearest_genes, by=c('common_loci' = 'arbs')) %>%
+    dplyr::filter(gene_name != "")
+
+granges.common <- dt.common %>% with(., GenomicRanges::GRanges(seqnames = tfxcan_chrom, IRanges(start = tfxcan_pos, end = tfxcan_pos)))
+
+dt.all <- arbs.nearest_genes %>%
+    dplyr::filter(gene_name != "")
+
+# GenomicRanges::distanceToNearest(granges.tfxcan_exclusive, top.genes_granges) ; GenomicRanges::distanceToNearest(granges.cwas_exclusive, top.genes_granges)
+```
+
+```{r}
+# tfxcan_ens <- arbs.nearest_genes %>% dplyr::filter(arbs %in%
+#     (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & is.na(CWAS.P)) %>% dplyr::pull(locus))
+# ) %>% dplyr::select(gene_id) %>% distinct() %>% pull(gene_id)
+
+# cwas_ens <- arbs.nearest_genes %>% dplyr::filter(arbs %in%
+#     (dt_compare %>% dplyr::filter(is.na(TFXcan.P) & !is.na(CWAS.P)) %>% dplyr::pull(locus))
+# ) %>% dplyr::select(gene_id) %>% distinct() %>% pull(gene_id)
+
+# common_ens <- arbs.nearest_genes %>% dplyr::filter(arbs %in%
+#     (dt_compare %>% dplyr::filter(!is.na(TFXcan.P) & !is.na(CWAS.P)) %>% dplyr::pull(locus))
+# ) %>% dplyr::select(gene_id) %>% distinct() %>% pull(gene_id)
+
+# all_ens <- arbs.nearest_genes %>% dplyr::select(gene_id) %>% distinct() %>% pull(gene_id)
+```
+
+```{r}
+# length(tfxcan_ens); length(cwas_ens); length(common_ens); length(all_ens)
+```
+
+```{r}
+# do you want to use the twas signals, too?
+# universe.twas <- dt.all %>%
+#     dplyr::filter(gene_name %in% twas_signif$gene_name) %>%
+#     dplyr::select(gene_name) %>%
+#     distinct() %>% pull(gene_name)
+```
+
+### Gene set overrepresentation analysis with gprofiler
+
+```{r}
+tfx <- dt.tfxcan_exclusive$gene_name %>% unique()
+cwa <- dt.cwas_exclusive$gene_name %>% unique()
+com <- dt.common$gene_name %>% unique()
+all_g <- dt.all$gene_name %>% unique()
+```
+
+```{r}
+tfx %>% cat(sep='\n', file=file.path(data_dir, 'tfxcan_genes.exclusive.txt'))
+cwa %>% cat(sep='\n', file=file.path(data_dir, 'cwas_genes.exclusive.txt'))
+com %>% cat(sep='\n', file=file.path(data_dir, 'common_genes.exclusive.txt'))
+all_g %>% cat(sep='\n', file=file.path(data_dir, 'all_genes.exclusive.txt'))
+```
+
+### Gene set overrepresentation analysis with gprofiler
+
+```{r}
+tfxcan_genes <- readLines(file.path(data_dir, 'tfxcan_genes.exclusive.txt'))
+cwas_genes <- readLines(file.path(data_dir, 'cwas_genes.exclusive.txt'))
+common_genes <- readLines(file.path(data_dir, 'common_genes.exclusive.txt'))
+all_genes <- readLines(file.path(data_dir, 'all_genes.exclusive.txt'))
+```
+
+```{r}
+length(tfxcan_genes) ; length(cwas_genes) ; length(common_genes) ; length(all_genes)
+```
+
+```{r}
+n <- max(length(tfxcan_genes), length(cwas_genes), length(common_genes), length(all_genes))
+length(tfxcan_genes) <- n                      
+length(cwas_genes) <- n
+length(common_genes) <- n
+length(all_genes) <- n
+
+gene_sets <- data.table::data.table(
+    tfxcan = tfxcan_genes,
+    cwas = cwas_genes,
+    overlapping = common_genes,
+    background = all_genes
+)
+
+head(gene_sets)
+```
+
+```{r}
+# SUPPLEMENTARY_TABLES[['Supplementary Table 10']] <- gene_sets
+```
+
+```{r}
+res <- gprofiler2::gost(query = list(
+    `Enpact ARBS genes` = tfxcan_genes, 
+    `CWAS ARBS genes` = cwas_genes,
+    `Overlapping genes` = common_genes
+    ),
+                organism = "hsapiens", ordered_query = FALSE,
+                multi_query = TRUE, significant = TRUE, exclude_iea = FALSE, 
+                measure_underrepresentation = FALSE, evcodes = FALSE, 
+                user_threshold = 0.01, correction_method = "bonferroni", custom_bg = all_genes, 
+                numeric_ns = "", sources = c("GO:MF", "REAC", 'GO:BP', 'GO:CC', 'KEGG'), as_short_link = FALSE, highlight = TRUE)
+res$result[1:5, 1:5]
+```
+
+```{r}
+# res <- gprofiler2::gost(query = tfx,
+#                 organism = "hsapiens", ordered_query = FALSE,
+#                 multi_query = F, significant = TRUE, exclude_iea = FALSE, 
+#                 measure_underrepresentation = FALSE, evcodes = TRUE, 
+#                 user_threshold = 0.01, correction_method = "bonferroni", custom_bg = all_g, 
+#                 numeric_ns = "", sources = c("GO:MF", "REAC", 'GO:BP', 'GO:CC', 'KEGG'), as_short_link = FALSE, highlight = TRUE)
+# res$result[1:5, 1:5]
+```
+
+```{r}
+dim(res$result)
+```
+
+```{r}
+# SUPPLEMENTARY_TABLES[['Supplementary Table 11']] <- res$result
+```
+
+```{r}
+gene_overrep_plot <- function(){
+    gprofiler2::gostplot(res, capped = FALSE, interactive = FALSE) %>%
+        gprofiler2::publish_gostplot(width = NA, height = NA, filename = NULL)
+}
+```
+
+```{r, fig.height = 9, fig.width = 20}
+goverrep_plot <- cowplot::plot_grid(gene_overrep_plot(), ncol = 1, nrow = 1)
+# ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4C.png", width = 14000, height = 6000, units = "px", dpi = 800)
+goverrep_plot
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4C.png", goverrep_plot, width = 11000, height = 3500, units = "px", dpi = 800)
+```
+
+#### Annotate arbs near TWAS-annotated genes
+```{r}
+man.dt_gexpr <- dplyr::inner_join(dt_gexpr, dt_genes, by=c('gene_name' = 'gene_name'), relationship = "many-to-many")
+```
+
+- TWAS
+```{r, twas-manhattan, fig.height = 6, fig.width = 12}
+png("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4B.png", width = 8000, height = 4000, res = 800, units = 'px')
+
+par(xpd = F,family = 'Helvetica', ps = 9.33, mgp = c(1.5,0.5,0))
+trunc_p <- 30
+
+pp <- man.dt_gexpr  %>% dplyr::mutate(across(c(start, end), as.numeric), pos = (end + start) / 2, chrom = as.numeric(gsub('chr', '', chrom))) %>%
+    dplyr::select(chrom, pos, pvalue, gene_name) %>% manhattan(chr = 'chrom', bp = 'pos', snp = 'gene_name', p = 'pvalue', genomewideline = -log10(0.05/nrow(.)), suggestiveline = F)
+
+# pp + ggbreak::scale_x_break()
+pp <- mtext('TWAS prostate cancer risk', adj = 0)
+
+box()
+
+par(mfrow = c(1,1))
+
+dev.off()
+```
+
+```{r}
+twas_signif_associations <- man.dt_gexpr %>%
+    dplyr::filter(pvalue <= (0.05/nrow(.))) %>%
+    dplyr::mutate(pos = ceiling((end + start) / 2))
+```
+
+```{r}
+top.arbs <- dt_compare %>% 
+    dplyr::arrange(desc(TFXcan.Z)) %>%
+    dplyr::filter(!is.na(TFXcan.P)) %>%
+    tidyr::separate_wider_delim(locus, delim = '_', names = c('chrom', 'start', 'end'), cols_remove = F) %>% 
+    dplyr::mutate(across(c(start, end), as.numeric), pos = (end + start) / 2, chrom = as.numeric(gsub('chr', '', chrom))) %>%
+    dplyr::select(chrom, start, end, pos, locus, TFXcan.Z, TFXcan.P)
+    
+top.arbs_granges <- top.arbs %>% with(., GenomicRanges::GRanges(seqnames = chrom, IRanges(start, end), arbs = locus))
+```
+
+```{r}
+ov_dist <- GenomicRanges::distanceToNearest(top.arbs_granges, genes_granges)
+
+distance_to_nearest_gene <- ov_dist %>% elementMetadata() %>% as.data.frame() %>% dplyr::pull(distance)
+
+summary(distance_to_nearest_gene) ; 
+```
+
+What genes are these?
+```{r}
+sd <- genes_granges[subjectHits(ov_dist), ] 
+sd$distance <- mcols(ov_dist)$distance
+sd$arbs <- mcols(top.arbs_granges[queryHits(ov_dist), ])$arbs
+dt_sd <- as.data.table(sd)
+```
+
+```{r}
+dt_sd <- dt_sd %>%
+    dplyr::mutate(twas_signif = case_when(
+        gene_name %in% twas_signif_associations$gene_name ~ TRUE,
+        .default  = FALSE
+    ))
+```
+
+```{r}
+# filter for the top 10 ARBS
+dt_lzoom <- dt_sd %>%
+    dplyr::inner_join(top.arbs %>% dplyr::select(locus, TFXcan.Z, TFXcan.P), by=c('arbs' = 'locus')) %>%
+    dplyr::mutate(twas_signif = case_when(
+        symbol %in% twas_signif_associations$gene_name ~ TRUE,
+        .default  = FALSE
+    ))
+head(dt_lzoom)
+
+top.dt_lzoom <- dt_lzoom %>% dplyr::filter(twas_signif == TRUE) %>% dplyr::arrange(desc(TFXcan.P))
+```
+
+
+```{r}
+# create the list of ggranges for the top.arbs
+
+list.ggranges <- purrr::map(unique(top.dt_lzoom$gene_name), function(gene){
+    ggranges <- with(
+        top.dt_lzoom %>% 
+            dplyr::filter(gene_name == gene) %>% 
+            dplyr::distinct(seqnames, start, end, gene_name), 
+        GenomicRanges::GRanges(seqnames = seqnames, IRanges(start = start, end = end), gene_name = gene_name))
+    
+    return(ggranges)
+})
+
+names(list.ggranges) <- unique(top.dt_lzoom$gene_name)
+list.ggranges <- Filter(Negate(is.null), list.ggranges)
+```
+
+```{r}
+
+# make the list of locus zoom plots
+list.lzoomPlots <- purrr::map(names(list.ggranges), function(agene){
+    # get the tfxcan results
+    tfxcan_et <- top.dt_lzoom %>% 
+        dplyr::filter(gene_name == agene) %>%
+        dplyr::distinct(arbs, zscore = TFXcan.Z, pvalue = TFXcan.P) %>%
+        tidyr::separate_wider_delim(arbs, delim = '_', names = c('chrom', 'start', 'end'), cols_remove = F)
+
+    ggranges <- list.ggranges[[agene]]
+    chrom <- paste0('chr', ggranges@seqnames |> as.character())
+    gstart <- start(ggranges)
+    gend <- end(ggranges)
+    chrom_tfxcan <- top.arbs %>%
+        dplyr::filter(chrom == ggranges@seqnames |> as.character() |> as.integer(), dplyr::between(pos, gstart - 1e6, gend + 1e6)) %>%
+        dplyr::select(chrom, pos, rsid=locus, start, end, pvalue = TFXcan.P) %>%
+        dplyr::mutate(logP = -log10(pvalue))
+    dg <- chrom_tfxcan %>% dplyr::select(chrom, pos, p=pvalue, start, end, rsid) |> as.data.frame()
+    loc <- locus(data = dg, gene = agene, ens_db = "EnsDb.Hsapiens.v86", index_snp = intersect(dg$rsid, tfxcan_et$arbs), flank = 1e6)
+
+    pp <- locus_ggplot(loc, filter_gene_biotype = 'protein_coding', highlight = agene, labels = "index", nudge_y = 0.05) +
+        theme(text=element_text(size=9.33, colour = 'black', family = 'Helvetica'),
+        axis.text = element_text(hjust = 1), 
+        axis.text.x = element_text( hjust=0.5), legend.position="none",
+        panel.background = element_rect(color = 'black'))
+})
+
+names(list.lzoomPlots) <- names(list.ggranges)
+
+```
+
+```{r, }
+groblist <- lapply(list.lzoomPlots, ggplotGrob)
+locus_zoom_plots <- patchwork::wrap_plots(groblist, ncol = 2)
+```
+
+```{r, fig.width = 24, fig.height = 16}
+locus_zoom_plots
+```
+
+```{r}
+# save the plot
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4D.png", locus_zoom_plots, width = 12000, height = 12000, units = "px", dpi = 800)
+```
+
+# FIGURE 6: Matrix factorization and Tenerife plots
+
+```{r, }
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(patchwork)
+library(cowplot)
+```
+
+```{r}
+FIGURE_6 <- list()
+SUPPLEMENTARY_FIGURE_6 <- list()
+```
+
+```{r}
+# these weird tissues should be removed 
+weird_tissues <- c("endometrioidadenocarcinoma", "HCT116", "HeLacontaminant", "Headandneck", "LNCaPcells", 'PeritonealEffusion')
+performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
+performance <- data.table::fread(performance_file) %>%
+    dplyr::filter(type == 'test') %>%
+    dplyr::filter((!is.na(auc) & auc >= 0.7) & !context %in% weird_tissues)
+dim(performance)
+```
+
+```{r}
+# prca_tfxcan <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/important/prostate_cancer_risk.enpactScores.2024-09-30.spredixcan.complete.txt") %>%
+#     dplyr::filter(!is.na(pvalue), !is.na(zscore)) %>%
+#     dplyr::filter(!grepl("HCT116_|HeLacontaminant_|PeritonealEffusion_|LNCaPcells_|endometrioidadenocarcinoma_|Headandneck_", gene_name)) %>%
+#     tidyr::separate_wider_delim(gene, names = c('tf', 'tissue', 'chrom', 'start', 'end'), delim = '_', cols_remove = FALSE) %>%
+#     dplyr::mutate(chrom_num = gsub('chr', '', chrom), across(c(start, end, chrom_num), as.numeric), tf_tissue = paste0(tf, '_', tissue), locus = paste(chrom, start, sep = ':')) %>%
+#     dplyr::filter(tf_tissue %in% performance$model) %>%
+#     dplyr::select(locus, tf, tissue, tf_tissue, chrom, start, end, zscore, pvalue)
+```
+
+```{r}
+prca_tfxcan <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-04-25.complete.spredixcan.txt") %>%
+    dplyr::filter(!is.na(pvalue), !is.na(zscore)) %>%
+    dplyr::filter(tf_tissue %in% performance$model) %>%
+    dplyr::select(locus, tf, tissue, tf_tissue, chrom, start, end, zscore, pvalue) %>%
+    dplyr::filter(!tissue %in% weird_tissues)
+```
+
+
+```{r}
+prca_tfxcan$tf_tissue |> unique() |> length()
+```
+
+```{r}
+# distritubion of TF tissue pairs
+prca_tfxcan$tf |> unique() |> length();
+prca_tfxcan$tissue |> unique() |> length();
+```
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 9']] <- prca_tfxcan
+```
+
+#### What TFs are most important across all 132 GWAS loci?
+
+```{r}
+dt_pranking <- prca_tfxcan %>%
+    dplyr::group_by(tf, locus) %>%
+    dplyr::summarize(acatP = ACAT::ACAT(pvalue)) %>% 
+    dplyr::mutate(neglogP = -log10(acatP)) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(locus) %>%
+    dplyr::mutate(prank = rank(-neglogP, ties.method = 'average')) %>%
+    dplyr::arrange(desc(prank))
+
+# boxplots
+arrangement <- dt_pranking %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(tf) %>%
+    dplyr::summarize(mn = median(prank)) %>% 
+    dplyr::arrange(mn)
+
+dt_pranking$tf <- factor(dt_pranking$tf, levels = arrangement$tf)
+
+tfxcan_tf_pval_ranking <- dt_pranking %>%
+    dplyr::filter(tf %in% arrangement$tf) %>%
+    ggplot(aes(x = prank, y = tf)) + 
+    geom_boxplot(alpha = 0.5) + theme_simple +
+    theme(legend.position = "none") +
+    labs(title = 'TFXcan ACAT pvalue ranking', x = 'Median Rank across 132 GWAS loci', y = 'Transcription Factor')
+```
+
+```{r, fig.width = 6, fig.height = 24}
+tfxcan_tf_pval_ranking
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['A']] <- tfxcan_tf_pval_ranking
+```
+
+```{r}
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6A.png", tfxcan_tf_pval_ranking, width = 5000, height = 15000, units = "px", dpi = 800)
+```
+
+#### What tissues are most important across all 132 GWAS loci?
+```{r}
+dt_pranking <- prca_tfxcan %>%
+    dplyr::group_by(tissue, locus) %>%
+    dplyr::summarize(acatP = ACAT::ACAT(pvalue)) %>% 
+    dplyr::mutate(neglogP = -log10(acatP)) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(locus) %>%
+    dplyr::mutate(prank = rank(-neglogP, ties.method = 'average')) %>%
+    dplyr::arrange(desc(prank))
+
+# boxplots
+arrangement <- dt_pranking %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(tissue) %>%
+    dplyr::summarize(mn = median(prank)) %>% 
+    dplyr::arrange(mn)
+
+dt_pranking$tissue <- factor(dt_pranking$tissue, levels = arrangement$tissue)
+
+tfxcan_tissue_pval_ranking <- dt_pranking %>%
+    dplyr::filter(tissue %in% arrangement$tissue) %>%
+    ggplot(aes(x = prank, y = tissue)) + 
+    geom_boxplot(alpha = 0.5) + theme_simple +
+    theme(legend.position = "none") +
+    labs(title = 'TFXcan ACAT pvalue ranking', x = 'Median Rank across 132 GWAS loci', y = 'Tissue')
+
+```
+
+```{r, fig.width = 6, fig.height = 11}
+tfxcan_tissue_pval_ranking
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['B']] <- tfxcan_tissue_pval_ranking
+```
+
+```{r}
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6B.png", tfxcan_tissue_pval_ranking, width = 5000, height = 8000, units = "px", dpi = 800)
+```
+
+
+```{r}
+# prca_tfxcan %>%
+#     dplyr::rename(tf_tissue_locus = gene) %>%
+#     dplyr::select(-gene_name) %>%
+#     data.table::fwrite(file.path(data_dir, 'prostate_cancer_risk.TFXcan.txt.gz'), sep='\t', quote = F, row.names = F, compress = 'gzip')
+```
+
+
+### Full Tenerife plot
+
+
+```{r}
+# read in the data i.e. zscores
+data_list <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zscores.matrices.rds")
+```
+
+```{r}
+# full tenerife
+standardized_zscores <- data_list[["zratios"]][["tfxcan"]]**2
+gwas_pvalues <- data_list[["zratios"]][["gwas"]]
+standardized_zscores <- standardized_zscores[rownames(gwas_pvalues), ]
+```
+
+
+```{r}
+p1 <- standardized_zscores %>%
+    ComplexHeatmap::Heatmap(col = brewer.pal(n = 8, name = "Blues"), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, heatmap_legend_param = list(title = expression(Z[TFXcan]^2)), row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1))
+
+p2 <- gwas_pvalues %>%
+    ComplexHeatmap::Heatmap(col = brewer.pal(n = 8, name = "RdBu"), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, heatmap_legend_param = list(title = expression(Z[GWAS])), row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1))
+
+p3 <- (p1 + p2)
+
+full_tenerife <- p3 %>% 
+    ComplexHeatmap::draw() %>%
+    grid.grabExpr() %>%
+    ggdraw()
+
+```
+
+```{r}
+# save the full tenerife plot
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/prca_full_tenerife_plot.pdf", full_tenerife, width = 50000, height = 20000, units = "px", dpi = 800, limitsize = FALSE)
+```
+
+## Subset tenerife plot
+```{r}
+# zoom into the tenerife plot
+# prostate only
+# here I plot the z-scores squared
+shw <- grepl("^AR_|^FOXA1_|^HOXB13_|^GATA2_|GWAS", colnames(data_list[["zratios"]][["tfxcan"]]))
+shw_mat <- data_list[["zratios"]][["tfxcan"]][, shw]
+
+# the dt_gwas_pvalues
+shw_gwas <- data_list[["zratios"]][["gwas"]]
+shw_gwas <- shw_gwas[rownames(shw_mat), ] |> as.matrix()
+colnames(shw_gwas) <- "GWAS"
+shw_mat <- cbind(shw_mat, shw_gwas)
+```
+
+```{r}
+wrows <- c(1:10, (nrow(shw_mat) - 10):nrow(shw_mat))
+mmat <- shw_mat[wrows, ]
+g.mmat <- mmat[, "GWAS", drop = FALSE]
+mmat <- (mmat[, -ncol(mmat), drop = FALSE])
+
+p1 <- mmat**2 %>%
+    ComplexHeatmap::Heatmap(col = brewer.pal(n = 8, name = "Blues"), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, heatmap_legend_param = list(title = expression(Z[TFXcan]^2)), row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1))
+
+p2 <- g.mmat %>%
+    ComplexHeatmap::Heatmap(col = brewer.pal(n = 8, name = "RdBu"), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, heatmap_legend_param = list(title = expression(Z[GWAS])), row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1))
+
+p3 <- p1 + p2
+
+subset_tenerife <- p3 %>%
+    ComplexHeatmap::draw() %>% 
+    grid.grabExpr() %>%
+    ggdraw()
+```
+
+```{r}
+# save the subset tenerife plot
+png("/beagle3/haky/users/temi/projects/Enpact/figures/prca_subset_tenerife_plot.png", width = 3000, height = 3000, res = 800, units = 'px')
+grid.draw(subset_tenerife)
+dev.off()
+```
+
+### Normalizing the Tenerife plot
+#### Ratio tenerife plot
+
+```{r}
+zratio_matdev <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.matrix.rds")
+```
+
+```{r}
+subset_zratio <- zratio_matdev[rownames(mmat), colnames(mmat)] %>% 
+    ComplexHeatmap::Heatmap(col = brewer.pal(n = 8, name = "Blues"), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, 
+        heatmap_legend_param = list(title = expression(frac(Z[TFXcan]^2, Z[GWAS]^2))), row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1)) %>%
+    ComplexHeatmap::draw() %>% 
+    grid.grabExpr() %>%
+    ggdraw()
+```
+
+```{r}
+# save the subset tenerife plot
+# png("/beagle3/haky/users/temi/projects/Enpact/figures/prca_subset_zratio_plot.png", width = 3000, height = 3000, res = 800, units = 'px')
+# subset_zratio
+# dev.off()
+```
+
+```{r, fig.width = 8, fig.height = 4}
+tenerife_plots <- patchwork::wrap_plots(
+    ggplotify::as.ggplot(subset_tenerife), 
+    ggplotify::as.ggplot(subset_zratio), ncol = 2) + plot_annotation(tag_levels = list(c(1,2)), 
+        theme = theme(plot.tag = element_text(size = 10.6, family = 'Helvetica', face = 'plain')))
+
+tenerife_plots
+```
+
+```{r}
+FIGURE_6$tenerife_plots <- tenerife_plots
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure6A.png", tenerife_plots, width = 6000, height = 3000, units = 'px', dpi = 800)
+```
+
+### Matrix factorization of z-scores
+
+```{r}
+zflash <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.flash.rds")
+```
+
+#### proportion of variance explained by each of the factors
+
+```{r}
+pve_plot <- ggplot() +
+    geom_point(aes(x = 1:length(zflash$pve), y = zflash$pve), size = 2) +
+    geom_line(aes(x = 1:length(zflash$pve), y = zflash$pve), linewidth = 0.5, color = 'grey', linetype = 'dashed') +
+    theme_simple +
+    labs(x = 'Program', y = 'PVE') +
+    scale_x_continuous(breaks = seq(1, length(zflash$pve), 1)) + theme( aspect.ratio=1)
+```
+
+```{r}
+# FIGURE_6$pve_plot <- pve_plot
+```
+
+```{r}
+# cumulative proportion of variance explained
+cum_pve <- cumsum(zflash$pve)
+cum_pve_plot <- ggplot() +
+    geom_point(aes(x = 1:length(cum_pve), y = cum_pve), size = 2) +
+    geom_line(aes(x = 1:length(cum_pve), y = cum_pve), linewidth = 0.5, color = 'grey', linetype = 'dashed') +
+    theme_simple +
+    labs(x = 'Program', y = 'Cumulative PVE') +
+    scale_x_continuous(breaks = seq(1, length(cum_pve), 1)) +
+    scale_y_continuous(limits = c(round(min(cum_pve), 2), round(max(cum_pve), 2)), breaks = seq(round(min(cum_pve), 2), round(max(cum_pve), 2), by=0.01)) + theme( aspect.ratio=1)
+```
+
+```{r}
+variance_explained <- patchwork::wrap_plots(list(pve_plot, cum_pve_plot), ncol = 2) +
+    plot_annotation(tag_levels = list(c('C', 'D'))) + theme(legend.position = 'none')
+```
+
+```{r, fig.width = 6, fig.height = 3}
+variance_explained %>% ggplotify::as.ggplot()
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['C']] <- variance_explained
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6CD.png", variance_explained, width = 4000, height = 4000, units = 'px', dpi = 800)
+```
+
+```{r}
+#FIGURE_6$cum_pve_plot <- cum_pve_plot
+```
+
+## Programs in PrCa TFXcan associations
+```{r}
+select_ks <- function(cluster_designation, cluster, mat, samp = TRUE){
+    yx <- cluster_designation[cluster_designation == cluster]
+    kx <- sapply(strsplit(names(yx), '_'), getElement, 2) |> unique()
+    yx_kx <- lapply(kx, function(x) yx[endsWith(names(yx), x)])
+
+    set.seed(2025)
+
+    if(samp){
+        selected_yx_kx <- sapply(yx_kx, function(x){
+            x <- x[sample.int(length(x), 1)]
+            return(x)
+        }) %>% names()
+    } else {
+        selected_yx_kx <- names(unlist(yx_kx))
+    }
+    
+
+    tryCatch({
+       mt <- mat[selected_yx_kx, ] |> t()
+       return(mt)
+    }, error = function(e){
+        message(glue('Error: {e} at {cluster}'))
+    })
+}
+
+create_cluster_data <- function(dt_yselected, topn = 20, average = FALSE){
+    # convert to data.table and to long format
+
+    if(average == FALSE){
+        dt_yselected <- as.data.table(dt_yselected, keep.rownames = 'tf_tissue') %>% 
+            tidyr::pivot_longer(cols = !tf_tissue, names_to = 'subsample', values_to = 'contribution') %>%
+            tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>%
+            dplyr::group_by(subsample) %>%
+            dplyr::arrange(desc(contribution)) %>%
+            slice_head(n = topn) %>%
+            dplyr::ungroup() %>%
+            dplyr::group_by(tf_tissue) %>%
+            dplyr::mutate(tf_tissue = factor(tf_tissue, levels = unique(.$tf_tissue)),
+                tf_tissue = reorder(tf_tissue, -contribution))
+    } else if(average){
+        dt_yselected <- as.data.table(dt_yselected, keep.rownames = 'tf_tissue') %>% 
+            tidyr::pivot_longer(cols = !tf_tissue, names_to = 'subsample', values_to = 'contribution') %>%
+            tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>%
+            dplyr::group_by(tf_tissue) %>%
+            dplyr::summarize(contribution = mean(contribution)) %>%
+            dplyr::mutate(tf_tissue = factor(tf_tissue, levels = unique(.$tf_tissue)),
+                tf_tissue = reorder(tf_tissue, -contribution))
+    }
+
+    return(dt_yselected)
+}
+```
+
+```{r}
+outfile <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.program_clusters.1000samples.L2_norm.txt.gz'
+mat_file <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_matrix.1000samples.L2_norm.rds.gz'
+corr_file <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_corrmatrix.1000samples.L2_norm.rds.gz'
+```
+
+```{r}
+clust1000 <- data.table::fread(outfile)
+cluster_assignments <- clust1000$cluster
+cluster_assignments <- setNames(cluster_assignments, clust1000$subprogram)
+```
+
+```{r}
+yclust <- readRDS(mat_file)
+dim(yclust); yclust[1:5, 1:5]
+```
+
+```{r}
+ycorr_mat <- readRDS(corr_file)
+dim(ycorr_mat); ycorr_mat[1:5, 1:5]
+```
+
+#### Optimal number of clusters
+
+```{r}
+# yclust_100 <- readRDS('/beagle3/haky/users/temi/projects/Enpact/files/prca_Fmatrix.correlation.random.100.rds.gz')
+# dim(yclust_100); yclust_100[1:5, 1:5]
+
+cluster_scores <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_clara_silhouette.1000samples.L2_norm.txt.gz')
+```
+
+```{r, fig.width = 4, fig.height = 4}
+
+mmx <- subset(cluster_scores, y == max(y))$clusters
+
+optimal_num <- cluster_scores %>%
+    ggplot(aes(x = clusters, y = y)) +
+    geom_point() +
+    geom_line() +
+    geom_text(aes(label = round(y, 3)), vjust = -1, size = 2) +
+    labs(x = 'Number of Clusters', y = 'Silhouette Score') + 
+    geom_vline(xintercept = mmx , linetype = 'dashed', color = 'grey') +
+    scale_x_continuous(breaks = seq(1, max(cluster_scores$clusters), 1)) +
+    theme_simple 
+
+optimal_num
+```
+
+```{r}
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6E.png", optimal_num, width = 3000, height = 3000, units = "px", dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['E']] <- optimal_num
+```
+
+#### How many programs per subsample
+```{r}
+# how many inferred programs per subsample
+programs_by_subsample <- strsplit(rownames(yclust), '_') %>% do.call('rbind', .) %>% as.data.table() %>% setNames(c('subsample', 'program'))
+```
+
+```{r}
+pdt <- programs_by_subsample %>%
+    dplyr::group_by(subsample) %>%
+    dplyr::summarize(n_programs = n()) %>%
+    dplyr::arrange(desc(n_programs)) %>%
+    dplyr::ungroup() %>%
+    dplyr::group_by(n_programs) %>%
+    dplyr::summarize(n_subsamples = n()) %>%
+    setNames(c('program', 'n_programs')) 
+    
+num_inferred_programs_per_subsample <- pdt %>%
+    ggplot(aes(x = program, y = n_programs)) +
+    geom_col() +
+    labs(x = 'Program', y = 'Number of Subsamples') +
+    scale_x_continuous(breaks = seq(1, max(pdt$program), 1)) +
+    geom_text(aes(label=n_programs),vjust = -1, size = 2) +
+    theme_simple +
+    ylim(0, 500)
+```
+
+```{r, fig.width = 4, fig.height = 5}
+num_inferred_programs_per_subsample
+```
+
+
+```{r}
+ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6F.png", num_inferred_programs_per_subsample, width = 3000, height = 4000, units = "px", dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['F']] <- num_inferred_programs_per_subsample
+```
+
+
+```{r}
+suppfig6 <- rlang::duplicate(SUPPLEMENTARY_FIGURE_6)
+
+names(suppfig6)
+```
+
+```{r}
+dsg <- "
+AB
+A#
+A#
+"
+
+x6a <- patchwork::wrap_plots(suppfig6$A, suppfig6$B, ncol = 2) +
+    plot_layout(design = dsg, heights = c(1, 0.2)) +
+    plot_annotation(tag_levels = 'A') + theme(legend.position = 'none')
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6AB.png", x6a, width = 7000, height = 15000, units = 'px', dpi = 800)
+```
+
+```{r}
+l1 <- patchwork::wrap_plots(pve_plot, suppfig6$F, cum_pve_plot, suppfig6$E, nrow = 2, ncol = 2, widths = c(0.4, 1))
+# l2 <- patchwork::wrap_plots(suppfig6$D, ncol = 1)
+```
+
+```{r}
+
+dsg <- "
+AB
+A#
+"
+x6 <- patchwork::wrap_plots(l1, nrow = 1, widths = c(1, 0.5)) +
+    plot_layout(design = dsg) +
+    plot_annotation(tag_levels = list(c('C', 'E', 'D', 'F'))) + theme(legend.position = 'none')
+```
+
+```{r, fig.width = 12, fig.height = 6}
+x6
+```
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6CDEFG.png", x6, width = 8000, height = 4000, units = 'px', dpi = 800)
+```
+
+## Assigning programs
+
+I need to manually check what programs these are
+```{r}
+# what possible clusters are here?
+
+nc_programs <- length(table(cluster_assignments))
+
+pclusts <- purrr::map(1:nc_programs, function(i){
+    X <- select_ks(cluster_assignments, i, yclust, samp = FALSE)
+    X <- rowMeans(X, na.rm = TRUE) |> as.matrix()
+    return(X)
+}, .progress = TRUE) %>% setNames(paste0('cluster', 1:nc_programs))
+
+```
+
+```{r}
+lapply(pclusts, function(x){
+   x %>%
+        data.table::as.data.table(keep.rownames = TRUE) %>%
+        setNames(c('tf_tissue', 'contribution')) %>%
+        dplyr::arrange(desc(contribution)) %>%
+        head(n=5)
+})
+```
+
+```{r}
+library(paletteer)
+# paletteer_d("MoMAColors::Warhol")
+# paletteer_d("tidyquant::tq_dark")
+```
+
+```{r}
+# functional_programs <- LETTERS
+
+# manually_chosen_colors <- c("#328C97FF", "#A5506DFF", "#2A9D3DFF", "#DB7003FF", "#A30000FF", "#916C37FF", "#97D1D9FF", "#FF0066FF", "#FBA600FF", 'grey')
+
+manually_chosen_colors <- paletteer::paletteer_d("MoMAColors::Klein")
+
+# create colors for programs
+num_programs <- 11
+std_palette <- manually_chosen_colors #RColorBrewer::brewer.pal(n = 9, name = "Set1") #paletteer_d("tidyquant::tq_dark") # RColorBrewer::brewer.pal(n = 12, name = "Set3")
+
+if(length(std_palette) < num_programs){
+    col_vector <- colorRampPalette(std_palette)(num_programs)
+    program_colors <- col_vector
+} else {
+    col_vector <- std_palette[1:num_programs]
+    set.seed(2024)
+    program_colors <- col_vector #sample(col_vector, num_programs) 
+}
+
+#RColorBrewer::brewer.pal(length(uniq_tissues), "Dark2")
+```
+
+```{r}
+# program_names <- c('Liver', 'Program 8', 'Program 9', 'CTCF', 'REST', 'Bone marrow', 'Blood', 'Hormone receptors', 'Colon', 'RFX5-REST')
+
+program_names <- c('Liver', 'Program 1', 'REST', 'Program 2', 'Bone marrow', 'Blood', 'Hormone receptors', 'CTCF', 'Colon', 'Program 3', 'Program 4')
+program_names <- setNames(program_names, paste0('cluster', 1:length(program_names)))
+
+# reordering the programs
+# names(functional_programs) <- glue::glue('k{1:length(functional_programs)}')
+# program_names <- program_names[c('cluster8', 'cluster1', 'cluster4', 'cluster5', 'cluster6', 'cluster7', 'cluster9', 'cluster2', 'cluster3', 'cluster10')] 
+names(program_colors) <- names(program_names)
+```
+
+```{r}
+aa <- as.data.table(program_names, keep.rownames = 'cluster')
+bb <- as.data.table(program_colors, keep.rownames = 'cluster')
+program_meta <- merge(aa, bb, by.x = 'cluster', by.y = 'cluster')
+program_meta$program <- gsub('cluster', 'k', program_meta$cluster)
+colnames(program_meta) <- c('cluster', 'name', 'color', 'program')
+program_meta <- program_meta %>% dplyr::arrange(match(cluster, names(program_names)))
+program_meta
+```
+
+```{r}
+data.table::fwrite(program_meta, '/beagle3/haky/users/temi/projects/Enpact/files/prca.programs.metadata.txt', sep = '\t', quote = F, col.names = T, row.names = F)
+```
+
+### Heatmap of some 100 programs
+#### Cluster of programs
+
+```{r}
+dt.clust1000 <- clust1000 %>% dplyr::mutate(cluster = paste0('cluster', cluster)) %>% dplyr::full_join(program_meta, by = 'cluster') %>% dplyr::select(subprogram, cluster, consensus_program = name, program)
+head(dt.clust1000)
+```
+
+```{r}
+od <- dt.clust1000$cluster
+names(od) <- dt.clust1000$consensus_program
+od <- od[unique(names(od))]
+
+lvs <- od #c(od[!names(od) %in% c('REST', 'RFX5-REST')], od[names(od) %in% c('REST', 'RFX5-REST')])
+
+# od <- gtools::mixedorder(program_meta$program)
+pm <- names(od)
+
+dt.assign <- dt.clust1000 %>% dplyr::filter(subprogram %in% rownames(ycorr_mat)) %>%
+    dplyr::arrange(match(subprogram, rownames(ycorr_mat))) %>% 
+    dplyr::mutate(consensus_program = factor(consensus_program, levels = names(lvs))) %>%
+    dplyr::arrange(match(cluster, lvs))
+
+program_meta <- program_meta %>% dplyr::arrange(match(name, names(lvs)))
+ycorr <- ycorr_mat[dt.assign$subprogram, dt.assign$subprogram]
+```
+
+```{r}
+program_colors <- program_meta$color
+names(program_colors) <- program_meta$names
+
+panel_fun = function(index, nm) {
+    grid.rect(gp = gpar(fill = program_colors[nm], col = "black"))
+    grid.text(nm, 0.5, 0.5)
+}
+
+ha_row <- ComplexHeatmap::rowAnnotation(program = anno_block(
+    gp = gpar(fill = program_meta$color), 
+    labels = program_meta$name, 
+    show_name = FALSE, 
+    labels_gp = gpar(fontsize = 9, fontfamily = 'Helvetica'),
+    panel_fun = panel_fun,
+    width = unit(5, "cm")
+))
+
+# ha_col <- ComplexHeatmap::HeatmapAnnotation(program = anno_block(
+#     gp = gpar(fill = program_meta$color), 
+#     labels = levels(dt.assign$consensus_program), 
+#     show_name = FALSE, 
+#     labels_gp = gpar(fontsize = 9, fontfamily = 'Helvetica'),
+#     panel_fun = panel_fun,
+#     width = unit(5, "cm")
+# ))
+```
+
+```{r}
+
+# xx <- dt.assign %>% dplyr::filter(consensus_program %in% c('REST program', 'RFX5-REST program'))
+
+# yx <- ycorr_mat[dt.assign$subprogram, dt.assign$subprogram]
+
+# identical(rownames(yx), colnames(yx))
+```
+
+```{r}
+hmap <- ComplexHeatmap::Heatmap(ycorr, col = c('blue', 'white', 'red'), show_row_names = FALSE, show_column_names = FALSE, show_row_dend = FALSE,
+        show_column_dend = FALSE, cluster_rows = FALSE, cluster_columns = FALSE,
+        heatmap_legend_param = list(
+            title = expression(R),
+            title_gp = gpar(fontsize = 12, fontface = "bold", fontfamily = 'Helvetica'),
+            legend_height = unit(10, "cm")
+        ), 
+        left_annotation = ha_row, row_split = dt.assign$consensus_program, row_gap = unit(0.5, 'mm'), row_title = NULL, use_raster = TRUE, raster_resize = TRUE, raster_device = "png") %>%
+    ComplexHeatmap::draw() %>%
+    grid.grabExpr() %>%
+    cowplot::ggdraw() %>%
+    ggplotify::as.ggplot()
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/subsamples.cluster1000.png", hmap, width = 18000, height = 18000, units = 'px', dpi = 800)
+```
+
+```{r}
+yclust_ordered <- yclust[rownames(ycorr), ]
+hmap_programs <- ComplexHeatmap::Heatmap(yclust_ordered, col = c('white', 'red'), show_row_names = FALSE, show_column_names = FALSE, show_row_dend = FALSE,
+        show_column_dend = FALSE, cluster_rows = FALSE, cluster_columns = FALSE,
+        heatmap_legend_param = list(
+            title = expression(Contribution),
+            title_gp = gpar(fontsize = 12, fontface = "bold", fontfamily = 'Helvetica'),
+            legend_height = unit(10, "cm")
+        ), 
+        left_annotation = ha_row, row_split = dt.assign$consensus_program, row_gap = unit(0.5, 'mm'), row_title = NULL,
+        use_raster = TRUE,
+        raster_resize = TRUE, 
+        raster_device = "png") %>%
+    ComplexHeatmap::draw() %>%
+    grid.grabExpr() %>%
+    cowplot::ggdraw() %>%
+    ggplotify::as.ggplot()
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/subsamples.programs.cluster1000.png", hmap_programs, width = 12000, height = 12000, units = 'px', dpi = 800)
+```
+
+```{r}
+SUPPLEMENTARY_FIGURE_6[['D']] <- hmap
+```
+#### How many programs assigned to a similar program
+```{r}
+nps <- purrr::map(1:11, function(i){
+    X <- select_ks(cluster_assignments, i, yclust, samp = FALSE)
+    ncol(X)
+}, .progress = TRUE) %>% unlist() %>% setNames(paste0('cluster', 1:11)) 
+
+names(nps) <- program_meta$name[match(names(nps), program_meta$cluster)]
+nps <- sort(nps, decreasing = TRUE)
+```
+
+```{r, fig.width = 12, fig.height = 6}
+num_program_assigned <- ggplot() +
+    aes(x = reorder(names(nps), -nps), y = nps) +
+    geom_col() +
+    theme_simple +
+    labs(x = 'Program', y = 'Number of programs assigned') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    geom_text(aes(label=nps), vjust = -1, size = 3) +
+    theme_simple 
+
+num_program_assigned
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6H.png", num_program_assigned, width = 10000, height = 4000, units = 'px', dpi = 800)
+```
+
+## Assigning program names to the inferred programs
+```{r}
+pclusts <- purrr::map(1:11, function(i){
+    X <- select_ks(cluster_assignments, i, yclust, samp = FALSE)
+    X <- rowMeans(X, na.rm = TRUE) |> as.matrix()
+    return(X)
+}, .progress = TRUE) %>% setNames(paste0('cluster', 1:11))
+```
+
+```{r}
+# rearrange program_meta
+program_meta <- program_meta %>%
+    dplyr::arrange(match(name, c('Hormone receptors', 
+        'Liver', 'Blood', 'Bone marrow', 'Colon', 'CTCF', 'REST', 'Program 1', 'Program 2', 'Program 3', 'Program 4')))
+program_meta
+```
+```{r}
+pclusts <- pclusts[program_meta$cluster]
+names(pclusts) <- program_meta$name
+names(pclusts)
+# pclusts <- pclusts[program_meta$name]
+```
+
+```{r}
+# inner join the pclusts
+# purrr::map(pclusts, function(x){
+#     x %>%
+#         data.table::as.data.table(keep.rownames = TRUE) %>%
+#         setNames(c('tf_tissue', 'contribution')) %>%
+#         dplyr::arrange(desc(contribution)) %>%
+#         head(n=10)
+# }) %>% purrr::reduce(function(x, y){
+#     dplyr::full_join(x, y, by = 'tf_tissue')
+# }) %>% dplyr::arrange(desc(contribution)) %>% View()
+```
+
+```{r}
+# pclust is already averages
+av_pps <- lapply(names(pclusts), function(each_cluster){
+    dt <- pclusts[[each_cluster]] %>%
+        data.table::as.data.table(keep.rownames = TRUE)  %>%
+        setNames(c('tf_tissue', 'contribution')) %>%
+        dplyr::arrange(desc(contribution)) %>%
+        head(n=10)
+
+    prcolor <- dplyr::filter(program_meta, name == each_cluster)$color
+    # create gradient
+    climit <- nrow(dt) + 5
+    cgradient <- colorRampPalette(c(prcolor, "white"))(climit)
+    cgradient <- cgradient[1:(nrow(dt))]
+
+    pname <- dplyr::filter(program_meta, name == each_cluster)$name
+
+    # if(pname == 'RFX5-REST'){
+    #     pname <- ''
+    # }
+
+    dt %>%
+        tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>%
+        ggplot(aes(y = reorder(tf_tissue, -contribution), x = contribution, fill = tf_tissue, group = tissue)) +
+        theme_simple +
+        geom_col(col = 'black', width = 1, fill = cgradient) +
+        labs(x = 'Consensus Contribution', y = 'Driver', title = pname) +
+        scale_y_discrete(
+                labels = function(x) {data.table::tstrsplit(x, "_")[[1]]}, 
+                limits = rev, expand = c(0, 0)
+        ) +
+        guides(fill = "none") +
+        scale_fill_discrete(drop=F) +
+        geom_text(aes(label = tissue, group = tf_tissue), size = 2, position = position_identity(), hjust = 1.5)
+
+        # position = position_dodge(width = 1), inherit.aes = TRUE, hjust = 5
+
+})
+```
+
+```{r, fig.width = 19, fig.height = 4}
+program_plots <- patchwork::wrap_plots(plotlist = av_pps, nrow = 2, axes = 'collect') +
+    patchwork::plot_annotation(title = '')
+
+program_plots
+```
+
+```{r}
+# png("/beagle3/haky/users/temi/projects/Enpact/figures/figure6B.png", width = 18000, height = 4000, res = 800, units = 'px')
+# grid::grid.draw(program_plots)
+# dev.off()
+
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure6B.png", program_plots, width = 18000, height = 2000, units = 'px', dpi = 800)
+```
+
+```{r}
+FIGURE_6$program_plots <- program_plots
+```
+
+```{r}
+pmats <- do.call('cbind', pclusts)
+colnames(pmats) <- paste0('k', 1:11)
+pmats <- as.data.frame(pmats) %>%
+    tibble::rownames_to_column('TF_tissue')
+dim(pmats); pmats[1:5, 1:5]
+```
+
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 10']] <- pmats
+```
+
+```{r}
+data.table::fwrite(pmats, file = '/beagle3/haky/users/temi/projects/Enpact/misc/prca.tf.clusters.txt', row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
+```
+
+## Distribution of TF/tissue contribution per program
+```{r, fig.width = 12, fig.height = 12}
+hist_pps <- lapply(names(pclusts), function(each_cluster){
+    dt <- create_cluster_data(pclusts[[each_cluster]], average=TRUE) %>%
+        dplyr::arrange(desc(contribution))
+
+    prcolor <- dplyr::filter(program_meta, name == each_cluster)$color
+
+    dt <- dt %>%
+        tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F)
+    dt %>%
+        ggplot(aes(x = contribution)) +
+        theme_simple +
+        geom_histogram(fill = prcolor, boundary = min(dt$contribution)) +
+        labs(x = 'Consensus Contribution', y = 'Driver', title = each_cluster) +
+        guides(fill = "none") +
+        scale_x_continuous(limits = c(0,1), oob = scales::squish)
+    
+})
+```
+
+```{r, fig.width = 8, fig.height = 8}
+histogram_avg_contributions <- patchwork::wrap_plots(hist_pps, ncol = 3, axes = 'collect')
+histogram_avg_contributions
+```
+
+```{r}
+ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6I.png", histogram_avg_contributions, width = 8000, height = 8000, units = 'px', dpi = 800)
+```
+
+## Enrichment test of program names
+
+```{r}
+# https://onlinelibrary.wiley.com/doi/10.1002/pro.3496
+nuc_recep <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/misc/nuclear_receptors.txt', fill=FALSE)
+
+length(nuc_recep$`Gene Name`)
+
+prca_tf_list <- c("AR", "NKX3.1", "FOXA1", "ERG", "ETV1", "ETV4", "ETV5", 
+             "SPDEF", "MYC", "HOXB13", "SRF", "RUNX2", "GATA2", "GATA3", 
+             "TP53", "E2F1", "HIF1A", "SMAD4", "STAT3", "CEBPB", "NR3C1", 
+             "KLF4", "SOX9", "BRCA1", "BRCA2", "YY1", "TLE3", "ZBTB7A", "ELK1")
+```
+
+```{r}
+meta_assignments <- pclusts$`Liver` %>% as.data.table(keep.rownames = 'tf_tissue') %>% tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>% dplyr::select(-V1) %>% dplyr::mutate(is_liver = ifelse(tissue == 'Liver', 1, 0),
+    is_bone_marrow = ifelse(tissue == 'BoneMarrow', 1, 0),
+    is_blood = ifelse(tissue == 'Blood', 1, 0),
+    is_colon = ifelse(tissue == 'Colon', 1, 0),
+    is_ctcf = ifelse(tf == 'CTCF', 1, 0),
+    is_rest = ifelse(tf == 'REST', 1, 0),
+    is_prostate = ifelse(tissue == 'Prostate', 1, 0),
+    is_breast = ifelse(tissue %in% c('Breast', 'MammaryGland'), 1, 0),
+    is_prostate_or_breast = ifelse(tissue %in% c('Prostate', 'Breast', 'MammaryGland'), 1, 0),
+    is_nuclear_receptor = ifelse(tf %in% nuc_recep$`Gene Name`, 1, 0), 
+    is_prca_tf = ifelse(tf %in% prca_tf_list, 1, 0))
+
+meta_assignments[1:5, ]
+```
+
+```{r}
+test_groups <- c('is_liver', 'is_bone_marrow', 'is_blood', 'is_colon', 'is_ctcf', 'is_rest', 'is_prostate', 'is_breast', 'is_prostate_or_breast', 'is_nuclear_receptor', 'is_prca_tf')
+```
+
+```{r}
+cluster_ttests <- purrr::map(names(pclusts), function(each_cluster){
+    dt <- pclusts[[each_cluster]] %>% as.data.table(keep.rownames = 'tf_tissue') %>%
+        dplyr::inner_join(meta_assignments, by = c('tf_tissue' = 'tf_tissue')) %>%
+        dplyr::rename(contribution = V1) %>%
+        as.data.table()
+
+    test <- purrr::map(test_groups, function(each_group){
+        test <- t.test(dt$contribution ~ dt[[each_group]])
+        return(test$p.value)
+    })
+    test <- as.numeric(test)
+    names(test) <- test_groups
+    return(test)
+}) %>%
+    do.call('rbind', .)
+
+rownames(cluster_ttests) <- names(pclusts)
+cluster_ttests <- -log10(cluster_ttests)
+cluster_ttests
+```
+```{r, fig.width = 8, fig.height = 8}
+ComplexHeatmap::Heatmap(cluster_ttests, col = colorRampPalette(c("white", "red"))(10), border = 'black', cluster_rows = F, cluster_columns = F, column_names_rot = 90, row_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = gpar(col = "black", lwd = 1),
+    cell_fun = function(j, i, x, y, width, height, fill) {
+        grid.text(sprintf("%.1f", cluster_ttests[i, j]), x, y, gp = gpar(fontsize = 10))
+}, heatmap_legend_param = list(title = "-log10\n(p-value)"))
+```
+
+
+## Assigning loci to programs and GWAS 
+```{r}
+library(ggmanh)
+```
+
+```{r}
+program_meta <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/files/prca.programs.metadata.txt')
+program_meta
+```
+
+```{r}
+loci_assignment <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.loci_assignments.1000samples.L2_norm.txt.gz'
+```
+
+```{r}
+dt_loci_assignments <- data.table::fread(loci_assignment)
+dim(dt_loci_assignments)
+```
+
+```{r}
+lmats <- dt_loci_assignments %>%
+    tibble::column_to_rownames('locus') %>%
+    setNames(paste0('k', 1:ncol(.))) %>%
+    tibble::rownames_to_column('locus')
+```
+
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 11']] <- lmats
+```
+
+```{r}
+data.table::fwrite(lmats, file = '/beagle3/haky/users/temi/projects/Enpact/misc/prca.loci.assignments.txt', row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
+```
+
+```{r}
+gwas_clusters <- dt_loci_assignments %>% tibble::column_to_rownames('locus') %>% as.matrix()
+```
+
+```{r}
+# assign each locus to a program by the maximum
+loci_designation <- gwas_clusters %>%
+    apply(1, function(x){
+        a <- which.max(x)
+        b <- max(x)
+        c(a, b)
+    }) %>%
+    t() %>%
+    as.data.table(keep.rownames = 'locus')
+    
+colnames(loci_designation) <- c('locus', 'designated_program', 'contribution')
+loci_designation <- loci_designation %>%
+    dplyr::mutate(designated_program = paste0('k', designated_program))
+
+loci_designation[1:5, ]
+```
+
+### How many loci are assigned to each program?
+
+```{r}
+ldt_summary <- loci_designation %>%
+    dplyr::group_by(designated_program) %>%
+    dplyr::summarize(n_loci = n()) %>%
+    dplyr::arrange(desc(n_loci)) %>%
+    dplyr::inner_join(program_meta, by = c('designated_program' = 'program')) %>%
+    dplyr::select(name, n_loci)
+```
+
+```{r, fig.width = 8, fig.height = 5}
+ggplot(ldt_summary, aes(x = stats::reorder(name, -n_loci), y = n_loci)) +
+    geom_col() +
+    theme_simple +
+    labs(x = 'Program', y = 'Number of Loci') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_text(aes(label = n_loci), vjust = -0.5, size = 3)
+```
+
+
+## Annotating the manhattan plot
+
+```{r}
+devtools::source_gist("https://gist.github.com/TemiPete/c19ee6999f017840b423f7c3f013379a")
+```
+
+Modify the program metadata
+```{r}
+# rearrange program_meta
+program_meta <- program_meta %>%
+    dplyr::arrange(match(name, c('Hormone receptors', 
+        'Liver', 'Blood', 'Bone marrow', 'Colon', 'CTCF', 'REST', 'Program 1', 'Program 2', 'Program 3', 'Program 4')))
+colormap <- setNames(as.character(program_meta$color), program_meta$name)
+# Add 'none' to colormap
+# #4D4D4D           #BEBEBE80
+colormap <- c(colormap, 'none_odd' = "#BEBEBE80", 'none_even' = '#4D4D4D')
+
+chrom_lengths <- get_chrom_lengths('hg38')
+xmax <- get_total_length(chrom_lengths)
+x_breaks <- get_x_breaks(chrom_lengths)
+```
+
+```{r}
+mandt <- data.table::fread("/beagle3/haky/users/temi/misc/tfxcan.prca_gwas.txt.gz", sep = '\t', quote = F, header = T)
+```
+
+```{r}
+ppdt <- mandt %>% 
+    dplyr::rename(chrom = chromosome, pos = position, y = log10pval) %>% 
+    dplyr::mutate(name = as.character(name)) %>%
+    dplyr::mutate(name_chrom = dplyr::case_when(
+        name == 'none' & chrom %in% seq(1, 22, by = 2) ~ 'none_odd',
+        name == 'none' & chrom %in% seq(0, 22, by = 2) ~ 'none_even',
+        TRUE ~ name
+    )) %>%
+    dplyr::mutate(chrom = paste0('chr', chrom), fill = color) %>%
+    add_cumulative_pos('hg38') %>% 
+    dplyr::mutate(name_chrom = factor(name_chrom, levels = c(program_meta$name, 'none_even', 'none_odd')), contribution = ifelse(is.na(contribution), 0, contribution))
+
+chromosome_levels <- paste0('chr', seq(1, 22))
+
+chrom_breaks <- ppdt %>% 
+    dplyr::group_by(chrom) %>% 
+    dplyr::summarize(center = mean(cumulative_pos)) %>%
+    dplyr::arrange(match(chrom, chromosome_levels)) %>%
+    dplyr::mutate(chrom = gsub('chr', '', chrom)) %>%
+    dplyr::mutate(chrom = as.numeric(chrom))
+
+x_breaks <- setNames(chrom_breaks$center, chrom_breaks$chrom)
+```
+
+```{r}
+
+man.g.colors <- ppdt %>%
+    ggplot2::ggplot(aes(x=cumulative_pos, y=y)) +
+    geom_point(aes(size = contribution, color = name_chrom), shape = 16, position = position_jitter(0.5)) +
+    theme_classic() +
+    scale_x_continuous(
+        limits=c(0, xmax), 
+        expand=c(0.01, 0), 
+        breaks=x_breaks,
+        labels=names(x_breaks), 
+        name='Chromosome') +
+    scale_y_continuous(
+        expand=c(0.01, 0), 
+        name=expression('-log'[10]*'(P)'), 
+        limit = c(0, 200)) +
+    scale_color_manual(values = colormap, labels = c(program_meta$name, 'Not tested', 'Not tested')) +
+    scale_shape_identity() +
+    guides(
+        color = guide_legend(title = "Program", override.aes = list(size = 2, shape = 16))
+    ) +
+    scale_size_continuous(range = range(ppdt$pch_size), name = "SNP effect \non Program") +
+    geom_hline(yintercept = -log10(5e-8), linetype = 'dashed', color = 'grey') + theme_simple
+```
+
+
+
+```{r}
+FIGURE_6$annotated_manhattan <- man.g.colors
+```
+
+
+
+```{r}
+ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6C.png', man.g.colors, width = 15000, height = 5000, dpi = 800, units = 'px')
+```
+
+
+```{r}
+figure_6 <- rlang::duplicate(FIGURE_6)
+# use ggplotify to convert to ggplot
+figure_6 <- lapply(figure_6, ggplotify::as.ggplot)
+```
+
+```{r}
+# b1 <- patchwork::wrap_plots(figure_6$tenerife_plots)
+
+# b2 <- figure_6$program_plots + plot_layout(ncol = 1, widths = c(1)) 
+
+# upperleft_panel <- figure_6$tenerife_plots
+# lowerleft_panel <- figure_6$annotated_manhattan
+# lower_panel <- figure_6$annotated_manhattan 
+```
+
+```{r}
+toppanel <- patchwork::wrap_plots(figure_6$tenerife_plots, figure_6$annotated_manhattan, nrow = 1) + plot_layout(widths = c(1, 0.3), design = 'ABBB')
+bottompanel <- figure_6$program_plots + plot_layout(nrow = 1)
+```
+
+```{r}
+f6 <- patchwork::wrap_plots(toppanel, bottompanel, nrow = 2) + plot_layout(heights = c(1, 1)) +
+    plot_annotation(tag_levels = list(c('A', 'C', 'B')), 
+        theme = theme(plot.tag = element_text(size = 10.6, family = 'Helvetica', face = 'plain')))
+```
+
+
+```{r, fig.width = 24, fig.height = 8, fig.format = 'png', fig.dpi = 800}
+f6
+```
+
+```{r}
+#save f6
+ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6.png', f6, width = 23000, height = 10000, dpi = 800, units = 'px')
+
+# ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6.pdf', f6, units = 'px')
+```
+
+```{r}
+ALL_FIGURES[['Figure 6']] <- f6
+```
+
+# All figures
+
+```{r}
+# ALL_FIGURES <- ALL_FIGURES[gtools::mixedsort(names(ALL_FIGURES))]
+
+print(names(ALL_FIGURES))
+```
+
+
+```{r, fig.width = 12, fig.height = 36}
+# library(gridExtra)
+# # patchwork::wrap_plots(ALL_FIGURES, nrow = length(ALL_FIGURES))
+
+# plots <- gridExtra::marrangeGrob(ALL_FIGURES, nrow = length(ALL_FIGURES), ncol = 1)
+# plots
+#save to multi pdf
+
+
+
+# ALL_FIGURES <- lapply(ALL_FIGURES, ggplot2::ggplotGrob)
+
+# pdf("/beagle3/haky/users/temi/projects/Enpact/figures/ALL_FIGURES.pdf", onefile = TRUE)
+# for (i in seq(length(ALL_FIGURES))) {
+#     do.call("grid.arrange", ALL_FIGURES[i])   
+# }
+# dev.off()
+
+# ggplot2::ggsave(plot = patchwork::wrap_plots(ALL_FIGURES, ncol=1), 
+#        filename = "/beagle3/haky/users/temi/projects/Enpact/figures/ALL_FIGURES.pdf",
+#        device = "pdf",
+#        units = 'px',
+#        width = 1000,
+#        height = 10000,)
+
+```
+
+```{r}
+# b1 + b4 + plot_layout(ncol = 3) plot_layout(ncol = 3, 
+#     widths = c(1, 1, 0.5), heights = c(1,1))
+```
+
+## Extra supplementary tables
+
+```{r}
+weird_tissues
+```
+
+#### Number of ChIP-seq experiments per TF/tissue pair
+
+```{r}
+experiments_threshold_pass <- data.table::fread('/project2/haky/Data/TFXcan/cistrome/raw/human_factor_full_QC.txt') %>%
+    dplyr::filter(Tissue_type != 'None', !is.na(PeaksUnionDHSRatio), FRiP > 0.01) %>%
+    dplyr::filter(!grepl('-', Factor, fixed = T)) %>%
+    dplyr::mutate(fake_types = gsub(' ', '', Tissue_type)) %>%
+    dplyr::filter(!fake_types %in% weird_tissues) %>% 
+    dplyr::select(-fake_types)
+```
+
+```{r}
+SUPPLEMENTARY_TABLES[['Supplementary Table 12']] <- experiments_threshold_pass 
+```
+
+```{r}
+n_exp_per_tf_tissue <- experiments_threshold_pass %>%
+    dplyr::group_by(Factor, Tissue_type) %>%
+    dplyr::summarize(n_experiments = n(), .groups = 'drop') %>%
+    dplyr::arrange(desc(n_experiments))
+```
+
+```{r}
+# SUPPLEMENTARY_TABLES[['Supplementary Table 17']] <- n_exp_per_tf_tissue
+```
+
+#### Baca individuals peaks data
+
+```{r}
+dir <- '/project2/haky/Data/CWAS/bed'
+
+idnames <- vector('character', length = 0)
+dtlist <- list.files(dir, pattern = "*.bed", full.names = T) %>% 
+    purrr::map(., .f = function(x){
+        dt <- data.table::fread(x, header = F)
+        idname <- x %>% basename() %>% str_remove('.bed')
+        idnames <<- c(idnames, idname)
+        return(dim(dt)) 
+    })
+```
+
+```{r}
+sapply(dtlist, getElement, 1) |> mean()
+```
+
+```{r}
+sapply(dtlist, getElement, 1) |> hist(xlab = 'Number of peaks per individual', main = '')
+```
+
+```{r}
+ind_peaks <- data.table::data.table(id = idnames, num_peaks = sapply(dtlist, getElement, 1))
+ind_peaks |> head()
+```
+
+```{r}
+# SUPPLEMENTARY_TABLES[['Supplementary Table 18']] <- ind_peaks
+```
+
+
+
+
+# SUPPLEMENTARY TABLES
+
+```{r}
+library(openxlsx)
+```
+
+```{r}
+# use gtools 
+SUPPLEMENTARY_TABLES <- SUPPLEMENTARY_TABLES[gtools::mixedsort(names(SUPPLEMENTARY_TABLES))]
+
+names(SUPPLEMENTARY_TABLES)
+```
+
+```{r}
+sheet_headers <- c(
+    "Annotations of Enformer epigenomic features",
+    "Enpact weights of epigenomic features for predicting the 692 TF/tissue pairs",
+    "Performance measures, train-test splits, number of experiments used, and other relevant metadata for each TF/tissue pair in Enpact",
+    "A list of established pioneer factors from Mayran and Drouin, 2018 (doi: 10.1074/jbc.R117.001232)",
+    "T-test of difference of predicted binding scores for bound vs unbound individuals for AR in prostate. Both Enpact and CWAS predictors were tested",
+    "Correlation test of Enpact's prediction and CWAS's prediction of AR binding in prostate tissues",
+    "Results of association of AR binding in prostate tissue with Prostate cancer risk",
+    "Zscores and P-values of androgen receptor binding sites (ARBS) identified by Enpact and CWAS",
+    "TFXcan results of association of TF/tissue binding with Prostate cancer risk",
+    "Contribution of TF/tissue pair to consensus programs",
+    "Effect of GWAS SNPs on consensus programs",
+    "Summary information of TFs, tissues, and experiments from the Cistrome Database used to train TF/tissue predictors"
+)
+```
+
+```{r}
+print(length(sheet_headers) == length(SUPPLEMENTARY_TABLES))
+```
+
+```{r}
+lapply(SUPPLEMENTARY_TABLES, dim)
+```
+
+```{r, eval = T, fig.height = 6}
+usestyle <- createStyle('Helvetica', 7)
+wb <- createWorkbook()
+addWorksheet(wb, sheetName = "README")
+writeDataTable(wb, "README", x = data.frame(NA), rowNames = F, colNames = F)
+
+#write out tables
+for (i in seq_along(SUPPLEMENTARY_TABLES)) {
+    shname <- paste0('Supplementary Table ', i)
+    headname <- as.character(glue::glue("{names(SUPPLEMENTARY_TABLES)[i]}: {sheet_headers[i]}"))
+    print(headname)
+    addWorksheet(wb, sheetName = shname)
+    writeData(wb, sheet = shname, x = headname, startRow = 1, startCol = 1)
+    writeDataTable(wb, shname, x = SUPPLEMENTARY_TABLES[[i]], startRow = 2, startCol = 1, withFilter = FALSE)
+}
+
+# Save workbook
+openxlsx::saveWorkbook(wb, file.path('/beagle3/haky/users/temi/projects/Enpact/figures', 'enpact-paper.supplementary_tables.xlsx'), overwrite = TRUE)
+```
+
+
+
+```{r}
+knitr::knit_exit()
+```
+
+
+```{r}
+# b2 <- (figure_6$program_ranking) + 
+#     plot_annotation(tag_levels = list('E'), 
+#         theme = theme(plot.tag = element_text(size = 10.6, family = 'Helvetica', face = 'plain')))
+
+# b3 <- figure_6$program_plots + figure_6$program_ranking + plot_layout(ncol = 2, widths = c(1, 0.4)) + 
+#     patchwork::plot_annotation(tag_levels = list('C', 'E'), 
+#         theme = theme(plot.tag = element_text(size = 10.6, family = 'Helvetica', face = 'plain')))
+```
