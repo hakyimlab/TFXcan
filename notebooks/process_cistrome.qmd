@@ -1,0 +1,53 @@
+
+```{r}
+
+```
+
+
+```{r}
+library(tidyverse)
+library(data.table)
+```
+
+
+```{r}
+remove_tissues <- c("Adherent HeLa cells", 
+    "endometrioid adenocarcinoma",
+    "epithelioid sarcoma",
+    "HCT116",
+    "HeLa contaminant",
+    "LNCaP cells",
+    "Malignant rhabdoid tumor",
+    "meningioma",
+    "None",
+    "Snap-frozen tissue",
+    "uterine leiomyosarcoma")
+```
+
+```{r}
+dt <- data.table::fread('/project2/haky/Data/TFXcan/cistrome/raw/human_factor_full_QC.txt') %>%
+    dplyr::filter(!Tissue_type %in% remove_tissues)
+```
+
+```{r}
+dt$Tissue_type |> unique() |> sort()
+```
+
+```{r}
+dt %>% dplyr::group_by(Factor, Cell_type, Tissue_type) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::arrange(desc(n)) |> View()
+```
+
+
+```{r}
+dt %>% dplyr::group_by(Factor) %>%
+    dplyr::summarise(n = n()) %>%
+    dplyr::arrange(desc(n))
+```
+
+
+
+```{r}
+
+```

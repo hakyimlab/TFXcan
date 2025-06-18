@@ -1,0 +1,70 @@
+---
+
+
+
+
+---
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(glue)
+```
+
+```{r}
+source("/beagle3/haky/users/temi/projects/Enpact/notebooks/hsq.R")
+```
+
+```{r}
+set.seed(200)
+
+nsamp = 120
+mp=100 ## number of features explaining yy
+h2 = 0.5
+betavec = rnorm(mp, sd=sqrt(h2/mp) )
+epsivec = rnorm(nsamp, sd= sqrt(1 - h2) )
+XX = matrix(rnorm(nsamp*mp), nsamp, mp) %>% scale()
+yy = XX %*% betavec + epsivec
+yy = scale(yy)
+## XRM <- XX %*% t(XX) / mp
+calc_mle(yy,XX,plotit=TRUE)
+```
+
+```{r}
+library(OmicKriging)
+```
+
+
+```{r}
+xgrm <- OmicKriging::read_GRMBin('/project2/haky/Data/baca_cwas/vcfs/hg38/grm_files/chr21.dose.grm')
+xgrm[1:5, 1:5]
+```
+
+```{r}
+Ytrue <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/experiments/heritability/phenotypes/cwas_arbs.peaks.txt")
+```
+
+```{r}
+Yone <- Ytrue %>% dplyr::select(V2, V5) %>% tibble::column_to_rownames('V2') %>% as.matrix()
+Yone <- Yone[match(rownames(xgrm), rownames(Yone)), , drop = FALSE]
+Yone <- Yone[!is.na(Yone), , drop = FALSE]
+
+#
+xgrm_121 <- xgrm[match(rownames(Yone), rownames(xgrm)), match(rownames(Yone), rownames(xgrm)), drop = FALSE]
+```
+
+```{r}
+fg <- calc_mle_from_grm(Yone, xgrm_121, plotit = TRUE) |> as.matrix()
+colnames(fg) <- c()
+```
+
+
+
+```{r}
+plink --bfile /project2/haky/Data/baca_cwas/vcfs/hg38/plink_geno/chr22.dose --freq counts --out /beagle3/haky/users/temi/projects/Enpact/out.out
+```
+
+
+```{r}
+plink --bfile /project2/haky/Data/baca_cwas/vcfs/hg38/plink_geno/chr22.dose --freq counts --out /beagle3/haky/users/temi/projects/Enpact/out.out
+```
