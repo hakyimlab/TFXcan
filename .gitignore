@@ -1,4 +1,7 @@
 # exclude everything except directory foo/bar
+
+.DS_Store
+.gitattributes
 enformer_pipeline/*
 impact_pipeline/*
 explore_freedman/*
