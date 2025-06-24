@@ -63,7 +63,6 @@ models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
 updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
 ```
 
-- [X] Temi: please add in this folder (the equivalent on your computer) all the reasonably sized data (<200MB) and minimal code to reproduce your figures here? `/Users/haekyungim/Library/CloudStorage/Box-Box/LargeFiles/imlab-data/data-Github/web-data/2024-05-16-tfxcan-paper-analysis`
 
 ```{r message=F, warning=F}
 library(glue)

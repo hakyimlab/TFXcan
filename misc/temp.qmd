@@ -1,0 +1,93 @@
+
+## Prepare the metadata and files
+
+```{r}
+# previously projectdir
+homerdb <- data.table::fread(file.path('../', 'metadata', 'motifTable.txt'), header = T) %>%
+    dplyr::filter(!grepl(',', `Gene Symbol`), !`Gene Symbol` %in% c( "-", "?")) %>%
+    dplyr::select(Filename, Consensus, symbol=`Gene Symbol`) %>%
+    dplyr::filter(symbol %in% c('AR', 'FOXA1', 'GATA2', 'HOXB13'))
+homerdb
+```
+
+```{r}
+mt <- data.table::fread(file.path('../', 'metadata', 'human_factor_full_QC.txt')) %>%
+    dplyr::filter(Tissue_type != 'None', !is.na(PeaksUnionDHSRatio), FRiP > 0.01) %>%
+    dplyr::filter(!grepl('-', Factor, fixed = T)) %>%
+    dplyr::filter(Factor %in% homerdb$symbol)
+
+idt <- mt %>%
+    dplyr::filter(Factor %in% c('AR', 'FOXA1', 'GATA2', 'HOXB13'), Tissue_type == 'Prostate') %>%
+    dplyr::group_by(Factor, Tissue_type) %>%
+    dplyr::group_split() 
+```
+
+```{r}
+ldt <- list()
+for(i in seq_along(idt)){
+    fdt <- idt[[i]]
+    tissuename <- unique(fdt$Tissue_type)
+    tissuename <- gsub(' ', '', tissuename)
+    tfname <- unique(fdt$Factor)
+    dcids <- fdt$DCid
+
+    if(!tfname %in% names(ldt)){
+        ldt[[as.name(tfname)]] <- list()
+        ldt[[as.name(tfname)]][['peakFiles']] <- list()
+        ldt[[as.name(tfname)]][['peakFiles']][[as.name(tissuename)]] <-  paste0(dcids, '_sort_peaks.narrowPeak.bed')
+        
+    } else {
+        ldt[[as.name(tfname)]][['peakFiles']][[as.name(tissuename)]] <-  paste0(dcids, '_sort_peaks.narrowPeak.bed')
+    }
+}
+```
+
+```{r}
+factors_motifs <- homerdb %>%
+    dplyr::group_by(symbol) %>%
+    dplyr::group_split()
+ndt <- c()
+mdt <- lapply(factors_motifs, function(edt){
+    res <- list()
+    res[['motifFiles']] <- edt$Filename
+    ndt <<- append(ndt, unique(edt$symbol))
+    return(res)
+})
+names(mdt) <- ndt
+```
+
+```{r}
+common_names <- intersect(names(ldt), names(mdt))
+peakslist <- ldt[common_names]
+motifslist <- mdt[common_names]
+enpact_models_config <- mapply(c, peakslist, motifslist)
+```
+
+```{r}
+# Modified from: https://stackoverflow.com/questions/74655073/how-to-effectively-join-two-lists-elementwise-by-element-name
+cat_lists <- function(list1, list2) {  
+  keys <- unique(c(names(list1), names(list2)))
+  purrr::map2(list1[keys], list2[keys], c) |>
+    set_names(keys)  
+
+}
+
+enlist <- purrr::reduce(list(motifslist, peakslist), cat_lists)
+```
+
+-- Filter for the following TFs: AR, FOXA1, HOXB13, and GATA2 in prostate tissues
+
+```{r}
+tfs_ex <- enlist[c('AR', 'FOXA1', 'HOXB13', 'GATA2')]
+tfs_ex <- base::Filter(Negate(is.null), tfs_ex)
+
+yaml::write_yaml(tfs_ex, file = file.path(project_dir, 'metadata', 'enpact_models_to_train.yaml'))
+
+# prepare the metadata 
+mtdt <- sapply(gsub('.peakFiles.', '_', names(rapply(peakslist, function(x) head(x, 1)))), base::strsplit, '_') |> unname() %>% do.call('rbind', .) %>% as.data.frame()
+colnames(mtdt) <- c('assay', 'context')
+
+data.table::fwrite(mtdt, file = file.path(project_dir, 'metadata', 'enpact_models_to_train.tsv'), sep = '\t', row.names =F, col.names =T, quote = F)
+```
+
+These files created above and saved are used to train the DL-based Enpact models.

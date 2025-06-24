@@ -6,7 +6,7 @@ date: 'Wed Sep 11 2024'
 html:
     self-contained: true
     code-background: true
-fig-format: svg
+fig-format: png
 ---
 
 ```{r}
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(eval = F, echo = TRUE, message = TRUE, warning = TRUE, cac
 ```
 
 ```{r}
-setwd('/beagle3/haky/users/temi/projects/Enpact/notebooks')
+setwd('/beagle3/haky/users/temi/projects/TFXcan/notebooks') # to this repository
 ```
 
 ```{r}
@@ -26,7 +26,7 @@ library(rtracklayer)
 library(GenomicRanges)
 library(magrittr)
 library(yaml)
-library(fpeek)
+# library(fpeek)
 library(purrr)
 ```
 
@@ -35,11 +35,15 @@ library(purrr)
 tdate <- '2024-04-17'
 
 base_dir <- '/project2/haky/temi/projects/TFXcan/baca_cwas'
-project_dir <- '/beagle3/haky/users/temi/projects/Enpact'
+project_dir <- '/beagle3/haky/users/temi/projects/TFXcan'
 data_dir <- glue('{project_dir}/data')
 files_dir <- glue('{project_dir}/files')
 if(!(dir.exists(files_dir))){
     dir.create(files_dir, recursive = T)
+}
+
+if(!(dir.exists(data_dir))){
+    dir.create(data_dir, recursive = T)
 }
 ```
 
@@ -47,100 +51,15 @@ if(!(dir.exists(files_dir))){
 In this notebook, I detail steps to re-create some of the data/results in the Enpact paper. I have set this notebook not to run when rendering. So, it will show you the code and markdown text, but not run the code.
 
 # Train DL-based Enpact models from scratch
+You can use this repository to train the DL-based Enpact models from scratch. The repository is [here](https://github.com/hakyimlab/TFPred-snakemake/tree/main). 
 
-## Prepare the metadata and files
+To train all 700+ TF-tissue binding predictors, 
 
-```{r}
-homerdb <- data.table::fread(file.path(project_dir, 'metadata', 'motifTable.txt'), header = T) %>%
-    dplyr::filter(!grepl(',', `Gene Symbol`), !`Gene Symbol` %in% c( "-", "?")) %>%
-    dplyr::select(Filename, Consensus, symbol=`Gene Symbol`) %>%
-    dplyr::filter(symbol %in% c('AR', 'FOXA1', 'GATA2', 'HOXB13'))
-homerdb
+```{bash}
+snakemake -s snakefile.smk --configfile minimal/pipeline.734.yaml --profile profiles/simple/ -np > dryrun.out
 ```
 
-```{r}
-mt <- data.table::fread(file.path(project_dir, 'metadata', 'human_factor_full_QC.txt')) %>%
-    dplyr::filter(Tissue_type != 'None', !is.na(PeaksUnionDHSRatio), FRiP > 0.01) %>%
-    dplyr::filter(!grepl('-', Factor, fixed = T)) %>%
-    dplyr::filter(Factor %in% homerdb$symbol)
-
-idt <- mt %>%
-    dplyr::filter(Factor %in% c('AR', 'FOXA1', 'GATA2', 'HOXB13'), Tissue_type == 'Prostate') %>%
-    dplyr::group_by(Factor, Tissue_type) %>%
-    dplyr::group_split() 
-```
-
-```{r}
-ldt <- list()
-for(i in seq_along(idt)){
-    fdt <- idt[[i]]
-    tissuename <- unique(fdt$Tissue_type)
-    tissuename <- gsub(' ', '', tissuename)
-    tfname <- unique(fdt$Factor)
-    dcids <- fdt$DCid
-
-    if(!tfname %in% names(ldt)){
-        ldt[[as.name(tfname)]] <- list()
-        ldt[[as.name(tfname)]][['peakFiles']] <- list()
-        ldt[[as.name(tfname)]][['peakFiles']][[as.name(tissuename)]] <-  paste0(dcids, '_sort_peaks.narrowPeak.bed')
-        
-    } else {
-        ldt[[as.name(tfname)]][['peakFiles']][[as.name(tissuename)]] <-  paste0(dcids, '_sort_peaks.narrowPeak.bed')
-    }
-}
-```
-
-```{r}
-factors_motifs <- homerdb %>%
-    dplyr::group_by(symbol) %>%
-    dplyr::group_split()
-ndt <- c()
-mdt <- lapply(factors_motifs, function(edt){
-    res <- list()
-    res[['motifFiles']] <- edt$Filename
-    ndt <<- append(ndt, unique(edt$symbol))
-    return(res)
-})
-names(mdt) <- ndt
-```
-
-```{r}
-common_names <- intersect(names(ldt), names(mdt))
-peakslist <- ldt[common_names]
-motifslist <- mdt[common_names]
-enpact_models_config <- mapply(c, peakslist, motifslist)
-```
-
-```{r}
-# Modified from: https://stackoverflow.com/questions/74655073/how-to-effectively-join-two-lists-elementwise-by-element-name
-cat_lists <- function(list1, list2) {  
-  keys <- unique(c(names(list1), names(list2)))
-  map2(list1[keys], list2[keys], c) |>
-    set_names(keys)  
-
-}
-
-enlist <- purrr::reduce(list(motifslist, peakslist), cat_lists)
-```
-
--- Filter for the following TFs: AR, FOXA1, HOXB13, and GATA2 in prostate tissues
-
-```{r}
-tfs_ex <- enlist[c('AR', 'FOXA1', 'HOXB13', 'GATA2')]
-tfs_ex <- base::Filter(Negate(is.null), tfs_ex)
-
-yaml::write_yaml(tfs_ex, file = file.path(project_dir, 'metadata', 'enpact_models_to_train.yaml'))
-
-# prepare the metadata 
-mtdt <- sapply(gsub('.peakFiles.', '_', names(rapply(peakslist, function(x) head(x, 1)))), base::strsplit, '_') |> unname() %>% do.call('rbind', .) %>% as.data.frame()
-colnames(mtdt) <- c('assay', 'context')
-
-data.table::fwrite(mtdt, file = file.path(project_dir, 'metadata', 'enpact_models_to_train.tsv'), sep = '\t', row.names =F, col.names =T, quote = F)
-```
-
-These files created above and saved are used to train the DL-based Enpact models.
-
-Steps required to train Enpact models are [here](https://github.com/hakyimlab/TFPred-snakemake). There is a minimal example to follow. As well as the necessary scripts to run the training for AR, FOXA1, HOXB13, and GATA2 in prostate tissues.
+Steps required to train Enpact models are [here](https://github.com/hakyimlab/TFPred-snakemake). There is a minimal example to follow, as well as the config needed to train all 734 TF-tissue binding predictors.
 
 # Train DL-based Enpact models using prepared matrix
 Alternatively, you may also train the AR-Prostate Enpact model, as well as the others, using the prepared train and test data here:
@@ -224,12 +143,14 @@ system(cmd) ; system('squeue -u temi')
 # Prepare Baca's CWAS models in sqlite and create the necessary databases
 The AR weights in the CWAS paper were trained using the Fusion pipeline in mind. Here, we prepared the AR weights such that they are compatible with the PredictDB pipeline.
 
+These weights were shared by our collaborators. So, you can either find them online yourself through the [CWAS paper](https://www.nature.com/articles/s41588-022-01168-y) or you can ask the authors for the weights.
+
 -- the CWAS weights for AR
 ```{r}
 transcription_factor <- 'AR'
-ar_zip <- '/project2/haky/Data/baca_cwas/cwas_weights/AR.zip'
-output_dir <- '/beagle3/haky/users/temi/projects/TFXcan/baca_cwas/data'
-print(file.exists(ar_zip))d
+ar_zip <- '/project2/haky/Data/baca_cwas/cwas_weights/AR.zip' # use the weights zip file here.
+output_dir <- '/beagle3/haky/users/temi/projects/TFXcan/data/baca_cwas_weights'
+print(file.exists(ar_zip))
 ```
 
 -- First unzip the file
