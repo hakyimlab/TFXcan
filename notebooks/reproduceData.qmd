@@ -537,11 +537,11 @@ The steps here are involved.
 
 ## For the 521 1KG EUR individuals at the 18,000 ARBS
 ```{r}
-exec_file <- '/beagle3/haky/users/temi/projects/Enpact/src/calculateEnpactScores.sbatch'
+exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.sbatch'
 data_directory <- '/beagle3/haky/users/temi/data/1KG_AR_prostate' 
 individuals_list <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt' 
 enpact_weights <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/statistics/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz' 
-output_file <-' /beagle3/haky/users/temi/projects/Enpact/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
+output_file <-' /beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
 files_pattern <- '_aggByCollect_AR_Prostate.csv'
 ```
 
@@ -553,11 +553,11 @@ cmd
 ## For the 131 samples in Baca
 
 ```{r}
-exec_file <- '/beagle3/haky/users/temi/projects/Enpact/src/calculateEnpactScores.sbatch'
+exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.sbatch'
 data_directory <- '/beagle3/haky/users/temi/data/baca_AR_prostate' 
 individuals_list <- '/project2/haky/temi/projects/enpact-predict-snakemake/metadata/cwas_individuals.txt' 
 enpact_weights <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/statistics/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz' 
-output_file <-' /beagle3/haky/users/temi/projects/Enpact/misc/reruns/enpact_predictions/ENPACT_48.BACA.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
+output_file <-' /beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.BACA.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
 files_pattern <- '_aggByMeanCenter_AR_Prostate.csv'
 ```
 
@@ -580,7 +580,7 @@ model <- 'AR_Prostate'
 exec_file <- file.path(project_dir, "src", 'formatForPredictDB.R')
 enpact_scores <- file.path(data_dir, "lenpact", glue("1KG_logistic.{model}.enpact_scores.txt"))
 enpact_annot <- file.path(data_dir, "lenpact", glue("1KG_logistic.{model}.enpact_annot.txt"))
-rds_file <- '/beagle3/haky/users/temi/projects/Enpact/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz'
+rds_file <- '/beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz'
 
 #endregion"/project2/haky/temi/projects/enpact-predict-snakemake/output/1KG_linear_2025-02-11/1KG_linear_2025-02-11.enpact_scores.array.rds.gz"
 # if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
@@ -620,7 +620,7 @@ system(cmd) ; system('squeue -u temi')
 
 ```{r}
 phenotype <- 'AR_Prostate.logistic'
-outputpath <- "/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28"
+outputpath <- "/beagle3/haky/users/temi/projects/TFXcan/models/lenpact/AR_Prostate.2025-04-28"
 annotfile <- enpact_annot #file.path(data_dir, "lenpact", "1KG.enpact_annot.txt")
 enpactfile <- enpact_scores #file.path(data_dir, "lenpact", "1KG.enpact_scores.txt")
 geno_dir <- "/project2/haky/Data/1000G/population_data/EUR/annot_files"
@@ -652,11 +652,11 @@ unpigz -ck predict_db_AR_Prostate.logistic_filtered.txt.gz | sed -e 's/:/_/g' | 
 
 ```{r}
 db_name <- 'AR_Prostate.logistic'
-model_db <- '/beagle3/haky/users/temi/projects/Enpact/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db'
+model_db <- '/beagle3/haky/users/temi/projects/TFXcan/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db'
 txt_genotypes <- '/project2/haky/Data/baca_cwas/vcfs/hg38/formatted_geno/all_chrs.text_dosages.txt.gz'
 txt_samples <- '/project2/haky/Data/baca_cwas/vcfs/hg38/formatted_geno/samples.text_dosages.txt'
 exec_file <- '/beagle3/haky/users/temi/software/MetaXcan/software/Predict.py'
-output_folder <- "/beagle3/haky/users/temi/projects/Enpact/data/baca_lenpact/output"
+output_folder <- "/beagle3/haky/users/temi/projects/TFXcan/data/baca_lenpact/output"
 if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
 ```
 
@@ -741,6 +741,30 @@ system(cmd) ; system('squeue -u temi')
 # Running TWAS on prostate cancer data
 
 This is very similar to using the PrediXcan pipeline. You will need to download the TWAS weights from the [PrediXcan website](https://predictdb.org/). You can use the [GTEx v8 weights](https://predictdb.org/download/weights/GTEx_V8_HapMap-2017-11-29.tar.gz) or the [GTEx v7 weights](https://predictdb.org/download/weights/GTEx_V7_HapMap-2017-11-29.tar.gz).
+
+
+
+
+
+# Consensus matrix factorization 
+
+### First prepare the z-ratio matrices
+
+###
+
+```{r}
+script <- '/beagle3/haky/users/temi/projects/TFXcan/src/repeat_flash.sbatch'
+datafile <- '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zratios.matrix.rds'
+output_basename <- '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/repeat_flash/prca_risk.retrain_repeats'
+priorL <- 'ebnm_point_exponential'
+priorF <- 'ebnm_point_exponential'
+greedy_Kmax <- 40L
+batch_list <- "/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/repeat_flash/prca_risk.random_subsets.txt"
+```
+
+```{r}
+glue::glue("sbatch {script} {datafile} {output_basename} {priorL} {priorF} {greedy_Kmax} {batch_list}")
+```
 
 # Matrix Factorization on enpact weights
 
