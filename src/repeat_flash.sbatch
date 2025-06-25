@@ -22,11 +22,10 @@ priorL=${3}
 priorF=${4}
 greedy_Kmax=${5}
 batch_list=${6}
+splits_directory=${7} #'/beagle3/haky/users/temi/projects/Enpact/data/tenerife/repeat_flash'
 
-splits_directory='/beagle3/haky/users/temi/projects/Enpact/data/tenerife/repeat_flash'
-
-parallel -a ${batch_list} --jobs 20 --joblog /beagle3/haky/users/temi/projects/Enpact/logs/consensusFlashier.log \
-    Rscript /beagle3/haky/users/temi/projects/Enpact/src/repeat_flash.R \
+parallel -a ${batch_list} --jobs 20 --joblog /beagle3/haky/users/temi/projects/TFXcan/logs/consensusFlashier.log \
+    Rscript /beagle3/haky/users/temi/projects/TFXcan/src/repeat_flash.R \
     --data ${datafile} \
     --splits ${splits_directory}/prca_risk.random_subsets.{}.rds \
     --batch {} \
@@ -39,7 +38,7 @@ status=$?
 
 if [ $status -eq 0 ]; then
     echo "INFO - Compiling job"
-    Rscript /beagle3/haky/users/temi/projects/Enpact/src/gather_repeats.R \
+    Rscript /beagle3/haky/users/temi/projects/TFXcan/src/gather_repeats.R \
         --output_basename ${output_basename} \
         --batch_list ${batch_list} \
         --output_file_basename ${output_basename}.repeat_flashier.rds.gz

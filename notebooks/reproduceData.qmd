@@ -51,7 +51,7 @@ if(!(dir.exists(data_dir))){
 In this notebook, I detail steps to re-create some of the data/results in the Enpact paper. I have set this notebook not to run when rendering. So, it will show you the code and markdown text, but not run the code.
 
 # Train DL-based Enpact models from scratch
-You can use this repository to train the DL-based Enpact models from scratch. The repository is [here](https://github.com/hakyimlab/TFPred-snakemake/tree/main). 
+Use [this](https://github.com/hakyimlab/TFPred-snakemake/tree/main) repository to train the DL-based Enpact models from scratch.
 
 To train all 700+ TF-tissue binding predictors, 
 
@@ -742,138 +742,141 @@ system(cmd) ; system('squeue -u temi')
 
 This is very similar to using the PrediXcan pipeline. You will need to download the TWAS weights from the [PrediXcan website](https://predictdb.org/). You can use the [GTEx v8 weights](https://predictdb.org/download/weights/GTEx_V8_HapMap-2017-11-29.tar.gz) or the [GTEx v7 weights](https://predictdb.org/download/weights/GTEx_V7_HapMap-2017-11-29.tar.gz).
 
-
-
-
-
 # Consensus matrix factorization 
+```{r warning=F, message=F}
+devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
+devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
+devtools::source_gist('https://gist.github.com/TemiPete/e7214eb308c4116e2f10ee96401be0c2')
+devtools::source_gist('https://gist.github.com/TemiPete/b309a46e25ecec93127fb6756e68fb14')
 
-### First prepare the z-ratio matrices
+# analyze tenerife
+devtools::source_gist("https://gist.github.com/TemiPete/d303781c7ddd9b6d8b4d0163804e80c2")
+```
 
-###
+### Step 1: First prepare the z-ratio matrices
+
+We want to remove some tissues 
+```{r}
+# these weird tissues should be removed 
+weird_tissues <- c("endometrioidadenocarcinoma", "HCT116", "HeLacontaminant", "Headandneck", "LNCaPcells", 'PeritonealEffusion')
+#performance_file <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/statistics/ENPACT_734_2024-07-26.compiled_stats.txt'
+performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
+performance <- data.table::fread(performance_file) %>%
+    dplyr::filter(type == 'test') %>%
+    dplyr::filter((!is.na(auc) & auc >= 0.7) & !context %in% weird_tissues)
+dim(performance)
+```
+
+You need the summary statistics
 
 ```{r}
-script <- '/beagle3/haky/users/temi/projects/TFXcan/src/repeat_flash.sbatch'
-datafile <- '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zratios.matrix.rds'
-output_basename <- '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/repeat_flash/prca_risk.retrain_repeats'
+# GWAS information
+ss <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/collection/prostate_cancer_risk.filteredGWAS.topSNPs.txt.gz") %>%
+    dplyr::mutate(loci = paste('chr', chr, sep='') %>% paste(., pos, sep = ':'))
+```
+
+You need the TFXcan results
+```{r}
+dt <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-04-25.complete.spredixcan.txt") %>%
+    dplyr::filter(!is.na(pvalue), !is.na(zscore)) %>%
+    dplyr::filter(tf_tissue %in% performance$model) %>%
+    dplyr::select(locus, tf, tissue, tf_tissue, chrom, start, end, zscore, pvalue) %>%
+    dplyr::filter(!grepl("HCT116|HeLacontaminant|PeritonealEffusion|LNCaPcells|endometrioidadenocarcinoma|Headandneck", tissue))
+```
+
+```{r}
+# collect the Z-scores into a matrix of loci x TF/tissue pairs
+tf_tissue_processed <- process_tfxcan_results(dt, ss, combine_at = 'tf', retain_at = 'tissue', aggregate_on = 'tf_tissue')
+
+# collect the Z-scores into two matrices for TFXcan and GWAS results
+data_list <- list()
+data_list[['zratios']] <- collect_matrices(tf_tissue_processed)
+
+# divide or get eh Z-ratios
+zratio_matdev <- (data_list[["zratios"]][["tfxcan"]])^2/(data_list[["zratios"]][["gwas"]][,,drop = TRUE])^2
+
+# there are missing values because I removed associations with pvalue at fdr < 0.05
+
+dim(zratio_matdev); zratio_matdev[1:5, 1:5]
+```
+
+```{r}
+saveRDS(zratio_matdev, '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zratios.matrix.rds')
+```
+
+### Step 2: Split the z-ratio matrix into random subsets
+```{r}
+X <- readRDS('/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zratios.matrix.rds') # loci by TF_tissues
+```
+
+```{r}
+# subsets directory
+consensus_subsets_dir <- file.path(project_dir, 'data', 'tenerife', 'repeat_flash', 'prca_risk')
+```
+
+```{r}
+# create random subsets; here I use 1000 random subsets, each with 80% of the loci
+set.seed(2025)
+random_loci <- purrr::map(1:1000, function(k){
+    jj <- sample(nrow(X), round(nrow(X) * 0.8))
+    return(jj)
+})
+
+# confirm length
+lapply(random_loci, length) %>% unlist() %>% unique() 
+
+# split into 100 batches
+batches_loci <- purrr::map(1:100, function(k){
+    jj <- random_loci[seq(k, 1000, by = 100) ] #|> unlist() #seq(k, 1, 1) 
+    return(jj)
+})
+
+names(batches_loci) <- paste0('batch', 1:100)
+
+lapply(batches_loci, length) |> unlist() %>% sum()
+
+# save these as a list
+lapply(names(batches_loci), function(ni) {
+    saveRDS(batches_loci[ni], glue::glue('{consensus_subsets_dir}/prca_risk.random_subsets.{ni}.rds'))
+})
+
+# save this as a list
+# saveRDS(random_loci, '/beagle3/haky/users/temi/projects/Enpact/data/tenerife/prca_risk.random_subsets_1000.rds')
+```
+
+```{r}
+write(names(batches_loci), file = glue::glue('{consensus_subsets_dir}/prca_risk.random_subsets.txt'))
+```
+
+### Step 3: Run Flashier on the random subsets
+```{r}
+script <- file.path(project_dir, 'src/repeat_flash.sbatch')
+datafile <- file.path(project_dir, 'data/tenerife/PrCa.tfxcan.zratios.matrix.rds')
+output_basename <- file.path(consensus_subsets_dir, 'prca_risk') # not a directory but a prefix for the output files
 priorL <- 'ebnm_point_exponential'
 priorF <- 'ebnm_point_exponential'
 greedy_Kmax <- 40L
-batch_list <- "/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/repeat_flash/prca_risk.random_subsets.txt"
+batch_list <- glue::glue('{consensus_subsets_dir}/prca_risk.random_subsets.txt')
+splits_directory <- consensus_subsets_dir
 ```
 
 ```{r}
-glue::glue("sbatch {script} {datafile} {output_basename} {priorL} {priorF} {greedy_Kmax} {batch_list}")
+glue::glue("sbatch {script} {datafile} {output_basename} {priorL} {priorF} {greedy_Kmax} {batch_list} {splits_directory}")
 ```
 
-# Matrix Factorization on enpact weights
+### Step 4: Run consensus factor analysis on the outputs
 
 ```{r}
-enpact_weights <- data.table::fread("/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/statistics/ENPACT_734_2024-07-26.compiled_weights.lambda.1se.txt.gz")
-```
-
-```{r}
-# remove some weird tissues
-weird_tissues <- c('HCT116', "HeLacontaminant", "Headandneck", "LNCaPcells")
-remove_these <- rownames(enpact_weights)[grepl(paste0("_", weird_tissues, collapse="|"), rownames(enpact_weights))]
-enpact_weights <- enpact_weights[!rownames(enpact_weights) %in% remove_these, ]
-# enpact_weights <- tibble::rownames_to_column(enpact_weights, 'feature')
-
-data.table::fwrite(enpact_weights, file=glue('{project_dir}/files/ENPACT_734_2024-07-26.compiled_weights.lambda.1se.txt.gz'), col.names=TRUE, row.names=FALSE, quote=F, compress='gzip', sep='\t')
-enpact_weights[1:5, 1:5]
+consensus_script <- file.path(project_dir, 'src/cluster_programs.sbatch')
+datafile <- file.path(splits_directory, 'prca_risk.retrain_repeats.ebnm_point_exponential-ebnm_point_exponential.1000Iters.rds.gz')
+outputbasename <- file.path(project_dir, 'data/consensus/prca_risk')
+normalization <- 'L2'
 ```
 
 ```{r}
-datafile <- glue('{project_dir}/files/ENPACT_734_2024-07-26.compiled_weights.lambda.1se.txt.gz')
-column_for_rownames <- 'feature'
-output_basename <- glue('{project_dir}/files/runFlashier')
-priorL <- "ebnm_point_exponential"
-priorF <- "ebnm_point_exponential"
-transpose <- "TRUE"
-greedy_Kmax <- 500L
+glue::glue("sbatch {consensus_script} {datafile} {outputbasename} {normalization}")
 ```
-
-```{r}
-# different combinations of priorL and priorF
-possible_priors <- c("ebnm_point_exponential", "ebnm_point_normal", "ebnm_point_laplace", "ebnm_normal", "ebnm_normal_scale_mixture")
-combination_priors <- expand.grid(possible_priors, possible_priors)
-```
-
-```{r}
-for(i in 1:nrow(combination_priors)){
-    priorL <- combination_priors[i, 1]
-    priorF <- combination_priors[i, 2]
-    cmd <- glue('sbatch {project_dir}/src/runFlashier.sbatch {datafile} {column_for_rownames} {output_basename} {priorL} {priorF} {transpose} {greedy_Kmax}')
-    print(cmd);
-    system(cmd)
-}
-```
-
-```{r}
-# if needed, you should edit the sbatch file: {project_dir}/src/predictCWASscores.sbatch
-cmd <- glue('sbatch {project_dir}/src/runFlashier.sbatch {datafile} {column_for_rownames} {output_basename} {priorL} {priorF} {transpose} {greedy_Kmax}')
-cmd
-```
-
-```{r}
-system(cmd) ; system('squeue -u temi')
-```
-
-```{r}
-ff <- readRDS(file=glue('{project_dir}/files/testrunFlashier.ebnm_point_exponential-ebnm_point_exponential.rds.gz'))
-```
-
-```{r}
-names_out <- c() #glue("{priorL}-{priorF}")
-out <- apply(combination_priors, 1, function(each_priors){
-    priorL <- each_priors[1]
-    priorF <- each_priors[2]
-    names_out <<- c(names_out, glue("{priorL}-{priorF}"))
-    ff <- glue('{project_dir}/files/runFlashier.{priorL}-{priorF}.rds.gz')
-    if(file.exists(ff)){
-        flash_object <- readRDS(file=ff)
-        return(flash_object)
-    } else {
-        return(NULL)
-    }
-    
-})
-names(out) <- names_out
-out <- Filter(Negate(is.null), out)
-```
-
-```{r}
-out$`ebnm_point_exponential-ebnm_point_exponential`$pve
-```
-
-```{r}
-lapply(out, function(each_out){
-    sum(each_out$pve)
-})
-```
-
-```{r}
-lapply(out, function(each_out){
-    each_out$n_factors
-})
-```
-
-```{r}
-lapply(out, function(each_out){
-    each_out$factor_weights
-})
-```
-
-```{r}
-lapply(out, function(each_out){
-    each_out$factor_weights
-})
-```
-
-```{r}
-xt <- readRDS('/project2/haky/temi/projects/enpact-predict-snakemake/output/1KG_2024-10-04/1KG_2024-10-04.enpact_scores.array.rds.gz')
-```
-
 
 ```{r}
 knitr::knit_exit()
