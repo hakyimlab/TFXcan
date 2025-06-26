@@ -4018,7 +4018,7 @@ SUPPLEMENTARY_TABLES[['Supplementary Table 10']] <- pmats
 ```
 
 ```{r}
-data.table::fwrite(pmats, file = '/beagle3/haky/users/temi/projects/Enpact/misc/prca.tf.clusters.txt', row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
+data.table::fwrite(pmats, file = file.path(output_directory, 'prca.tf.clusters.txt'), row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
 ```
 
 ## Distribution of TF/tissue contribution per program
@@ -4146,7 +4146,7 @@ SUPPLEMENTARY_TABLES[['Supplementary Table 11']] <- lmats
 ```
 
 ```{r}
-data.table::fwrite(lmats, file = '/beagle3/haky/users/temi/projects/Enpact/misc/prca.loci.assignments.txt', row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
+data.table::fwrite(lmats, file = file.path(output_directory, 'prca.loci.assignments.txt'), row.names = TRUE, col.names = TRUE, sep = '\t', quote = F)
 ```
 
 ```{r}
@@ -4472,7 +4472,7 @@ for (i in seq_along(SUPPLEMENTARY_TABLES)) {
 }
 
 # Save workbook
-openxlsx::saveWorkbook(wb, file.path('/beagle3/haky/users/temi/projects/Enpact/figures', 'enpact-paper.supplementary_tables.xlsx'), overwrite = TRUE)
+openxlsx::saveWorkbook(wb, file.path(output_directory, 'enpact-paper.supplementary_tables.xlsx'), overwrite = TRUE)
 ```
 
 
