@@ -32,48 +32,53 @@ Run the following:
 knitr::opts_chunk$set(cache.rebuid = TRUE, fig.width = 4, fig.height = 4, fig.format = 'png', fig.dpi = 800)
 ```
 
-```{r}
-SUPPLEMENTARY_FIGURE <- list()
+# Data and access to data
 
-ALL_FIGURES <- list()
+## if using a mounted box folder and have access to the imlab box
+
+```{r}
+# uncomment what you need here
+
+# PRE = '/Users/temi/Library/CloudStorage/Box-Box/imlab-data'
+# PRE = '/Users/temidayoadeluwa/Library/CloudStorage/Box-Box/imlab-data'
+# PRE = "/Users/haekyungim/Library/CloudStorage/Box-Box/LargeFiles/imlab-data"
+
+analysis_directory <- file.path(PRE, 'TFXcan/analysis')
+output_directory <- file.path(analysis_directory, 'output')
+if(!dir.exists(output_directory)) {
+    dir.create(output_directory, recursive = TRUE)
+}
 ```
+
+## if you need to download the data to your local machine
+The data used in this notebook are here on Box:
+https://uchicago.box.com/s/p07onnhc6u4kojrqs39otrcrsp8qk8hs
+
+When you have the data downloaded, you can set the `analysis_directory` variable to the path where you saved the data.
+
+```{r}
+analysis_directory <- "" # set 
+```
+
+```{r}
+# create a new directory for the output and figures generated in this notebook
+output_directory <- file.path(analysis_directory, 'output')
+if(!dir.exists(output_directory)) {
+    dir.create(output_directory, recursive = TRUE)
+}
+```
+
+# Load libraries and functions, and set some variables
 
 ## Initial definitions library loading
-```{r initial definitions}
+```{r initial definitions, message=F, warning=F}
 suppressMessages(library(tidyverse))
 suppressMessages(library(glue))
-
-# # this `PRE` should be edited accordingly 
-
-# # PRE = '/Users/temi/Library/CloudStorage/Box-Box/imlab-data/data-Github/web-data'
-# PRE = '/Users/temidayoadeluwa/Library/CloudStorage/Box-Box/imlab-data/data-Github/web-data'
-# #PRE = "/Users/haekyungim/Library/CloudStorage/Box-Box/LargeFiles/imlab-data/data-Github/web-data"
-
-# SLUG <- "tfxcan-paper-analysis"
-# bDATE <- '2024-05-16'
-# data_dir <- glue("{PRE}/{bDATE}-{SLUG}/data")
-# if(!file.exists(data_dir)) system(glue::glue("mkdir {data_dir}"))
-# ##system(glue("open {DATA}")) ## this will open the folder 
-# #2024-05-16-tfxcan-paper-analysis
-
-#data_dir <- '/project2/haky/temi/projects/Enpact-figures/data'
-data_dir <- enpact_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/data'
-suppdata_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/supplementary'
-models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
-updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
-```
-
-
-```{r message=F, warning=F}
-library(glue)
 library(GenomicRanges)
 library(R.utils)
 library(data.table)
-library(tidyverse)
-# library(pROC)
 library(qvalue)
 library(VennDiagram)
-# library(ggVennDiagram)
 library(ggpubr)
 library(qqman)
 library(rstatix)
@@ -93,46 +98,19 @@ library(AnnotationHub)
 I use some of the functions in these gists;
 
 ```{r warning=F, message=F}
-devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
-devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
-devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
-devtools::source_gist('https://gist.github.com/TemiPete/e7214eb308c4116e2f10ee96401be0c2')
-devtools::source_gist('https://gist.github.com/TemiPete/b309a46e25ecec93127fb6756e68fb14')
-devtools::source_gist('https://gist.github.com/TemiPete/9c487a30e2c1a27a1d46b68128c82d10')
-
-devtools::source_gist("https://gist.github.com/TemiPete/d303781c7ddd9b6d8b4d0163804e80c2")
+devtools::source_gist('https://gist.github.com/TemiPete/73751e3b6695808065832b1950fc3856')
 ```
 
-
-```{r}
-logitsToProbabilities <- function(x){
-    if(any(is.na(x))){
-        stop('ERROR - There are NAs in your supplied x. Remove them first.')
-    }
-    out <- exp(x)/(1 + exp(x))
-    return(out)
-}
-```
-
-```{r}
-theme_simple <- theme_bw() + theme(
-    panel.grid.major = element_blank(), 
-    panel.grid.minor = element_blank(),
-    plot.title = element_text(family = 'Helvetica', colour = 'black', size = 9.33),
-    text=element_text(size=9.33, colour = 'black', family = 'Helvetica'),
-    axis.text = element_text(hjust = 1), 
-    axis.text.x = element_text( hjust=0.5), 
-    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5)
-)
-```
 
 ```{r}
 SUPPLEMENTARY_TABLES <- list()
+SUPPLEMENTARY_FIGURE <- list()
+ALL_FIGURES <- list()
 ```
 
 ```{r}
 # mappings
-dt_mapping <- data.table::fread(file.path(enpact_data_dir, 'enformer-tracks-annotated-resaved-2.txt')) %>%
+dt_mapping <- data.table::fread(file.path(analysis_directory, 'files', 'enformer-tracks-annotated-resaved-2.txt')) %>%
     dplyr::select(target, assay, feature_names) %>%
     dplyr::mutate(target = case_when(
         target == "" ~ assay,
@@ -143,7 +121,7 @@ dt_mapping[1:5, ]
 
 ```{r}
 # organ and slims annotation
-dt_slims <- data.table::fread(file.path(enpact_data_dir, "enpact_slims.txt")) %>%
+dt_slims <- data.table::fread(file.path(analysis_directory, 'files', "enpact_slims.txt")) %>%
     dplyr::mutate(index = index + 1, feature = paste0("f_", index)) %>%
     dplyr::select(-c(index, genome, identifier, file, clip, scale, sum_stat))
 dt_slims[1:5, 1:5]
@@ -168,7 +146,7 @@ FIGURE_2 <- list()
 weird_tissues <- c("endometrioidadenocarcinoma", "HCT116", "HeLacontaminant", "Headandneck", "LNCaPcells", "PeritonealEffusion")
 
 #performance_file <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/statistics/ENPACT_734_2024-07-26.compiled_stats.txt'
-performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
+performance_file <- file.path(analysis_directory, 'data/enpact/weights', 'ENPACT_734_2025-04-24.compiled_stats.txt')
 performance <- data.table::fread(performance_file)
 
 tf_tissues_removed <- performance %>%
@@ -199,7 +177,7 @@ length(valid_tf_tissues)
 
 
 ```{r}
-weights_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz'
+weights_file <- file.path(analysis_directory, 'data/enpact/weights', 'ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz')
 weights <- data.table::fread(weights_file)
 weights <- weights %>%
     dplyr::select(all_of(c('feature', valid_tf_tissues))) 
@@ -252,38 +230,6 @@ test_performance$context |> unique() |> length()
 # SUPPLEMENTARY_TABLES[["2: TF tissue pairs removed from Enpact"]] <- tf_tissues_removed
 ```
 
-```{r}
-gg_qq_empirical <- function(a, b, quantiles = seq(0, 1, 0.01), name=NULL, btype='normal', mlog10_p_thres=30, neglog10 = TRUE)
-{
-  a_lab <- deparse(substitute(a))
-  n <- length(a)
-  p_thres = 10^{-mlog10_p_thres}
-    if( sum( a < p_thres) ){
-        warning(paste("thresholding p to ", p_thres) )
-        a = pmax(a, p_thres)
-    }
-
-
-  if(missing(b)) {
-    if(btype == 'normal'){
-        b <- rnorm(length(a), mean(a), sd(a))
-        b_lab <- "normal distribution"
-    } else if(btype == 'uniform'){
-        b <- qunif(ppoints(n), min=0, max=1)[order(order(a))]
-        b_lab <- "uniform distribution"
-    }
-  } 
-
-  else b_lab <- deparse(substitute(b))
-  # paste(deparse(substitute(a)), "quantiles")
-  
-  ggplot(mapping = aes(x = -log10(b), 
-                       y = -log10(a))) + 
-    geom_point() +
-    geom_abline(aes(slope = 1, intercept = 0), linetype = 2, col = 'grey')
-}
-
-```
 
 ### Tf/tissue pairs with aucs > 0.7
 
@@ -409,7 +355,7 @@ qqplot_all_weights
 ```
 
 ```{r}
-ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_all_weights.png', qqplot_all_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
+ggsave(file.path(output_directory, 'qqplot_all_weights.png'), qqplot_all_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
 ```
 
 ```{r}
@@ -487,15 +433,7 @@ qqplot_ar_prostate_weights
 ```
 
 ```{r}
-ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_ar_prostate_weights.png', qqplot_ar_prostate_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
-```
-
-```{r}
-# qqplots_weights <- patchwork::wrap_plots(qqplot_ar_prostate_weights, qqplot_all_weights) + plot_layout(axes = 'collect', guides = "collect")
-```
-
-```{r}
-# ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_weights.png', qqplots_weights, width = 8000, height = 3000, dpi = 800, units = 'px')
+ggsave(file.path(output_directory, 'qqplot_ar_prostate_weights.png'), qqplot_ar_prostate_weights, width = 4000, height = 3000, dpi = 800, units = 'px')
 ```
 
 ```{r}
@@ -572,15 +510,7 @@ SUPPLEMENTARY_FIGURE_1$C <- qqplot_other_examples
 ```
 
 ```{r}
-ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_other_examples.png', qqplot_other_examples, width = 8000, height = 5000, dpi = 800, units = 'px')
-```
-
-```{r}
-# qqplots_weights <- patchwork::wrap_plots(qqplot_ar_prostate_weights, qqplot_all_weights) + plot_layout(axes = 'collect', guides = "collect")
-```
-
-```{r}
-# ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/qqplot_weights.png', qqplots_weights, width = 8000, height = 3000, dpi = 800, units = 'px')
+ggsave(file.path(output_directory, 'qqplot_other_examples.png'), qqplot_other_examples, width = 8000, height = 5000, dpi = 800, units = 'px')
 ```
 
 ```{r}
@@ -616,7 +546,7 @@ length(enformers_tfs)
 ```
 
 ```{r}
-cistrome_db <- data.table::fread("/project2/haky/Data/TFXcan/cistrome/raw/human_factor_full_QC.txt") %>%
+cistrome_db <- data.table::fread(file.path(analysis_directory, 'files', "human_factor_full_QC.txt")) %>%
     dplyr::filter(!Tissue_type %in% weird_tissues)
 
 cistrome_db %>% dplyr::pull("Factor") %>% unique() %>% length()
@@ -631,8 +561,7 @@ cistrome_db %>% dplyr::filter(Factor %in% enformers_tfs) %>% pull(Factor) %>% un
 ### Performance of incremental AR models across the genome: AUC
 #### AUC vs number of training data for AR:Prostate
 ```{r}
-experiment_dir <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_incremental50_2025-04-26'
-incremental_experiment_summary <- data.table::fread(file.path(experiment_dir, 'statistics', 'ENPACT_incremental50_2025-04-26.compiled_stats.txt'))
+incremental_experiment_summary <- data.table::fread(file.path(analysis_directory, 'data/tests/incremental50', 'ENPACT_incremental50_2025-04-26.compiled_stats.txt'))
 
 # test_performance
 incremental_test_performance <- incremental_experiment_summary[type == 'test', ]
@@ -658,7 +587,7 @@ SUPPLEMENTARY_FIGURE_1$A <- incremental_samples_performance_barplot
 ```
 
 ```{r}
-ggplot2::ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1A.png', incremental_samples_performance_barplot, width = 6000, height = 3000, dpi = 800, units = 'px')
+ggplot2::ggsave(file.path(output_directory, 'suppl.figure1A.png'), incremental_samples_performance_barplot, width = 6000, height = 3000, dpi = 800, units = 'px')
 
 # ggplot2::ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1A.pdf", incremental_samples_performance_barplot, units = "px")
 ```
@@ -827,8 +756,8 @@ SUPPLEMENTARY_FIGURE_1$B <- tf_tissue_pairs_distribution
 ### Performance (t-test) of specific models
 
 ```{r}
-models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
-updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
+# models_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/models'
+# updated_data_dir <- '/beagle3/haky/users/temi/projects/Enpact-figures/newdata'
 ```
 ```{r}
 focus_tfs <- c('FOXA1', 'AR', 'HOXB13', 'GATA2')
@@ -852,7 +781,7 @@ tfs_tissues
 ```{r}
 rundate <- '2025-04-24'
 predictions <- lapply(tfs_tissues, function(each_tft){
-  one_ex <- glue('{updated_data_dir}/{each_tft}_{rundate}.logistic.test_eval.txt.gz') #|> Sys.glob()
+  one_ex <- glue('{analysis_directory}/data/enpact/evaluations/{each_tft}_{rundate}.logistic.test_eval.txt.gz') #|> Sys.glob()
   if(file.exists(one_ex)){
     dt <- data.table::fread(one_ex) 
     return(dt)
@@ -1086,7 +1015,7 @@ pw_plot <- patchwork::wrap_plots(cowplot::ggdraw(pioneer_weights_plot), nrow = 1
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1D.png'), pw_plot, width = 4000, height = 4000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure1D.png'), pw_plot, width = 4000, height = 4000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1246,7 +1175,7 @@ SUPPLEMENTARY_FIGURE_1$D <- tissue_enrichment_plot
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1C.png'), tissue_enrichment_plot, width = 7000, height = 7000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure1C.png'), tissue_enrichment_plot, width = 7000, height = 7000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1265,7 +1194,7 @@ top_plot <- patchwork::wrap_plots(suppfigure1$A, suppfigure1$B, nrow = 2, ncol =
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1AB.png'), top_plot, width = 10000, height = 6000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure1AB.png'), top_plot, width = 10000, height = 6000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1323,7 +1252,7 @@ f2
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/figure2.png'), f2, width = 8000, height = 2500, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'figure2.png'), f2, width = 8000, height = 2500, units = 'px', dpi = 800)
 ```
 
 ### Create and save supplementary figure 1
@@ -1358,7 +1287,7 @@ s1 <- patchwork::wrap_plots(first_3, number_4, number_5, ncol=1, heights = c(0.3
 
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure1.png'), s1, width = 10000, height = 20000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure1.png'), s1, width = 10000, height = 20000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1396,15 +1325,15 @@ cwas_mat[1:5, 1:5]
 
 ```{r}
 #read in the matrix of enpact scores
-enpact_mat <- data.table::fread(file.path(data_dir, 'baca.enpact_scores.AR_Prostate.txt.gz')) %>% 
+enpact_mat <- data.table::fread(file.path(analysis_directory, 'data/predictions', 'baca.enpact_scores.AR_Prostate.txt.gz')) %>% 
     tibble::column_to_rownames("V1") %>%
     as.matrix()
 
-gt_mat_binarized <- data.table::fread(file.path(data_dir, 'baca.observed_binding.binarized.txt.gz')) %>%
+gt_mat_binarized <- data.table::fread(file.path(analysis_directory, 'data/predictions', 'baca.observed_binding.binarized.txt.gz')) %>%
     tibble::column_to_rownames("V1") %>%
     as.matrix()
 
-cwas_mat <- data.table::fread(file.path(data_dir, 'baca.cwas_scores.AR_Prostate.txt.gz')) %>%
+cwas_mat <- data.table::fread(file.path(analysis_directory, 'data/predictions', 'baca.cwas_scores.AR_Prostate.txt.gz')) %>%
     tibble::column_to_rownames("V1") %>%
     as.matrix()
 ```
@@ -1427,8 +1356,8 @@ enpact_mat[1:2, 1:2]; cwas_mat[1:2, 1:2]; gt_mat_binarized[1:2, 1:2]
 You only need to read in the results of the correlation test or t-test
 
 ```{r}
-dt_enpact_observed <- data.table::fread(file.path(data_dir, 'baca.enpact_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
-dt_cwas_observed <- data.table::fread(file.path(data_dir, 'baca.cwas_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
+dt_enpact_observed <- data.table::fread(file.path(analysis_directory, 'data/tests', 'baca.enpact_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
+dt_cwas_observed <- data.table::fread(file.path(analysis_directory, 'data/tests', 'baca.cwas_observed_ttest.txt.gz')) %>% dplyr::filter(!is.na(pval))
 ```
 
 
@@ -1666,7 +1595,7 @@ scatterplot_top12_enpact_observed
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure2A.png'), scatterplot_top12_enpact_observed, width = 8000, height = 6000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure2A.png'), scatterplot_top12_enpact_observed, width = 8000, height = 6000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1741,8 +1670,8 @@ FIGURE_3$cherrypicked_scatterplot_enpact_observed <- cherrypicked_scatterplot_en
 ```
 
 ```{r}
-cor_enp_cwas <- data.table::fread(file.path(data_dir, 'baca.enpact_cwas_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
-cor_null <- data.table::fread(file.path(data_dir, 'baca.null_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
+cor_enp_cwas <- data.table::fread(file.path(analysis_directory, 'data/tests', 'baca.enpact_cwas_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
+cor_null <- data.table::fread(file.path(analysis_directory, 'data/tests', 'baca.null_correlations.txt.gz')) %>% dplyr::filter(!is.na(pvalue))
 ```
 
 ```{r}
@@ -1918,7 +1847,7 @@ scatterplot_top12_enpact_cwas
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure2B.png'), scatterplot_top12_enpact_cwas, width = 8000, height = 6000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure2B.png'), scatterplot_top12_enpact_cwas, width = 8000, height = 6000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -1969,7 +1898,7 @@ ttplot <- top12_ect %>%
     theme(legend.position="none") +
     geom_text(data=tt, mapping=aes(x = -Inf, y = Inf, label = label, col = 'red'), hjust = -0.1, vjust = 2, lineheight = 1, size = 2.5)
 #  
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/logits.figure3F.png'), ttplot, width = 3000, height = 3000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'logits.figure3F.png'), ttplot, width = 3000, height = 3000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -2055,7 +1984,7 @@ f3
 
 
 ```{r, fig.height=6, fig.width=9}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.png", f3, width = 8000, height = 5500, units = "px", dpi = 800)
+ggsave(file.path(output_directory, "figure3.png"), f3, width = 8000, height = 5500, units = "px", dpi = 800)
 
 # ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure3.pdf", f3, units = "px")
 ```
@@ -2165,7 +2094,7 @@ histogram_fracsnps_used
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure3A.png'), histogram_fracsnps_used, width = 3000, height = 3000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure3A.png'), histogram_fracsnps_used, width = 3000, height = 3000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -2178,10 +2107,10 @@ summary_frac_used; summary_nsps_used
 ### Compare with CWAS
 
 ```{r}
-hg38_maps <- data.table::fread(file.path(data_dir, 'baca_cwas_loci_hg38.bed')) 
+hg38_maps <- data.table::fread(file.path(analysis_directory, 'files', 'baca_cwas_loci_hg38.bed')) 
 hg38_maps <- setnames(hg38_maps, c('chr', 'start', 'end', 'hg19_locus')) %>%
     tidyr::unite('hg38_locus', chr:end, sep='_')
-cwas_models <- readxl::read_excel(file.path(data_dir, 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
+cwas_models <- readxl::read_excel(file.path(analysis_directory, 'files', 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
     dplyr::select(ID, CHR, P0, P1, R2=MODELCV.R2, pvalue=MODELCV.PV)
 cwas_models <- dplyr::inner_join(cwas_models, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
     dplyr::select(locus=hg38_locus, R2, pvalue)
@@ -2223,7 +2152,7 @@ dim(ePeaks)
 ```
 
 ```{r}
-distance_from_center <- data.table::fread(file.path('/beagle3/haky/users/temi/projects/Enpact/files', 'snp_weights_distance.txt.gz'))
+distance_from_center <- data.table::fread(file.path(analysis_directory, 'files', 'snp_weights_distance.txt.gz'))
 ```
 
 ```{r}
@@ -2262,7 +2191,7 @@ f4 <- patchwork::wrap_plots(figure_4, ncol = 3) + plot_annotation(tag_levels = l
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure4.png", f4, width = 6000, height = 2000, units = "px", dpi = 800)
+ggsave(file.path(output_directory, "figure4.png"), f4, width = 6000, height = 2000, units = "px", dpi = 800)
 
 # ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure4.pdf", f4, units = "px")
 ```
@@ -2326,7 +2255,7 @@ peak_center_distances_distribution <- ggplot() +
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure3B.png'), peak_center_distances_distribution, width = 8000, height = 3000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure3B.png'), peak_center_distances_distribution, width = 8000, height = 3000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -2385,10 +2314,10 @@ FIGURE_5 <- list()
 ```
 
 ```{r}
-dt_gexpr <- data.table::fread(file.path(data_dir, 'prostate_cancer_risk.gexpr.spredixcan.txt.gz'))
-dt_tfxcan <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/data/tfxcan/AR_Prostate.logistic.TFXcan.prostate_cancer_risk.csv')
-cwas_74 <- data.table::fread(file.path(data_dir, 'CWAS_significant_prostate_cancer_risk_associations.top74.txt.gz'))
-ldblocks <- data.table::fread(file.path(data_dir, 'hg38_fourier_ls-all.bed'), header=F, col.names=c('chrom', 'start', 'end'))
+dt_gexpr <- data.table::fread(file.path(analysis_directory, 'data/twas', 'prostate_cancer_risk.gexpr.spredixcan.txt.gz'))
+dt_tfxcan <- data.table::fread(file.path(analysis_directory, 'data/tfxcan', 'AR_Prostate.logistic.TFXcan.prostate_cancer_risk.csv'))
+cwas_74 <- data.table::fread(file.path(analysis_directory, 'files', 'CWAS_significant_prostate_cancer_risk_associations.top74.txt.gz'))
+ldblocks <- data.table::fread(file.path(analysis_directory, 'files', 'hg38_fourier_ls-all.bed'), header=F, col.names=c('chrom', 'start', 'end'))
 ```
 
 ```{r}
@@ -2401,7 +2330,7 @@ SUPPLEMENTARY_TABLES[['Supplementary Table 7']] <- dt_tfxcan %>% dplyr::rename(a
 -- map the loci of the dt_cwas (74 significantly associated loci) to hg38
 
 ```{r}
-hg38_maps <- data.table::fread(file.path(data_dir, 'baca_cwas_loci_hg38.bed')) 
+hg38_maps <- data.table::fread(file.path(analysis_directory, 'files', 'baca_cwas_loci_hg38.bed')) 
 hg38_maps <- setnames(hg38_maps, c('chr', 'start', 'end', 'hg19_locus')) %>%
     tidyr::unite('hg38_locus', chr:end, sep='_')
 
@@ -2597,7 +2526,7 @@ jt %>%
 ```
 
 ```{r}
-ggsave(file.path('/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4A.png'), ldblock_distribution, width = 10000, height = 4000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, 'suppl.figure4A.png'), ldblock_distribution, width = 10000, height = 4000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -2668,7 +2597,7 @@ FIGURE_5$vennplot_overlaps <- vennplot
 - out of the 5580 that they tested, how many do we find?
 ```{r}
 # these have been mapped from hg19 to hg38 already
-cwas_5580 <- data.table::fread(file.path(data_dir, 'CWAS_significant_prostate_cancer_risk_associations.top5580.txt.gz'))
+cwas_5580 <- data.table::fread(file.path(analysis_directory, 'files', 'CWAS_significant_prostate_cancer_risk_associations.top5580.txt.gz'))
 cwas_5580
 ```
 
@@ -2687,7 +2616,7 @@ We can say that we find many more because they lacked to power to test exhaustiv
 -- CWAS also has association zscores and pvalues for some 5568 models (ARBS)
 
 ```{r}
-cwas_5580 <- readxl::read_excel(file.path(data_dir, 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
+cwas_5580 <- readxl::read_excel(file.path(analysis_directory, 'files', 'cwas_supplementary_tables.xlsx'), sheet = 'Table S3', skip = 1) %>%
     dplyr::select(ID, CHR, P0, P1, TWAS.Z, TWAS.P)
 cwas_5580 <- dplyr::inner_join(cwas_5580, hg38_maps, by=c('ID' = 'hg19_locus')) %>%
     dplyr::select(locus=hg38_locus, CWAS.Z=TWAS.Z, CWAS.P=TWAS.P)
@@ -2893,7 +2822,7 @@ f5
 ```{r, fig.format = 'png', fig.dpi = 800}
 # ggsave has trouble saving base R plots and other non ggplot objects
 
-png(filename="/beagle3/haky/users/temi/projects/Enpact/figures/figure5.png", width = 8000, height = 4000, units = "px", res = 800)
+png(filename=file.path(output_directory, "figure5.png"), width = 8000, height = 4000, units = "px", res = 800)
 f5
 dev.off()
 
@@ -3074,19 +3003,19 @@ all_g <- dt.all$gene_name %>% unique()
 ```
 
 ```{r}
-tfx %>% cat(sep='\n', file=file.path(data_dir, 'tfxcan_genes.exclusive.txt'))
-cwa %>% cat(sep='\n', file=file.path(data_dir, 'cwas_genes.exclusive.txt'))
-com %>% cat(sep='\n', file=file.path(data_dir, 'common_genes.exclusive.txt'))
-all_g %>% cat(sep='\n', file=file.path(data_dir, 'all_genes.exclusive.txt'))
+tfx %>% cat(sep='\n', file=file.path(output_directory, 'tfxcan_genes.exclusive.txt'))
+cwa %>% cat(sep='\n', file=file.path(output_directory, 'cwas_genes.exclusive.txt'))
+com %>% cat(sep='\n', file=file.path(output_directory, 'common_genes.exclusive.txt'))
+all_g %>% cat(sep='\n', file=file.path(output_directory, 'all_genes.exclusive.txt'))
 ```
 
 ### Gene set overrepresentation analysis with gprofiler
 
 ```{r}
-tfxcan_genes <- readLines(file.path(data_dir, 'tfxcan_genes.exclusive.txt'))
-cwas_genes <- readLines(file.path(data_dir, 'cwas_genes.exclusive.txt'))
-common_genes <- readLines(file.path(data_dir, 'common_genes.exclusive.txt'))
-all_genes <- readLines(file.path(data_dir, 'all_genes.exclusive.txt'))
+tfxcan_genes <- readLines(file.path(output_directory, 'tfxcan_genes.exclusive.txt'))
+cwas_genes <- readLines(file.path(output_directory, 'cwas_genes.exclusive.txt'))
+common_genes <- readLines(file.path(output_directory, 'common_genes.exclusive.txt'))
+all_genes <- readLines(file.path(output_directory, 'all_genes.exclusive.txt'))
 ```
 
 ```{r}
@@ -3160,7 +3089,7 @@ goverrep_plot
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4C.png", goverrep_plot, width = 11000, height = 3500, units = "px", dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure4C.png"), goverrep_plot, width = 11000, height = 3500, units = "px", dpi = 800)
 ```
 
 #### Annotate arbs near TWAS-annotated genes
@@ -3303,7 +3232,7 @@ locus_zoom_plots
 
 ```{r}
 # save the plot
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure4D.png", locus_zoom_plots, width = 12000, height = 12000, units = "px", dpi = 800)
+ggsave(filename=file.path(output_directory, "suppl.figure4D.png"), locus_zoom_plots, width = 12000, height = 12000, units = "px", dpi = 800)
 ```
 
 # FIGURE 6: Matrix factorization and Tenerife plots
@@ -3400,7 +3329,7 @@ SUPPLEMENTARY_FIGURE_6[['A']] <- tfxcan_tf_pval_ranking
 ```
 
 ```{r}
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6A.png", tfxcan_tf_pval_ranking, width = 5000, height = 15000, units = "px", dpi = 800)
+ggsave(filename=file.path(output_directory, "suppl.figure6A.png"), tfxcan_tf_pval_ranking, width = 5000, height = 15000, units = "px", dpi = 800)
 ```
 
 #### What tissues are most important across all 132 GWAS loci?
@@ -3441,7 +3370,7 @@ SUPPLEMENTARY_FIGURE_6[['B']] <- tfxcan_tissue_pval_ranking
 ```
 
 ```{r}
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6B.png", tfxcan_tissue_pval_ranking, width = 5000, height = 8000, units = "px", dpi = 800)
+ggsave(filename=file.path(output_directory, "suppl.figure6B.png"), tfxcan_tissue_pval_ranking, width = 5000, height = 8000, units = "px", dpi = 800)
 ```
 
 
@@ -3458,7 +3387,7 @@ ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6B
 
 ```{r}
 # read in the data i.e. zscores
-data_list <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zscores.matrices.rds")
+data_list <- readRDS(file.path(analysis_directory, "data/tenerife/PrCa.tfxcan.zscores.matrices.rds"))
 ```
 
 ```{r}
@@ -3487,7 +3416,7 @@ full_tenerife <- p3 %>%
 
 ```{r}
 # save the full tenerife plot
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/prca_full_tenerife_plot.pdf", full_tenerife, width = 50000, height = 20000, units = "px", dpi = 800, limitsize = FALSE)
+ggsave(filename=file.path(output_directory, "prca_full_tenerife_plot.pdf"), full_tenerife, width = 50000, height = 20000, units = "px", dpi = 800, limitsize = FALSE)
 ```
 
 ## Subset tenerife plot
@@ -3536,7 +3465,7 @@ dev.off()
 #### Ratio tenerife plot
 
 ```{r}
-zratio_matdev <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.matrix.rds")
+zratio_matdev <- readRDS(file.path(analysis_directory, "data/tenerife/PrCa.tfxcan.zratios.matrix.rds"))
 ```
 
 ```{r}
@@ -3569,13 +3498,13 @@ FIGURE_6$tenerife_plots <- tenerife_plots
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure6A.png", tenerife_plots, width = 6000, height = 3000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "figure6A.png"), tenerife_plots, width = 6000, height = 3000, units = 'px', dpi = 800)
 ```
 
 ### Matrix factorization of z-scores
 
 ```{r}
-zflash <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.flash.rds")
+zflash <- readRDS(file.path(analysis_directory, "data/tenerife/PrCa.tfxcan.zratios.flash.rds"))
 ```
 
 #### proportion of variance explained by each of the factors
@@ -3619,7 +3548,7 @@ SUPPLEMENTARY_FIGURE_6[['C']] <- variance_explained
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6CD.png", variance_explained, width = 4000, height = 4000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure6CD.png"), variance_explained, width = 4000, height = 4000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -3627,64 +3556,11 @@ ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6CD.png", v
 ```
 
 ## Programs in PrCa TFXcan associations
-```{r}
-select_ks <- function(cluster_designation, cluster, mat, samp = TRUE){
-    yx <- cluster_designation[cluster_designation == cluster]
-    kx <- sapply(strsplit(names(yx), '_'), getElement, 2) |> unique()
-    yx_kx <- lapply(kx, function(x) yx[endsWith(names(yx), x)])
-
-    set.seed(2025)
-
-    if(samp){
-        selected_yx_kx <- sapply(yx_kx, function(x){
-            x <- x[sample.int(length(x), 1)]
-            return(x)
-        }) %>% names()
-    } else {
-        selected_yx_kx <- names(unlist(yx_kx))
-    }
-    
-
-    tryCatch({
-       mt <- mat[selected_yx_kx, ] |> t()
-       return(mt)
-    }, error = function(e){
-        message(glue('Error: {e} at {cluster}'))
-    })
-}
-
-create_cluster_data <- function(dt_yselected, topn = 20, average = FALSE){
-    # convert to data.table and to long format
-
-    if(average == FALSE){
-        dt_yselected <- as.data.table(dt_yselected, keep.rownames = 'tf_tissue') %>% 
-            tidyr::pivot_longer(cols = !tf_tissue, names_to = 'subsample', values_to = 'contribution') %>%
-            tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>%
-            dplyr::group_by(subsample) %>%
-            dplyr::arrange(desc(contribution)) %>%
-            slice_head(n = topn) %>%
-            dplyr::ungroup() %>%
-            dplyr::group_by(tf_tissue) %>%
-            dplyr::mutate(tf_tissue = factor(tf_tissue, levels = unique(.$tf_tissue)),
-                tf_tissue = reorder(tf_tissue, -contribution))
-    } else if(average){
-        dt_yselected <- as.data.table(dt_yselected, keep.rownames = 'tf_tissue') %>% 
-            tidyr::pivot_longer(cols = !tf_tissue, names_to = 'subsample', values_to = 'contribution') %>%
-            tidyr::separate(tf_tissue, c('tf', 'tissue'), sep = '_', remove = F) %>%
-            dplyr::group_by(tf_tissue) %>%
-            dplyr::summarize(contribution = mean(contribution)) %>%
-            dplyr::mutate(tf_tissue = factor(tf_tissue, levels = unique(.$tf_tissue)),
-                tf_tissue = reorder(tf_tissue, -contribution))
-    }
-
-    return(dt_yselected)
-}
-```
 
 ```{r}
-outfile <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.program_clusters.1000samples.L2_norm.txt.gz'
-mat_file <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_matrix.1000samples.L2_norm.rds.gz'
-corr_file <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_corrmatrix.1000samples.L2_norm.rds.gz'
+outfile <- file.path(analysis_directory, 'data/consensus', 'prca_risk.program_clusters.1000samples.L2_norm.txt.gz')
+mat_file <- file.path(analysis_directory, 'data/consensus', 'prca_risk.programs_matrix.1000samples.L2_norm.rds.gz')
+corr_file <- file.path(analysis_directory, 'data/consensus', 'prca_risk.programs_corrmatrix.1000samples.L2_norm.rds.gz')
 ```
 
 ```{r}
@@ -3709,7 +3585,7 @@ dim(ycorr_mat); ycorr_mat[1:5, 1:5]
 # yclust_100 <- readRDS('/beagle3/haky/users/temi/projects/Enpact/files/prca_Fmatrix.correlation.random.100.rds.gz')
 # dim(yclust_100); yclust_100[1:5, 1:5]
 
-cluster_scores <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.programs_clara_silhouette.1000samples.L2_norm.txt.gz')
+cluster_scores <- data.table::fread(file.path(analysis_directory, 'data/consensus', 'prca_risk.programs_clara_silhouette.1000samples.L2_norm.txt.gz'))
 ```
 
 ```{r, fig.width = 4, fig.height = 4}
@@ -3730,7 +3606,7 @@ optimal_num
 ```
 
 ```{r}
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6E.png", optimal_num, width = 3000, height = 3000, units = "px", dpi = 800)
+ggsave(filename=file.path(output_directory, "suppl.figure6E.png"), optimal_num, width = 3000, height = 3000, units = "px", dpi = 800)
 ```
 
 ```{r}
@@ -3769,7 +3645,7 @@ num_inferred_programs_per_subsample
 
 
 ```{r}
-ggsave(filename="/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6F.png", num_inferred_programs_per_subsample, width = 3000, height = 4000, units = "px", dpi = 800)
+ggsave(filename=file.path(output_directory, "suppl.figure6F.png"), num_inferred_programs_per_subsample, width = 3000, height = 4000, units = "px", dpi = 800)
 ```
 
 ```{r}
@@ -3793,7 +3669,7 @@ A#
 x6a <- patchwork::wrap_plots(suppfig6$A, suppfig6$B, ncol = 2) +
     plot_layout(design = dsg, heights = c(1, 0.2)) +
     plot_annotation(tag_levels = 'A') + theme(legend.position = 'none')
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6AB.png", x6a, width = 7000, height = 15000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure6AB.png"), x6a, width = 7000, height = 15000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -3816,7 +3692,7 @@ x6 <- patchwork::wrap_plots(l1, nrow = 1, widths = c(1, 0.5)) +
 x6
 ```
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6CDEFG.png", x6, width = 8000, height = 4000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure6CDEFG.png"), x6, width = 8000, height = 4000, units = 'px', dpi = 800)
 ```
 
 ## Assigning programs
@@ -3845,60 +3721,56 @@ lapply(pclusts, function(x){
 })
 ```
 
+If there is a need to modify the programs and the colors and all that, you can edit this section. Otherwise, just read it in. 
+
 ```{r}
-library(paletteer)
+
+# library(paletteer)
 # paletteer_d("MoMAColors::Warhol")
 # paletteer_d("tidyquant::tq_dark")
-```
 
-```{r}
-# functional_programs <- LETTERS
+# manually_chosen_colors <- paletteer::paletteer_d("MoMAColors::Klein")
 
-# manually_chosen_colors <- c("#328C97FF", "#A5506DFF", "#2A9D3DFF", "#DB7003FF", "#A30000FF", "#916C37FF", "#97D1D9FF", "#FF0066FF", "#FBA600FF", 'grey')
+# # create colors for programs
+# num_programs <- 11
+# std_palette <- manually_chosen_colors #RColorBrewer::brewer.pal(n = 9, name = "Set1") #paletteer_d("tidyquant::tq_dark") # RColorBrewer::brewer.pal(n = 12, name = "Set3")
 
-manually_chosen_colors <- paletteer::paletteer_d("MoMAColors::Klein")
+# if(length(std_palette) < num_programs){
+#     col_vector <- colorRampPalette(std_palette)(num_programs)
+#     program_colors <- col_vector
+# } else {
+#     col_vector <- std_palette[1:num_programs]
+#     set.seed(2024)
+#     program_colors <- col_vector #sample(col_vector, num_programs) 
+# }
 
-# create colors for programs
-num_programs <- 11
-std_palette <- manually_chosen_colors #RColorBrewer::brewer.pal(n = 9, name = "Set1") #paletteer_d("tidyquant::tq_dark") # RColorBrewer::brewer.pal(n = 12, name = "Set3")
-
-if(length(std_palette) < num_programs){
-    col_vector <- colorRampPalette(std_palette)(num_programs)
-    program_colors <- col_vector
-} else {
-    col_vector <- std_palette[1:num_programs]
-    set.seed(2024)
-    program_colors <- col_vector #sample(col_vector, num_programs) 
-}
-
-#RColorBrewer::brewer.pal(length(uniq_tissues), "Dark2")
-```
-
-```{r}
 # program_names <- c('Liver', 'Program 8', 'Program 9', 'CTCF', 'REST', 'Bone marrow', 'Blood', 'Hormone receptors', 'Colon', 'RFX5-REST')
 
-program_names <- c('Liver', 'Program 1', 'REST', 'Program 2', 'Bone marrow', 'Blood', 'Hormone receptors', 'CTCF', 'Colon', 'Program 3', 'Program 4')
-program_names <- setNames(program_names, paste0('cluster', 1:length(program_names)))
+# program_names <- c('Liver', 'Program 1', 'REST', 'Program 2', 'Bone marrow', 'Blood', 'Hormone receptors', 'CTCF', 'Colon', 'Program 3', 'Program 4')
+# program_names <- setNames(program_names, paste0('cluster', 1:length(program_names)))
 
-# reordering the programs
-# names(functional_programs) <- glue::glue('k{1:length(functional_programs)}')
-# program_names <- program_names[c('cluster8', 'cluster1', 'cluster4', 'cluster5', 'cluster6', 'cluster7', 'cluster9', 'cluster2', 'cluster3', 'cluster10')] 
-names(program_colors) <- names(program_names)
+# # reordering the programs
+# # names(functional_programs) <- glue::glue('k{1:length(functional_programs)}')
+# # program_names <- program_names[c('cluster8', 'cluster1', 'cluster4', 'cluster5', 'cluster6', 'cluster7', 'cluster9', 'cluster2', 'cluster3', 'cluster10')] 
+# names(program_colors) <- names(program_names)
+
+# aa <- as.data.table(program_names, keep.rownames = 'cluster')
+# bb <- as.data.table(program_colors, keep.rownames = 'cluster')
+# program_meta <- merge(aa, bb, by.x = 'cluster', by.y = 'cluster')
+# program_meta$program <- gsub('cluster', 'k', program_meta$cluster)
+# colnames(program_meta) <- c('cluster', 'name', 'color', 'program')
+# program_meta <- program_meta %>% dplyr::arrange(match(cluster, names(program_names)))
+# program_meta
+
+# data.table::fwrite(program_meta, file.path(analysis_directory, 'files/prca.programs.metadata.txt'), sep = '\t', quote = F, col.names = T, row.names = F)
+
 ```
 
 ```{r}
-aa <- as.data.table(program_names, keep.rownames = 'cluster')
-bb <- as.data.table(program_colors, keep.rownames = 'cluster')
-program_meta <- merge(aa, bb, by.x = 'cluster', by.y = 'cluster')
-program_meta$program <- gsub('cluster', 'k', program_meta$cluster)
-colnames(program_meta) <- c('cluster', 'name', 'color', 'program')
-program_meta <- program_meta %>% dplyr::arrange(match(cluster, names(program_names)))
+program_meta <- data.table::fread(file.path(analysis_directory, 'files/prca.programs.metadata.txt'))
 program_meta
 ```
 
-```{r}
-data.table::fwrite(program_meta, '/beagle3/haky/users/temi/projects/Enpact/files/prca.programs.metadata.txt', sep = '\t', quote = F, col.names = T, row.names = F)
-```
 
 ### Heatmap of some 100 programs
 #### Cluster of programs
@@ -3980,7 +3852,7 @@ hmap <- ComplexHeatmap::Heatmap(ycorr, col = c('blue', 'white', 'red'), show_row
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/subsamples.cluster1000.png", hmap, width = 18000, height = 18000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "subsamples.cluster1000.png"), hmap, width = 18000, height = 18000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -4003,7 +3875,7 @@ hmap_programs <- ComplexHeatmap::Heatmap(yclust_ordered, col = c('white', 'red')
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/subsamples.programs.cluster1000.png", hmap_programs, width = 12000, height = 12000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "subsamples.programs.cluster1000.png"), hmap_programs, width = 12000, height = 12000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -4034,7 +3906,7 @@ num_program_assigned
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6H.png", num_program_assigned, width = 10000, height = 4000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure6H.png"), num_program_assigned, width = 10000, height = 4000, units = 'px', dpi = 800)
 ```
 
 ## Assigning program names to the inferred programs
@@ -4125,7 +3997,7 @@ program_plots
 # grid::grid.draw(program_plots)
 # dev.off()
 
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/figure6B.png", program_plots, width = 18000, height = 2000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "figure6B.png"), program_plots, width = 18000, height = 2000, units = 'px', dpi = 800)
 ```
 
 ```{r}
@@ -4176,14 +4048,14 @@ histogram_avg_contributions
 ```
 
 ```{r}
-ggsave("/beagle3/haky/users/temi/projects/Enpact/figures/suppl.figure6I.png", histogram_avg_contributions, width = 8000, height = 8000, units = 'px', dpi = 800)
+ggsave(file.path(output_directory, "suppl.figure6I.png"), histogram_avg_contributions, width = 8000, height = 8000, units = 'px', dpi = 800)
 ```
 
 ## Enrichment test of program names
 
 ```{r}
 # https://onlinelibrary.wiley.com/doi/10.1002/pro.3496
-nuc_recep <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/misc/nuclear_receptors.txt', fill=FALSE)
+nuc_recep <- data.table::fread(file.path(analysis_directory, 'files', 'nuclear_receptors.txt'), fill=FALSE)
 
 length(nuc_recep$`Gene Name`)
 
@@ -4248,12 +4120,12 @@ library(ggmanh)
 ```
 
 ```{r}
-program_meta <- data.table::fread('/beagle3/haky/users/temi/projects/Enpact/files/prca.programs.metadata.txt')
+program_meta <- data.table::fread(file.path(analysis_directory, 'files/prca.programs.metadata.txt'))
 program_meta
 ```
 
 ```{r}
-loci_assignment <- '/beagle3/haky/users/temi/projects/Enpact/data/consensus/prca_risk.loci_assignments.1000samples.L2_norm.txt.gz'
+loci_assignment <- file.path(analysis_directory, 'data/consensus/prca_risk.loci_assignments.1000samples.L2_norm.txt.gz')
 ```
 
 ```{r}
@@ -4322,10 +4194,6 @@ ggplot(ldt_summary, aes(x = stats::reorder(name, -n_loci), y = n_loci)) +
 
 ## Annotating the manhattan plot
 
-```{r}
-devtools::source_gist("https://gist.github.com/TemiPete/c19ee6999f017840b423f7c3f013379a")
-```
-
 Modify the program metadata
 ```{r}
 # rearrange program_meta
@@ -4343,7 +4211,7 @@ x_breaks <- get_x_breaks(chrom_lengths)
 ```
 
 ```{r}
-mandt <- data.table::fread("/beagle3/haky/users/temi/misc/tfxcan.prca_gwas.txt.gz", sep = '\t', quote = F, header = T)
+mandt <- data.table::fread(file.path(analysis_directory, "files/tfxcan.prca_gwas.txt.gz"), sep = '\t', quote = F, header = T)
 ```
 
 ```{r}
@@ -4405,7 +4273,7 @@ FIGURE_6$annotated_manhattan <- man.g.colors
 
 
 ```{r}
-ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6C.png', man.g.colors, width = 15000, height = 5000, dpi = 800, units = 'px')
+ggsave(file.path(output_directory, 'figure6C.png'), man.g.colors, width = 15000, height = 5000, dpi = 800, units = 'px')
 ```
 
 
@@ -4443,7 +4311,7 @@ f6
 
 ```{r}
 #save f6
-ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6.png', f6, width = 23000, height = 10000, dpi = 800, units = 'px')
+ggsave(file.path(output_directory, 'figure6.png'), f6, width = 23000, height = 10000, dpi = 800, units = 'px')
 
 # ggsave('/beagle3/haky/users/temi/projects/Enpact/figures/figure6.pdf', f6, units = 'px')
 ```
@@ -4502,7 +4370,7 @@ weird_tissues
 #### Number of ChIP-seq experiments per TF/tissue pair
 
 ```{r}
-experiments_threshold_pass <- data.table::fread('/project2/haky/Data/TFXcan/cistrome/raw/human_factor_full_QC.txt') %>%
+experiments_threshold_pass <- data.table::fread(file.path(analysis_directory, 'human_factor_full_QC.txt')) %>%
     dplyr::filter(Tissue_type != 'None', !is.na(PeaksUnionDHSRatio), FRiP > 0.01) %>%
     dplyr::filter(!grepl('-', Factor, fixed = T)) %>%
     dplyr::mutate(fake_types = gsub(' ', '', Tissue_type)) %>%
@@ -4527,7 +4395,8 @@ n_exp_per_tf_tissue <- experiments_threshold_pass %>%
 
 #### Baca individuals peaks data
 
-```{r}
+This section counts the number of peaks per individual in the Baca et al. 2023 data, which is used for the CWAS analysis. I did not provide the data here. 
+```{r, eval = F}
 dir <- '/project2/haky/Data/CWAS/bed'
 
 idnames <- vector('character', length = 0)
@@ -4538,26 +4407,14 @@ dtlist <- list.files(dir, pattern = "*.bed", full.names = T) %>%
         idnames <<- c(idnames, idname)
         return(dim(dt)) 
     })
-```
 
-```{r}
 sapply(dtlist, getElement, 1) |> mean()
-```
 
-```{r}
 sapply(dtlist, getElement, 1) |> hist(xlab = 'Number of peaks per individual', main = '')
-```
 
-```{r}
 ind_peaks <- data.table::data.table(id = idnames, num_peaks = sapply(dtlist, getElement, 1))
 ind_peaks |> head()
 ```
-
-```{r}
-# SUPPLEMENTARY_TABLES[['Supplementary Table 18']] <- ind_peaks
-```
-
-
 
 
 # SUPPLEMENTARY TABLES

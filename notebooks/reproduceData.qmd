@@ -144,7 +144,6 @@ system(cmd) ; system('squeue -u temi')
 The AR weights in the CWAS paper were trained using the Fusion pipeline in mind. Here, we prepared the AR weights such that they are compatible with the PredictDB pipeline.
 
 These weights were shared by our collaborators. So, you can either find them online yourself through the [CWAS paper](https://www.nature.com/articles/s41588-022-01168-y) or you can ask the authors for the weights.
-
 -- the CWAS weights for AR
 ```{r}
 transcription_factor <- 'AR'
