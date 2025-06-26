@@ -1,5 +1,5 @@
 ---
-title: TFXcan paper figures (main and supplementary)
+title: TFXcan paper analysis (main and supplementary)
 date: "2024-11-21"
 date-modified: today
 author: Temi
@@ -18,12 +18,12 @@ A notebook for the figures used in the TFXcan paper. Many of these analysis were
 ::: {.callout-note}
 ## Software and packages for this notebook
 If you can use conda to create an R environment, that would be best. Otherwise, you are free to install package your preferred way.
-Here is an environment yaml file you can use: `https://uchicago.box.com/shared/static/0qxuj0384k51ip54jv5pr5xj20t2kx2i.yaml`
+Here is an environment yaml file you can use: `https://github.com/hakyimlab/TFXcan/blob/master/software/tfxcan-environment.yaml`
 Run the following:
 
-1. conda env create --file ./r-env.yaml --name r-env #or a name you want
+1. conda env create --file ./tfxcan-environment.yaml --name tfxcan-environment #or a name you want
 
-2. conda activate r-env
+2. conda activate tfxcan-environment
 
 3. r #or R or radian
 :::
