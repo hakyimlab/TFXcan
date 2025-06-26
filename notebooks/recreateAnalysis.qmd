@@ -28,6 +28,10 @@ Run the following:
 3. r #or R or radian
 :::
 
+::: {.callout-warning}
+There will be issues if you try to build the environment on a mac. This is because this environment was built on a linux platform, and cross-platform compatibility is not guaranteed. If you are on a mac, you can try to install the packages manually or use the `renv` package to create a virtual environment for this notebook.
+:::
+
 ```{r}
 knitr::opts_chunk$set(cache.rebuid = TRUE, fig.width = 4, fig.height = 4, fig.format = 'png', fig.dpi = 800)
 ```
