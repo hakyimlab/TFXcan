@@ -34,7 +34,6 @@ experiments/prostate_cancer/*
 **/__pycache__/
 .*/
 software/tfxcan-project/*
-software
 
 # include
 !scripts/
