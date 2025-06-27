@@ -22,7 +22,9 @@ renv::hydrate(packages = c('glue'), project = '/beagle3/haky/users/temi/projects
 
 renv::snapshot(lockfile = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project/renv.lock', library = '/beagle3/haky/users/temi/software/conda_envs/renviron/lib/R/library')
 
-sed '/linux/d; /mutex/d; /gcc/d; /fortran/d; /pixman/d; /lib/d; /icu/d; /zlib/d; /bzip2/d; /lzma/d; /readline/d; /ncurses/d; /cairo/d; /fontconfig/d; /freetype/d; /glibc/d' -i 
+
+conda env export | grep -v "^prefix: " | grep -v "^name: " > /beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-environment.yaml
+sed '/linux/d; /mutex/d; /gcc/d; /fortran/d; /pixman/d; /lib/d; /icu/d; /zlib/d; /bzip2/d; /lzma/d; /readline/d; /ncurses/d; /cairo/d; /fontconfig/d; /freetype/d; /glibc/d' /beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-environment.yaml > /beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-environment.mac.yaml
 ```
 
 # Introduction 
