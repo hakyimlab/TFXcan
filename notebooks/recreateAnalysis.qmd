@@ -21,6 +21,8 @@ renv::hydrate(packages = c('glue'), project = '/beagle3/haky/users/temi/projects
              library = '/beagle3/haky/users/temi/software/conda_envs/renviron/lib/R/library')
 
 renv::snapshot(lockfile = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project/renv.lock', library = '/beagle3/haky/users/temi/software/conda_envs/renviron/lib/R/library')
+
+sed '/linux/d' 
 ```
 
 # Introduction 
