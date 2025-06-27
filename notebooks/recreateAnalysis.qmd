@@ -11,6 +11,18 @@ fig-dpi: 800
 This notebook is complete but changes may be made to the figures and tables.
 :::
 
+```{r}
+renv::init(project = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project')
+renv::status(project = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project')
+
+renv::install("glue", project = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project')
+
+renv::hydrate(packages = c('glue'), project = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project', 
+             library = '/beagle3/haky/users/temi/software/conda_envs/renviron/lib/R/library')
+
+renv::snapshot(lockfile = '/beagle3/haky/users/temi/projects/TFXcan/software/tfxcan-project/renv.lock', library = '/beagle3/haky/users/temi/software/conda_envs/renviron/lib/R/library')
+```
+
 # Introduction 
 
 A notebook for the figures used in the TFXcan paper. Many of these analysis were done in other notebooks and the results saved in the `data` folder. The aim of this notebook is to do a few analysis as possible and focus on the figures.
@@ -97,6 +109,10 @@ library(cowplot)
 library(gprofiler2)
 library(openxlsx)
 library(AnnotationHub)
+library(RColorBrewer)
+library(ComplexHeatmap)
+library(ggmanh)
+library(openxlsx)
 ```
 
 I use some of the functions in these gists;
@@ -2850,7 +2866,7 @@ I have decided to look at genes within 1 mb of the ARBS.
 
 ```{r}
 # getting genes using annotation hub
-library(AnnotationHub)
+
 ```
 
 ```{r}
@@ -3241,11 +3257,7 @@ ggsave(filename=file.path(output_directory, "suppl.figure4D.png"), locus_zoom_pl
 
 # FIGURE 6: Matrix factorization and Tenerife plots
 
-```{r, }
-library(RColorBrewer)
-library(ComplexHeatmap)
-library(patchwork)
-library(cowplot)
+
 ```
 
 ```{r}
@@ -4120,7 +4132,7 @@ ComplexHeatmap::Heatmap(cluster_ttests, col = colorRampPalette(c("white", "red")
 
 ## Assigning loci to programs and GWAS 
 ```{r}
-library(ggmanh)
+
 ```
 
 ```{r}
