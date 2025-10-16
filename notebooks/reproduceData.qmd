@@ -481,7 +481,7 @@ ex |> head(); wt |> head()
 dbDisconnect(mydb)
 ```
 
-# Predict CWAS scores using these models
+# Predict CWAS scores in Baca individuals using the CWAS models 
 
 Above, we prepared the CWAS models for AR. We can now predict CWAS scores using these models.
 
@@ -539,8 +539,8 @@ The steps here are involved.
 exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.sbatch'
 data_directory <- '/beagle3/haky/users/temi/data/1KG_AR_prostate' 
 individuals_list <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt' 
-enpact_weights <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/statistics/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz' 
-output_file <-' /beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
+enpact_weights <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz' 
+output_file <-'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/ENPACT_734.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
 files_pattern <- '_aggByCollect_AR_Prostate.csv'
 ```
 
@@ -555,8 +555,8 @@ cmd
 exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.sbatch'
 data_directory <- '/beagle3/haky/users/temi/data/baca_AR_prostate' 
 individuals_list <- '/project2/haky/temi/projects/enpact-predict-snakemake/metadata/cwas_individuals.txt' 
-enpact_weights <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/statistics/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz' 
-output_file <-' /beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.BACA.CWAS_ARBS.predictions.2025-04-28.rds.gz' 
+enpact_weights <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz' 
+output_file <-'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/ENPACT_734.BACA.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
 files_pattern <- '_aggByMeanCenter_AR_Prostate.csv'
 ```
 
@@ -879,4 +879,208 @@ glue::glue("sbatch {consensus_script} {datafile} {outputbasename} {normalization
 
 ```{r}
 knitr::knit_exit()
+```
+
+
+# Collect weights
+
+
+```{r}
+date_2025 <- '2025-04-24'
+directory_2025 <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/models'
+models_2025 <- list.files(directory_2025)
+metadata_2025 <- data.table(tf_tissue = models_2025, path = glue::glue("{directory_2025}/{models_2025}/{models_2025}_{date_2025}.logistic.rds")) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, delim = '_', names = c('tf', 'tissue'), cols_remove = FALSE)
+```
+
+```{r}
+date_2024 <- '2024-07-26'
+directory_2024 <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/models'
+models_2024 <- list.files(directory_2024)
+metadata_2024 <- data.table(tf_tissue = models_2024, path = glue::glue("{directory_2024}/{models_2024}/{models_2024}_{date_2024}.logistic.rds")) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, delim = '_', names = c('tf', 'tissue'), cols_remove = FALSE) %>%
+    dplyr::filter(!tf_tissue %in% metadata_2025$tf_tissue)
+```
+
+```{r}
+models_metadata <- dplyr::bind_rows(metadata_2025, metadata_2024) %>%
+    dplyr::rename(model = tf_tissue) %>%
+    dplyr::filter(file.size(path) != 0)
+```
+
+```{r}
+data.table::fwrite(models_metadata, '/beagle3/haky/users/temi/projects/TFXcan/files/enpact_models.metadata.tsv', sep = '\t', quote = F, col.names = TRUE, row.names = FALSE)
+```
+
+```{r}
+"sbatch /beagle3/haky/users/temi/projects/TFXcan/src/collect_enpact_weights.sbatch /beagle3/haky/users/temi/projects/TFXcan/files/enpact_models.metadata.tsv /beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept"
+```
+
+## Create hdf5 database
+
+
+```{r}
+library(rhdf5)
+```
+
+
+```{r}
+folder <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/aggregated_predictions/prostate_cancer_risk'
+individual_enformer_predictions <- list.files(folder, pattern = "*.aggByCollect_prostate_cancer_risk.csv.gz")
+```
+
+
+```{r}
+individuals <- gsub('_aggByCollect_prostate_cancer_risk.csv.gz', '', individual_enformer_predictions)
+individual_metadata <- data.table(individual = individuals, path = glue::glue("{folder}/{individual_enformer_predictions}"))
+
+individual_metadata %>%
+    data.table::fwrite('/beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.eur_1000G.metadata.tsv', sep = '\t', quote = F, col.names = TRUE, row.names = FALSE)
+```
+
+## Predict with Enpact weights
+--matrix {input.matrix} --weights {params.enpact_weights} --metadata {input.metadata} --split --output_basename {params.output_basename} --subset_of_loci {params.loci_subset}
+
+```{r}
+input_matrix <- "/beagle3/haky/users/temi/projects/TFXcan/files/prostate_cancer_risk.2024-09-30.processed.matrix.h5.gz"
+input_metadata <- "/beagle3/haky/users/temi/projects/TFXcan/files/prostate_cancer_risk.2024-09-30.processed.metadata.tsv"
+enpact_weights <- "/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz"
+output_basename <- "/scratch/beagle3/temi/enpact_scores/prostate_cancer_risk/prostate_cancer_risk/prostate_cancer_risk"
+
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/predict_enpact_scores.sbatch {input_matrix} {enpact_weights} {input_metadata} {output_basename}")
+```
+
+
+
+## Checks
+
+```{r}
+old_db <- readRDS("/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/enpactdb/prostate_cancer_risk.enpact_scores.array.rds.gz")
+dim(old_db)
+old_scores <- as.data.table(old_db[, , 'ATF2_Embryo'], keep.rownames = 'locus')
+old_scores[1:5, 1:5]
+```
+
+```{r}
+new_scores <- data.table::fread('/scratch/beagle3/temi/enpact_scores/prostate_cancer_risk/prostate_cancer_risk.ATF2_Embryo.enpact_scores.txt') %>%
+    dplyr::mutate(NAME = gsub('ATF2_Embryo_', '', NAME)) %>% dplyr::rename(locus = NAME)
+new_scores[1:5, 1:5]
+```
+
+
+```{r}
+dim(old_scores); dim(new_scores)
+```
+
+
+```{r}
+common_loci <- intersect(old_scores$locus, new_scores$locus)
+length(common_loci)
+```
+
+
+```{r}
+new_scores <- new_scores %>% dplyr::arrange(locus = match(locus, common_loci))
+new_scores[1:5, 1:5]
+```
+
+```{r}
+old_scores <- old_scores %>% dplyr::arrange(locus = match(locus, common_loci))
+old_scores[1:5, 1:5]
+```
+
+
+```{r}
+cor(old_scores$HG01771, new_scores$HG01771)
+```
+
+
+```{r}
+purrr::map(colnames(old_scores)[-1], function(each_name){
+    cor(old_scores[[each_name]], new_scores[[each_name]])
+}) %>% unlist() %>% hist()
+```
+
+
+```{r}
+wgts <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz")
+
+wgts %>% dplyr::select("ATF2_Embryo")
+```
+
+
+
+```{r}
+list.files('/scratch/beagle3/temi/enpact_scores/prostate_cancer_risk') %>%
+    gsub("prostate_cancer_risk.|.annotation.txt|.enpact_scores.txt", "", .) %>% unique() %>%
+    as.data.table() %>%
+    data.table:::fwrite("/beagle3/haky/users/temi/projects/TFXcan/files/enpact_models.linearize.list.tsv", col.names = F, row.names = F, quote = F, sep = '\t')
+```
+
+
+```{r}
+xenformer <- data.table::fread(base::subset(individual_metadata, individual == 'HG01771')$path) %>%
+    dplyr::arrange(id = match(id, common_loci))
+locs <- xenformer$id
+Xmat <- xenformer %>% dplyr::select(-id) %>% as.matrix()
+dim(Xmat)
+```
+
+
+```{r}
+wgts <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz")
+wgts %>% dplyr::select("AR_Prostate")
+```
+
+```{r}
+wgts <- wgts %>% dplyr::select(-feature)  %>% as.matrix()
+wgts_intercept <- wgts[1, , drop = F]
+wgts_features <- wgts[-1, , drop = F]
+dim(wgts_intercept); dim(wgts_features)
+```
+
+
+```{r}
+Ymat_noIntercept <- (Xmat %*% wgts_features)
+Ymat <- apply(Ymat_noIntercept, 1, function(each_row){
+    wgts_intercept + each_row
+}) %>% t()
+
+colnames(Ymat) <- colnames(wgts_features)
+
+dim(Ymat)
+```
+
+```{r}
+Ymat[1:5, 1:5]
+```
+
+```{r}
+dt1 <- data.table::fread("/scratch/midway3/temi/enpact_predictions/prostate_cancer_risk/HG01771.prostate_cancer_risk.aggByCollect.2024-09-30.csv.gz") %>%
+    dplyr::arrange(locus = match(locus, common_loci)) %>% dplyr::select("AR_Prostate")
+dt1[1:10, 1]
+```
+
+```{r}
+old_scores$HG01771[1:10]; new_scores$HG01771[1:10]
+```
+
+
+```{r}
+Ymat[1:10, 'AR_Prostate']
+```
+
+
+```{r}
+Ymat_noIntercept[1:10, 'AR_Prostate']
+```
+
+
+```{r}
+new_scores$HG01771[1:10] - old_scores$HG01771[1:10]
+```
+
+
+```{r}
+wgts_intercept[1:5]
 ```

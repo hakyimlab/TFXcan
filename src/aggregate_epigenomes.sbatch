@@ -1,14 +1,13 @@
 #!/bin/bash
-
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem-per-cpu=8G
 #SBATCH --job-name=aggregate_epigenomes
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/aggregate_epigenomes.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/aggregate_epigenomes.err
-#SBATCH --time=04:00:00	
+#SBATCH --output=/beagle3/haky/users/temi/projects/dgtex/logs/aggregate_epigenomes.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/dgtex/logs/aggregate_epigenomes.err
+#SBATCH --time=02:00:00	
 #SBATCH --partition=caslake
 
 # module load openmpi
