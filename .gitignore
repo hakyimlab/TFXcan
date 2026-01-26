@@ -16,6 +16,8 @@ experiments/*
 files/*
 results/*
 figures/*
+notebooks/recreateAnalysis_cache/*
+notebooks/recreateAnalysis_files/*
 
 # include
 !scripts/
