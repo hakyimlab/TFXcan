@@ -10,22 +10,22 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem-per-cpu=12G
-#SBATCH --job-name=tfxcan_pcr
+#SBATCH --job-name=tfxcan-association
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/tfxcan_pcr.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/tfxcan_pcr.err
-#SBATCH --time=24:00:00	
+#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/tfxcan-association.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/tfxcan-association.err
+#SBATCH --time=24:00:00
 #SBATCH --partition=caslake
 
 # module load openmpi
 # module load parallel
 
 date
-slurm_workdir=${SLURM_SUBMIT_DIR}
-SLURM_O_WORKDIR=${slurm_workdir}/run
-mkdir -p ${SLURM_O_WORKDIR}
-echo Working directory is $SLURM_O_WORKDIR
-cd $SLURM_O_WORKDIR
+# slurm_workdir=${SLURM_SUBMIT_DIR}
+# SLURM_O_WORKDIR=${slurm_workdir}/run
+# mkdir -p ${SLURM_O_WORKDIR}
+# echo Working directory is $SLURM_O_WORKDIR
+# cd $SLURM_O_WORKDIR
 
 echo Jobid: $SLURM_JOBID
 echo Running on host `hostname`

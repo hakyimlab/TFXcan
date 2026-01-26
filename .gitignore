@@ -2,41 +2,20 @@
 
 .DS_Store
 .gitattributes
-enformer_pipeline/*
-impact_pipeline/*
-explore_freedman/*
-log/*
-modeling_pipeline/*
-plots/*
-genotypes/*
-temp/*
-old_scripts/
 *__*__/*
-TFPred_pipeline/*
-baca_cwas/*
-enformer_test/*
-geuvadis_individuals/*
 **/predictions_folder/
-**/cmd_parsl.*
-prediXcan/*
-experiments/AR_prostate/*
-experiments/association/*
-experiments/association/metadata/*
-experiments/geuvadis_99/*
-experiments/compare_predictors/*
+experiments/*
+helpers/*
 logs/*
-scripts/predictDB_helpers/format_files/*
-experiments/compare_predictors/metadata/geuvadis_expression_promoters.txt
-experiments/association/metadata/geuvadis_expression_promoters.txt
-experiments/association/*
 data/*
 helpers/*
-experiments/prostate_cancer/*
 **/__pycache__/
 .*/
 software/tfxcan-project/*
 experiments/*
 files/*
+results/*
+figures/*
 
 # include
 !scripts/

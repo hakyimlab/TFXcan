@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=8G    
+#SBATCH --cpus-per-task=12
+#SBATCH --mem-per-cpu=12G    
 #SBATCH --job-name=calculate_enpact_scores
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/calculate_enpact_scores.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/calculate_enpact_scores.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/calculate_enpact_scores.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/calculate_enpact_scores.err
 #SBATCH --time=04:00:00	
-#SBATCH --partition=caslake
+#SBATCH --partition=bigmem
 
 date
 
@@ -20,13 +20,14 @@ individuals_list=${2}
 enpact_weights=${3}
 output_file=${4}
 files_pattern=${5}
+for_models=${6}
 
 start=`date +%s`
 
-Rscript /beagle3/haky/users/temi/projects/Enpact/src/calculateEnpactScores.R \
+Rscript /beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.R \
     --data_directory ${data_directory} --individuals_list ${individuals_list} \
     --enpact_weights ${enpact_weights} --output_file ${output_file} \
-    --files_pattern ${files_pattern}
+    --files_pattern ${files_pattern} --for_models ${for_models}
 
 
 end=`date +%s`
@@ -35,7 +36,7 @@ runtime=$((end-start))
    
 status=$?
 
-echo "Exit status of predicing binding with Enpact is: $status"
+echo "Exit status of predicting binding with Enpact is: $status"
 echo "Runtime is: $runtime seconds"
 
 # example usage  for 1kg individuals

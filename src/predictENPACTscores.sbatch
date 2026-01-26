@@ -9,10 +9,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --job-name=predict_baca_with_lenpact
+#SBATCH --job-name=predict_with_lenpact
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/predict_lenpact_scores.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/predict_lenpact_scores.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/predict_lenpact_scores.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/predict_lenpact_scores.err
 #SBATCH --time=01:00:00	
 #SBATCH --partition=caslake
 
@@ -36,14 +36,15 @@ txt_genotypes=${3}
 txt_samples=${4}
 exec_file=${5}
 output_folder=${6}
+output_basename=${7}
 mkdir -p ${output_folder}
 
 python ${exec_file} \
     --model_db_path ${model_db} \
     --text_genotypes ${txt_genotypes} \
     --text_sample_ids ${txt_samples} \
-    --prediction_output "${output_folder}/${db_name}/baca_lEnpact_predict.txt" \
-    --prediction_summary_output "${output_folder}/${db_name}/baca_lEnpact_summary.txt" \
+    --prediction_output "${output_folder}/${db_name}/${output_basename}_predict.txt" \
+    --prediction_summary_output "${output_folder}/${db_name}/${output_basename}_summary.txt" \
     --verbosity 9 \
     --model_db_snp_key varID \
     --throw

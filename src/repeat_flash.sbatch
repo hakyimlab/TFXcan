@@ -5,8 +5,8 @@
 #SBATCH --mem-per-cpu=12G    
 #SBATCH --job-name=consensusFlashier
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/consensusFlashier.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/consensusFlashier.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/consensusFlashier.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/consensusFlashier.err
 #SBATCH --time=24:00:00
 #SBATCH --partition=bigmem
 
@@ -23,6 +23,7 @@ priorF=${4}
 greedy_Kmax=${5}
 batch_list=${6}
 splits_directory=${7} #'/beagle3/haky/users/temi/projects/Enpact/data/tenerife/repeat_flash'
+merged_output_basename=${8}
 
 parallel -a ${batch_list} --jobs 20 --joblog /beagle3/haky/users/temi/projects/TFXcan/logs/consensusFlashier.log \
     Rscript /beagle3/haky/users/temi/projects/TFXcan/src/repeat_flash.R \
@@ -37,11 +38,11 @@ parallel -a ${batch_list} --jobs 20 --joblog /beagle3/haky/users/temi/projects/T
 status=$?
 
 if [ $status -eq 0 ]; then
-    echo "INFO - Compiling job"
+    echo "INFO - Compiling the flashier results..."
     Rscript /beagle3/haky/users/temi/projects/TFXcan/src/gather_repeats.R \
-        --output_basename ${output_basename} \
+        --output_basename ${merged_output_basename} \
         --batch_list ${batch_list} \
-        --output_file_basename ${output_basename}.repeat_flashier.rds.gz
+        --input_basename ${output_basename}
 fi
 
 status=$?

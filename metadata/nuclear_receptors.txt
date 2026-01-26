@@ -1,0 +1,50 @@
+Family	Common Name	Abbreviation	Gene Name	Ligand
+0B	Dosage-sensitive sex reversal-adrenal hypoplasia congenital critical region on the X chromosome, Gene 1	DAX1	NR0B1	Orphan
+0B	Short heterodimeric partner	SHP	NR0B2	Orphan
+1A	Thyroid hormone receptor-α	TRα	THRA	Thyroid hormones
+1A	Thyroid hormone receptor-β	TRβ	THRB	Thyroid hormones
+1B	Retinoic acid receptor-α	RARα	RARA	Retinoic acids
+1B	Retinoic acid receptor-β	RARβ	RARB	Retinoic acids
+1B	Retinoic acid receptor-γ	RARγ	RARG	Retinoic acids
+1C	Peroxisome proliferator-activated receptor-α	PPARα	PPARA	Fatty acids
+1C	Peroxisome proliferator-activated receptor-β	PPARβ	PPARD	Fatty acids
+1C	Peroxisome proliferator-activated receptor-γ	PPARγ	PPARG	Fatty acids
+1D	Reverse-Erb-α	REV-ERBα	NR1D1	Heme
+1D	Reverse-Erb-β	REV-ERBβ	NR1D2	Heme
+1F	Retinoic acid-related orphan-α	RORα	RORA	Sterols
+1F	Retinoic acid-related orphan-β	RORβ	RORB	Sterols
+1F	Retinoic acid-related orphan-γ	RORγ	RORC	Sterols
+1H	Farnesoid X receptor	FXRα	NR1H4	Bile Acids
+1H	Farnesoid X receptor-β	FXRβ	NR1H5P	Orphan
+1H	Liver X receptor-α	LXRα	NR1H3	Oxysterols
+1H	Liver X receptor-β	LXRβ	NR1H2	Oxysterols
+1I	Vitamin D receptor	VDR	VDR	1α,25-dihydroxyvitamin D3
+1I	Pregnane X receptor	PXR	NR1I2	Endobiotics and xenobiotics
+1I	Constitutive androstane receptor		NR1I3	Xenobiotics
+2A	Hepatocyte nuclear Factor-4-α	HNF4α	HNF4A	Fatty acids
+2A	Hepatocyte nuclear Factor-4-γ	HNF4γ	HNF4G	Fatty acids
+2B	Retinoid X receptor-α	RXRα	RXRA	9-Cis retinoic acid
+2B	Retinoid X receptor-β	RXRβ	RXRB	9-Cis retinoic acid
+2B	Retinoid X receptor-γ	RXRγ	RXRG	9-Cis retinoic acid
+2C	Testicular Receptor 2	TR2	NR2C1	Orphan
+2C	Testicular Receptor 4	TR4	NR2C2	Orphan
+2E	Tailless homolog orphan receptor	TLX	NR2E1	Orphan
+2E	Photoreceptor-cell-specific nuclear receptor	PNR	NR2E3	Orphan
+2F	Chicken ovalbumin upstream promoter-transcription factor α	COUP-TFα	NR2F1	Orphan
+2F	Chicken ovalbumin upstream promoter-transcription factor β	COUP-TFβ	NR2F2	Orphan
+2F	Chicken ovalbumin upstream promoter-transcription factor γ	COUP-TFγ	NR2F6	Orphan
+3A	Estrogen receptor-α	ERα	ESR1	Estrogens
+3A	Estrogen receptor-β	ERβ	ESR2	Estrogens
+3B	Estrogen-related receptor-α	ERRα	ESRRA	Orphan
+3B	Estrogen-related receptor-β	ERRβ	ESRRB	Orphan
+3B	Estrogen-related receptor-γ	ERRγ	ESRRG	Orphan
+3C	Androgen receptor	AR	AR	Androgens
+3C	Glucocorticoid receptor	GR	NR3C1	Glucocorticoids
+3C	Mineralocorticoid receptor	MR	NR3C2	Mineralocorticoids and glucocorticoids
+3C	Progesterone receptor	PR	PGR	Progesterone
+4A	Nerve growth Factor 1B	NGF1-B	NR4A1	Orphan
+4A	Nurr-related Factor 1	NURR1	NR4A2	Unsaturated fatty acids
+4A	Neuron-derived orphan Receptor 1	NOR-1	NR4A3	Orphan
+5A	Steroidogenic Factor 1	SF-1	NR5A1	Phospholipids
+5A	Liver receptor Homolog-1	LRH-1	NR5A2	Phospholipids
+6A	Germ cell nuclear factor	GCNF	NR6A1	Orphan

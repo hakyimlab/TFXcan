@@ -53,11 +53,11 @@ print(glue('INFO - Saving the model to `{opt$model_rds_file}`'))
 saveRDS(cv_model, file=opt$model_rds_file)
 doParallel::stopImplicitCluster()
 
-weights <- stats::coef(cv_model, s = 'lambda.1se')[-1]
+weights <- stats::coef(cv_model, s = 'lambda.1se')
 weights <- weights %>% as.data.frame()
 colnames(weights) <- opt$metadata  
 weights <- weights %>% 
-    dplyr::mutate(feature = paste0('f_', seq_len(nrow(.)))) %>% 
+    dplyr::mutate(feature = c('intercept', paste0('f_', seq_len(nrow(.))))) %>% 
     dplyr::relocate(feature)
 
 print(glue('INFO - Saving the weights'))

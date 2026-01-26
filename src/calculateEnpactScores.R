@@ -6,8 +6,8 @@
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--data_directory", help='A transcription factor e.g. AR'),
-    make_option("--individuals_list", help='An output file'),
+    make_option("--data_directory", help="The folder with the epigenome data"),
+    make_option("--individuals_list", help='The list of individuals for which you want to predict'),
     make_option("--enpact_weights"),
     make_option("--output_file"),
     make_option("--files_pattern"),
@@ -21,20 +21,23 @@ library(data.table)
 library(tidyverse)
 library(glmnet)
 library(glue)
+library(abind)
 
 print(opt)
 
+# sbatch /beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores.sbatch /beagle3/haky/users/temi/data/1KG_AR_prostate /beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt /beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz /beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/ENPACT_734.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz _aggByCollect_AR_Prostate.csv AR_Prostate
+
 # # setwd("/beagle3/haky/users/temi/projects/TFXcan-snakemake/")
 # opt <- list()
-# opt$enpact_weights <- "/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2025-04-24/statistics/ENPACT_734_2025-04-24.compiled_weights.lambda.1se.txt.gz"
-# opt$data_directory <- "/beagle3/haky/users/temi/data/baca_AR_prostate"
-# opt$individuals_list <- '/project2/haky/temi/projects/enpact-predict-snakemake/metadata/cwas_individuals.txt'
-# opt$output_file <- '/beagle3/haky/users/temi/projects/Enpact/misc/reruns/enpact_predictions/ENPACT_48.BACA.predictions.2025-04-28.rds.gz'
-# opt$files_pattern <- '_aggByMeanCenter_AR_Prostate.csv'
+# opt$enpact_weights <- "/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz"
+# opt$data_directory <- "/beagle3/haky/users/temi/data/1KG_AR_prostate"
+# opt$individuals_list <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt'
+# opt$files_pattern <- '_aggByCollect_AR_Prostate.csv'
+# opt$for_models <- 'AR_Prostate'
 
-# opt$data_directory <- "/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/aggregated_predictions/prostate_cancer_risk"
-# opt$individuals <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt'
-# opt$output_file <- '/beagle3/haky/users/temi/projects/Enpact/misc/reruns/enpact_predictions/ENPACT_48.predictions.2025-04-24.rds.gz'
+
+
+
 
 dt_individuals <- data.table::fread(opt$individuals_list, header = FALSE)
 individual_enpact_features <- glue::glue("{opt$data_directory}/{dt_individuals$V1}{opt$files_pattern}") |> as.vector()
@@ -65,12 +68,15 @@ if(is.null(opt$for_models)){
     print(glue::glue("INFO - predicting for all models supplied in the weights file"))
     weights <- data.table::fread(opt$enpact_weights) %>% 
         dplyr::select(-feature) %>% as.matrix()
+    weights_intercepts <- weights[1, , drop = F]
+    weights_features <- weights[-1, , drop = F]
 } else {
      # weights 
     print(glue::glue("INFO - predicting only for {opt$for_models} models"))
     weights <- data.table::fread(opt$enpact_weights) %>% 
         dplyr::select(-feature) %>% as.matrix()
-    weights <- weights[, opt$for_models, drop = FALSE]
+    weights_intercepts <- weights[1, opt$for_models, drop = F]
+    weights_features <- weights[-1, opt$for_models, drop = F]
 }
 
 
@@ -78,17 +84,25 @@ Y_hats <- purrr:::map(.x=individual_enpact_features, .f = function(each_file){
     dt <- data.table::fread(each_file)
     X <- as.matrix(dt[, -c(1)])
 
-    stopifnot(dim(X)[2] == dim(weights)[1])
+    stopifnot(dim(X)[2] == dim(weights_features)[1])
 
     # prediction
-    y_hat <- X %*% weights[, , drop = FALSE]
-    rownames(y_hat) <- dt$id
+    y_hat_noIntercept <- X %*% weights_features[, , drop = FALSE]
+    y_hat <- apply(y_hat_noIntercept, 1, function(each_row){
+        weights_intercepts + each_row
+    }) %>% t()
 
+    if(!is.null(opt$for_models)){
+        y_hat <- t(y_hat)
+    }
+
+    colnames(y_hat) <- colnames(weights_features)
+    rownames(y_hat) <- dt$id
     return(y_hat)
 
 }, .progress = TRUE)
 
-library(abind)
+
 
 # collect the names of the locus and individuals
 loci <- purrr::map(.x=Y_hats, .f=rownames) %>%

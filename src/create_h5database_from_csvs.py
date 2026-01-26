@@ -15,7 +15,9 @@ parser.add_argument("--output_basename", help="", type=str)
 args = parser.parse_args()
 
 # read in the metadata
-dt_metadata = pd.read_table('/beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.eur_1000G.metadata.tsv')
+dt_metadata = pd.read_table(args.metadata)
+
+print(dt_metadata.shape)
 
 dt_temp = pd.read_csv(dt_metadata.path[0])
 dt_temp.insert(loc=0, column='individual', value=dt_metadata.individual[0])
@@ -40,9 +42,9 @@ meta = eur_1kg_predictions[['locus', 'individual']]
 assert xmatrix.shape[0] == meta.shape[0]
 
 # write out the metadata
-bname = 'prostate_cancer_risk.2024-09-30.processed'
-metadata_file = os.path.join('/beagle3/haky/users/temi/projects/TFXcan/files', f'{bname}.metadata.tsv')
-matrix_file = os.path.join('/beagle3/haky/users/temi/projects/TFXcan/files', f'{bname}.matrix.h5.gz')
+#bname = 'prostate_cancer_risk.2024-09-30.processed'
+metadata_file = os.path.join(f'{args.output_basename}.metadata.tsv')
+matrix_file = os.path.join(f'{args.output_basename}.matrix.h5.gz')
 meta.to_csv(metadata_file, sep = '\t', index = False)
 xmatrix.to_hdf(matrix_file, key = 'matrix', mode='w', complevel=9)
 

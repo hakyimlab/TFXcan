@@ -5,8 +5,8 @@
 #SBATCH --mem-per-cpu=4G    
 #SBATCH --job-name=liftover
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/liftover.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/liftover.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/liftover.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/liftover.err
 #SBATCH --time=00:30:00	
 #SBATCH --partition=caslake
 

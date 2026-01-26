@@ -528,6 +528,9 @@ data.table::fwrite(cwas_mat, file=glue('{project_dir}/files/baca_cwas_scores.hg3
 ```
 
 # Predict Enpact scores using the DL-based Enpact model
+
+Here, I just need the AR_Prostate model tbf
+
 The steps here are involved. 
 
 1. Get epigenomic features for all Baca individuals with Enformer. In this paper, we used [this pipeline]().
@@ -540,12 +543,13 @@ exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores
 data_directory <- '/beagle3/haky/users/temi/data/1KG_AR_prostate' 
 individuals_list <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/metadata/EUR_individuals.1KG.txt' 
 enpact_weights <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz' 
-output_file <-'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/ENPACT_734.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
+output_file <-'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/AR_Prostate.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
 files_pattern <- '_aggByCollect_AR_Prostate.csv'
+md <- 'AR_Prostate'
 ```
 
 ```{r}
-cmd <- glue('sbatch {exec_file} {data_directory} {individuals_list} {enpact_weights} {output_file} {files_pattern}')
+cmd <- glue('sbatch {exec_file} {data_directory} {individuals_list} {enpact_weights} {output_file} {files_pattern} {md}')
 cmd
 ```
 
@@ -556,12 +560,13 @@ exec_file <- '/beagle3/haky/users/temi/projects/TFXcan/src/calculateEnpactScores
 data_directory <- '/beagle3/haky/users/temi/data/baca_AR_prostate' 
 individuals_list <- '/project2/haky/temi/projects/enpact-predict-snakemake/metadata/cwas_individuals.txt' 
 enpact_weights <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz' 
-output_file <-'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/ENPACT_734.BACA.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
+output_file <- '/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/AR_Prostate.BACA.CWAS_ARBS.predictions.2025-10-16.rds.gz' 
 files_pattern <- '_aggByMeanCenter_AR_Prostate.csv'
+md <- 'AR_Prostate'
 ```
 
 ```{r}
-cmd <- glue('sbatch {exec_file} {data_directory} {individuals_list} {enpact_weights} {output_file} {files_pattern}')
+cmd <- glue('sbatch {exec_file} {data_directory} {individuals_list} {enpact_weights} {output_file} {files_pattern} {md}')
 cmd
 ```
 
@@ -573,37 +578,27 @@ cmd
 2. With the DL-based Enpact model, predict the Enpact scores using [this pipeline](https://github.com/hakyimlab/enpact-predict-snakemake)
 3. Prepare the matrix and data for the SNP-based Enpact model such that they are compatible with predictDB format
 
-#### Format 1KG predictions
+## Format 1KG predictions
 ```{r}
+output_directory <- '/scratch/beagle3/temi/enpact_scores/cwas_arbs_1000G'
 model <- 'AR_Prostate'
-exec_file <- file.path(project_dir, "src", 'formatForPredictDB.R')
-enpact_scores <- file.path(data_dir, "lenpact", glue("1KG_logistic.{model}.enpact_scores.txt"))
-enpact_annot <- file.path(data_dir, "lenpact", glue("1KG_logistic.{model}.enpact_annot.txt"))
-rds_file <- '/beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz'
+exec_file <- '/beagle3/haky/users/temi/projects/Enpact/src/formatForPredictDB.R' #file.path(project_dir, "src", 'formatForPredictDB.R')
+enpact_scores <- file.path(output_directory, glue("1KG.{model}.enpact_scores.txt"))
+enpact_annot <- file.path(output_directory, glue("1KG.{model}.enpact_annot.txt"))
+
+# enpact_scores <- file.path(output_directory, "lenpact", glue("1KG_logistic.{model}.enpact_scores.txt"))
+# enpact_annot <- file.path(output_directory, "lenpact", glue("1KG_logistic.{model}.enpact_annot.txt"))
+rds_file <- '/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/AR_Prostate.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz'
+
+#'/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/AR_Prostate.1KG.CWAS_ARBS.predictions.2025-10-16.rds.gz'
+
+
+#'/beagle3/haky/users/temi/projects/TFXcan/misc/reruns/enpact_predictions/ENPACT_48.1KG.CWAS_ARBS.predictions.2025-04-28.rds.gz'
 
 #endregion"/project2/haky/temi/projects/enpact-predict-snakemake/output/1KG_linear_2025-02-11/1KG_linear_2025-02-11.enpact_scores.array.rds.gz"
 # if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
 ```
 
-```{r}
-# if needed, you should edit the sbatch file: {project_dir}/src/predictCWASscores.sbatch
-cmd <- glue('sbatch {project_dir}/src/formatForPredictDB.sbatch {exec_file} {rds_file} {enpact_scores} {enpact_annot} {model}')
-cmd
-```
-
-```{r}
-system(cmd) ; system('squeue -u temi')
-```
-
-#### Format Baca predictions
-```{r}
-model <- 'AR_Prostate'
-exec_file <- file.path(project_dir, "src", 'formatForPredictDB.R')
-enpact_scores <- file.path(data_dir, "lenpact", glue("Baca.{model}.enpact_scores.txt"))
-enpact_annot <- file.path(data_dir, "lenpact", glue("Baca.{model}.enpact_annot.txt"))
-rds_file <- "/project2/haky/temi/projects/enpact-predict-snakemake/output/baca_2024-11-15/baca_2024-11-15.enpact_scores.array.rds.gz"
-# if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
-```
 
 ```{r}
 # if needed, you should edit the sbatch file: {project_dir}/src/predictCWASscores.sbatch
@@ -615,13 +610,14 @@ cmd
 system(cmd) ; system('squeue -u temi')
 ```
 
-4. Train the SNP-based Enpact model
+
+## Train the SNP-based Enpact model
 
 ```{r}
-phenotype <- 'AR_Prostate.logistic'
-outputpath <- "/beagle3/haky/users/temi/projects/TFXcan/models/lenpact/AR_Prostate.2025-04-28"
-annotfile <- enpact_annot #file.path(data_dir, "lenpact", "1KG.enpact_annot.txt")
-enpactfile <- enpact_scores #file.path(data_dir, "lenpact", "1KG.enpact_scores.txt")
+phenotype <- 'AR_Prostate.EUR.CWAS_ARBS'
+outputpath <- "/scratch/beagle3/temi/lEnpact/AR_Prostate.2025-10-23"
+annotfile <- file.path(output_directory, glue("1KG.{model}.enpact_annot.txt")) #file.path(data_dir, "lenpact", "1KG.enpact_annot.txt")
+enpactfile <- file.path(output_directory, glue("1KG.{model}.enpact_scores.txt")) #file.path(data_dir, "lenpact", "1KG.enpact_scores.txt")
 geno_dir <- "/project2/haky/Data/1000G/population_data/EUR/annot_files"
 conda_env <- "/beagle3/haky/users/temi/software/conda_envs/predictdb-env"
 nextflow_command <- "/beagle3/haky/users/temi/projects/TFXcan-snakemake/workflow/PredictDb-nextflow/main.nf"
@@ -643,25 +639,52 @@ gzip -dk predict_db_AR_Prostate_filtered.txt.gz
 sed -e 's/:/_/g' predict_db_AR_Prostate_filtered.txt > predict_db_AR_Prostate_filtered.formatted.txt
 
 # or
-unpigz -ck predict_db_AR_Prostate.logistic_filtered.txt.gz | sed -e 's/:/_/g' | pigz > predict_db_AR_Prostate.logistic_filtered.formatted.txt.gz
+#unpigz -ck predict_db_AR_Prostate.logistic_filtered.txt.gz | sed -e 's/:/_/g' | pigz > predict_db_AR_Prostate.logistic_filtered.formatted.txt.gz
+
+unpigz -ck predict_db_AR_Prostate.EUR.CWAS_ARBS_filtered.txt.gz | sed -e 's/:/_/g' | pigz > predict_db_AR_Prostate.EUR.CWAS_ARBS_filtered.formatted.txt.gz
 ```
 
 
 # Predict Enpact scores on Baca individuals using the SNP-based Enpact model
+## Format Baca predictions
+```{r}
+output_directory <- '/scratch/beagle3/temi/enpact_scores/cwas_arbs_baca'
+model <- 'AR_Prostate'
+exec_file <- '/beagle3/haky/users/temi/projects/Enpact/src/formatForPredictDB.R'
+enpact_scores <- file.path(output_directory, glue("Baca.{model}.enpact_scores.txt"))
+enpact_annot <- file.path(output_directory, glue("Baca.{model}.enpact_annot.txt"))
+rds_file <- '/beagle3/haky/users/temi/projects/TFXcan/data/enpact_scores/AR_Prostate.BACA.CWAS_ARBS.predictions.2025-10-16.rds.gz'
+
+#"/project2/haky/temi/projects/enpact-predict-snakemake/output/baca_2024-11-15/baca_2024-11-15.enpact_scores.array.rds.gz"
+# if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
+```
 
 ```{r}
-db_name <- 'AR_Prostate.logistic'
-model_db <- '/beagle3/haky/users/temi/projects/TFXcan/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db'
+# if needed, you should edit the sbatch file: {project_dir}/src/predictCWASscores.sbatch
+cmd <- glue('sbatch {project_dir}/src/formatForPredictDB.sbatch {exec_file} {rds_file} {enpact_scores} {enpact_annot} {model}')
+cmd
+```
+
+```{r}
+system(cmd) ; system('squeue -u temi')
+```
+
+## Predict on Baca individuals
+```{r}
+db_name <- 'AR_Prostate.EUR.CWAS_ARBS'
+model_db <- '/scratch/beagle3/temi/lEnpact/AR_Prostate.2025-10-23/AR_Prostate.EUR.CWAS_ARBS/models/filtered_db/predict_db_AR_Prostate.EUR.CWAS_ARBS_filtered.db'
+# '/beagle3/haky/users/temi/projects/TFXcan/models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db'
 txt_genotypes <- '/project2/haky/Data/baca_cwas/vcfs/hg38/formatted_geno/all_chrs.text_dosages.txt.gz'
 txt_samples <- '/project2/haky/Data/baca_cwas/vcfs/hg38/formatted_geno/samples.text_dosages.txt'
 exec_file <- '/beagle3/haky/users/temi/software/MetaXcan/software/Predict.py'
-output_folder <- "/beagle3/haky/users/temi/projects/TFXcan/data/baca_lenpact/output"
+output_folder <- "/beagle3/haky/users/temi/projects/TFXcan/data/lenpact_scores" #"/beagle3/haky/users/temi/projects/TFXcan/data/baca_lenpact/output"
+output_basename <- "baca"
 if(!dir.exists(output_folder)){dir.create(output_folder, recursive = T)}
 ```
 
 ```{r}
 # if needed, you should edit the sbatch file: {project_dir}/src/predictCWASscores.sbatch
-cmd <- glue('sbatch {project_dir}/src/predictENPACTscores.sbatch {db_name} {model_db} {txt_genotypes} {txt_samples} {exec_file} {output_folder}')
+cmd <- glue('sbatch {project_dir}/src/predictENPACTscores.sbatch {db_name} {model_db} {txt_genotypes} {txt_samples} {exec_file} {output_folder} {output_basename}')
 cmd
 ```
 
@@ -718,13 +741,16 @@ pcgss %>% split(.$chrom) %>% imap(~data.table::fwrite(.x, glue('{output_folder}/
 -- Now, you can run TFXcan on the prostate cancer data
 
 ```{r}
-db_name <- 'AR_Prostate.logistic'
-model_db <- file.path(project_dir, 'models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db')
-covariances <- file.path(project_dir, 'models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.formatted.txt.gz')
-gwas_folder <- file.path(project_dir, 'data/sumstats')
+db_name <- 'AR_Prostate.EUR.CWAS_ARBS'
+model_db <- "/scratch/beagle3/temi/lEnpact/AR_Prostate.2025-10-23/AR_Prostate.EUR.CWAS_ARBS/models/filtered_db/predict_db_AR_Prostate.EUR.CWAS_ARBS_filtered.db"
+
+#file.path(project_dir, 'models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.db')
+covariances <- "/scratch/beagle3/temi/lEnpact/AR_Prostate.2025-10-23/AR_Prostate.EUR.CWAS_ARBS/models/filtered_db/predict_db_AR_Prostate.EUR.CWAS_ARBS_filtered.formatted.txt.gz"
+#file.path(project_dir, 'models/lenpact/AR_Prostate.2025-04-28/AR_Prostate.logistic/models/filtered_db/predict_db_AR_Prostate.logistic_filtered.formatted.txt.gz')
+gwas_folder <- "/beagle3/haky/users/temi/projects/Enpact/data/sumstats" #file.path(project_dir, 'data/sumstats')
 gwas_file_pattern <- ".*_Schumacher.gwas_ss.txt.gz"
 exec_file <- '/beagle3/haky/users/temi/software/MetaXcan/software/SPrediXcan.py'
-output_file <- file.path(project_dir, 'data', 'tfxcan', 'AR_Prostate.logistic.TFXcan.prostate_cancer_risk.csv')
+output_file <- file.path(project_dir, 'data', 'tfxcan', 'AR_Prostate.EUR.CWAS_ARBS.TFXcan.prostate_cancer_risk.csv')
 if(!dir.exists(dirname(output_file))){dir.create(dirname(output_file), recursive = T)}
 ```
 
@@ -760,10 +786,12 @@ We want to remove some tissues
 # these weird tissues should be removed 
 weird_tissues <- c("endometrioidadenocarcinoma", "HCT116", "HeLacontaminant", "Headandneck", "LNCaPcells", 'PeritonealEffusion')
 #performance_file <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_734_2024-07-26/statistics/ENPACT_734_2024-07-26.compiled_stats.txt'
-performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
+performance_file <- '/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.with_auprc.tsv'
+
+#'/beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_stats.txt'
 performance <- data.table::fread(performance_file) %>%
     dplyr::filter(type == 'test') %>%
-    dplyr::filter((!is.na(auc) & auc >= 0.7) & !context %in% weird_tissues)
+    dplyr::filter((!is.na(auroc) & auroc >= 0.7) & !context %in% weird_tissues)
 dim(performance)
 ```
 
@@ -772,16 +800,114 @@ You need the summary statistics
 ```{r}
 # GWAS information
 ss <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/collection/prostate_cancer_risk.filteredGWAS.topSNPs.txt.gz") %>%
-    dplyr::mutate(loci = paste('chr', chr, sep='') %>% paste(., pos, sep = ':'))
+    dplyr::mutate(loci = paste('chr', chr, sep='') %>% paste(., pos, sep = ':')) 
+    
+    # %>%
+    # dplyr::mutate(locus = paste('chr', chr, sep = '') %>% paste(., pos, pos + 1, sep='_'))
 ```
 
 You need the TFXcan results
 ```{r}
-dt <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-04-25.complete.spredixcan.txt") %>%
+dt <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-10-21.complete.spredixcan.tsv") %>%
     dplyr::filter(!is.na(pvalue), !is.na(zscore)) %>%
+    tidyr::separate_wider_delim(tfbs, delim = "_", names = c("tf", 'tissue', 'chrom', 'start', 'end')) %>%
+    dplyr::mutate(locus = paste(chrom, start, end, sep = "_"), tf_tissue = paste(tf, tissue, sep = "_")) %>%
     dplyr::filter(tf_tissue %in% performance$model) %>%
     dplyr::select(locus, tf, tissue, tf_tissue, chrom, start, end, zscore, pvalue) %>%
-    dplyr::filter(!grepl("HCT116|HeLacontaminant|PeritonealEffusion|LNCaPcells|endometrioidadenocarcinoma|Headandneck", tissue))
+    dplyr::filter(!grepl("HCT116|HeLacontaminant|PeritonealEffusion|LNCaPcells|endometrioidadenocarcinoma|Headandneck", tissue)) %>%
+    dplyr::mutate(snp = paste(chrom, start, sep = ':'))
+```
+
+```{r}
+process_tfxcan_results <- function(summary_results, gwas_summary_stats, combine_at, retain_at, aggregate_on = c('tf', 'tissue', 'tf_tissue'), how = 'weights'){
+    # analysis_factor <- switch(analysis_level, 
+    #     'tf' = 'tf', 
+    #     'tissue' = 'tissue', 
+    #     'tf_tissue' = 'tf_tissue'
+    # )
+    aggregate_on <- switch(aggregate_on, 
+        'tf' = 'tf', 
+        'tissue' = 'tissue', 
+        'tf_tissue' = 'tf_tissue'
+    )
+
+    # process the sumstats to make it easier to work with
+    res_sumstats <- gwas_summary_stats %>%
+        dplyr::rename(locus = loci, zscore = zscore, pvalue = pval) %>%
+        dplyr::filter(nchar(a0) == 1) %>%
+        dplyr::mutate(bind_level = 'GWAS') %>%
+        dplyr::select(locus, bind_level, zscore, pvalue) %>% 
+        dplyr::filter(locus %in% summary_results$snp)
+
+    print(head(res_sumstats))
+
+    if(aggregate_on %in% c('tf', 'tissue')){
+
+        dt_gwas <- res_sumstats %>% 
+            dplyr::select(locus, bind_level, zscore, pvalue)
+        dt_tfxcan <- summary_results %>% 
+            dplyr::select(locus, all_of(c(combine_at, aggregate_on)), zscore, pvalue) 
+        mtx <- dt_tfxcan %>%
+            tidyr::separate(locus, c('chrom', 'start'), sep = ':', remove = FALSE) %>%
+            dplyr::mutate(start = as.numeric(start), end = as.numeric(start + 1)) 
+            
+        if(how == 'weights'){
+            mtx <- mtx %>%
+                dplyr::group_split(!!rlang::sym(retain_at), chrom, start, end) %>%
+                purrr::map_dfr(merge_zscores, level = retain_at, how = 'weights') %>%
+                do.call(cbind, .) %>% as.data.table() %>% 
+                dplyr::mutate(locus = paste0(chrom, ":", start), zscore = as.numeric(zscore)) %>% 
+                dplyr::arrange(desc(zscore)) %>%
+                dplyr::select(locus, all_of(c('level', 'zscore'))) %>%
+                dplyr::rename(bind_level = 'level') 
+        } else if (how == 'acat'){
+            # sum and convert to zscores
+            # dplyr::group_by(!!rlang::sym(retain_at))
+            mtx <- mtx %>%
+                dplyr::group_by(!!rlang::sym(aggregate_on), chrom, start, end) %>%
+                dplyr::summarize(nv = acat(pvalue) + 2.2e-16) %>%
+                dplyr::mutate(locus = paste0(chrom, ":", start), zscore = qnorm(nv, lower.tail = FALSE)) %>%
+                dplyr::ungroup() %>%
+                dplyr::group_by(!!rlang::sym(aggregate_on)) %>% 
+                dplyr::arrange(desc(zscore)) %>%
+                dplyr::select(locus, all_of(c(aggregate_on, 'zscore'))) %>%
+                dplyr::rename(bind_level = aggregate_on)
+            
+        } 
+    } else if (aggregate_on %in% c('tf_tissue')) {
+        # gg <- res_sumstats %>% 
+        #     dplyr::select(locus, bind_level, zscore, pvalue)
+        mtx <- summary_results %>% 
+            dplyr::select(locus = snp, bind_level = !!rlang::sym(aggregate_on), zscore, pvalue) 
+        dt_gwas <- res_sumstats %>% 
+            dplyr::select(locus, bind_level, zscore, pvalue)
+
+        # mtx <- dplyr::bind_rows(gg, xx)
+    }
+
+    print(head(mtx))
+    print("===")
+    print(head(dt_gwas))
+
+    mat_tfxcan <- dplyr::bind_rows(mtx, dt_gwas) %>%
+        dplyr::select(locus, bind_level, zscore) %>%
+        tidyr::pivot_wider(id_cols = 'locus', values_from = zscore, names_from = bind_level) %>% 
+        tibble::column_to_rownames('locus') %>%
+        as.matrix() %>%
+        t()
+    print(mat_tfxcan[1:3, 1:3])
+    #mat_tfxcan <- mat_tfxcan[complete.cases(mat_tfxcan), ]
+    return(mat_tfxcan)
+}
+```
+
+```{r}
+# ss %>%
+#         dplyr::rename(locus = loci, zscore = zscore, pvalue = pval) %>%
+#         dplyr::filter(nchar(a0) == 1) %>%
+#         dplyr::mutate(bind_level = 'GWAS') %>%
+#         dplyr::select(locus, bind_level, zscore, pvalue) %>% head()
+#         dplyr::filter(locus %in% summary_results$locus) %>% head()
 ```
 
 ```{r}
@@ -801,7 +927,12 @@ dim(zratio_matdev); zratio_matdev[1:5, 1:5]
 ```
 
 ```{r}
+saveRDS(data_list, '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zscores.matrices.rds')
 saveRDS(zratio_matdev, '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan.zratios.matrix.rds')
+```
+
+```{r}
+sum(complete.cases(zratio_matdev))
 ```
 
 ### Step 2: Split the z-ratio matrix into random subsets
@@ -812,6 +943,7 @@ X <- readRDS('/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/PrCa.tfxcan
 ```{r}
 # subsets directory
 consensus_subsets_dir <- file.path(project_dir, 'data', 'tenerife', 'repeat_flash', 'prca_risk')
+dir.create(consensus_subsets_dir, recursive = TRUE)
 ```
 
 ```{r}
@@ -852,24 +984,27 @@ write(names(batches_loci), file = glue::glue('{consensus_subsets_dir}/prca_risk.
 ```{r}
 script <- file.path(project_dir, 'src/repeat_flash.sbatch')
 datafile <- file.path(project_dir, 'data/tenerife/PrCa.tfxcan.zratios.matrix.rds')
-output_basename <- file.path(consensus_subsets_dir, 'prca_risk') # not a directory but a prefix for the output files
+output_basename <- file.path('/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/flash_results', 'prca_risk') # not a directory but a prefix for the output files
 priorL <- 'ebnm_point_exponential'
 priorF <- 'ebnm_point_exponential'
 greedy_Kmax <- 40L
 batch_list <- glue::glue('{consensus_subsets_dir}/prca_risk.random_subsets.txt')
 splits_directory <- consensus_subsets_dir
+merged_output_basename <- '/beagle3/haky/users/temi/projects/TFXcan/data/tenerife/prca_risk'
 ```
 
 ```{r}
-glue::glue("sbatch {script} {datafile} {output_basename} {priorL} {priorF} {greedy_Kmax} {batch_list} {splits_directory}")
+glue::glue("sbatch {script} {datafile} {output_basename} {priorL} {priorF} {greedy_Kmax} {batch_list} {splits_directory} {merged_output_basename}")
 ```
 
 ### Step 4: Run consensus factor analysis on the outputs
 
 ```{r}
 consensus_script <- file.path(project_dir, 'src/cluster_programs.sbatch')
-datafile <- file.path(splits_directory, 'prca_risk.retrain_repeats.ebnm_point_exponential-ebnm_point_exponential.1000Iters.rds.gz')
-outputbasename <- file.path(project_dir, 'data/consensus/prca_risk')
+datafile <- glue::glue("{merged_output_basename}.ebnm_point_exponential-ebnm_point_exponential.1000Iters.rds.gz")
+
+#file.path(splits_directory, 'prca_risk.retrain_repeats.ebnm_point_exponential-ebnm_point_exponential.1000Iters.rds.gz')
+outputbasename <- file.path(project_dir, 'data/tenerife/consensus/prca_risk')
 normalization <- 'L2'
 ```
 
@@ -882,8 +1017,71 @@ knitr::knit_exit()
 ```
 
 
-# Collect weights
 
+# You can also run some codes individually
+
+## develop snp-predictors
+
+For this one, I have a snakemake pipeline ready to go. 
+
+## run summary TFXcan
+
+```{r}
+mms <- list.files("/scratch/beagle3/temi/lEnpact/enpact_models_linearization_2025-10-16")
+mms_models <- glue::glue("/scratch/beagle3/temi/lEnpact/enpact_models_linearization_2025-10-16/{mms}/models/filtered_db/predict_db_{mms}_filtered.db")
+mms_cov <- glue::glue("/scratch/beagle3/temi/lEnpact/enpact_models_linearization_2025-10-16/{mms}/models/filtered_db/Covariances.varID.txt.gz")
+```
+
+```{r}
+mms_metadata <- data.table(tf_tissue = mms, model = mms_models, covariances = mms_cov)
+
+mms_metadata %>% data.table::fwrite("/beagle3/haky/users/temi/projects/TFXcan/files/enpact_linearized_models.tsv", sep = '\t', quote = F, row.names = F, col.names = T)
+```
+
+```{r}
+phenotype = "prostate_cancer_risk"
+models_list = "/beagle3/haky/users/temi/projects/TFXcan/files/enpact_linearized_models.tsv"
+output_directory = '/scratch/beagle3/temi/summary_tfxcan/prostate_cancer_risk'
+gwas_folder = "/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/processed_sumstats/prostate_cancer_risk"
+gwas_pattern = '.*.sumstats.txt.gz'
+exec_file = "/beagle3/haky/users/temi/software/MetaXcan/software/SPrediXcan.py"
+conda_environment = "/beagle3/haky/users/temi/software/conda_envs/imlabtools"
+
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/run_summary_tfxcan.sbatch {phenotype} {models_list} {output_directory} {gwas_folder} {gwas_pattern} {exec_file} {conda_environment}")
+```
+
+```{r}
+# # I have to re-run mammary gland
+# mms_metadata %>% dplyr::filter(tf_tissue == 'AR_MammaryGland') %>% data.table::fwrite("/beagle3/haky/users/temi/projects/TFXcan/files/enpact_linearized_models.AR_MammaryGland.tsv", sep = '\t', quote = F, row.names = F, col.names = T)
+```
+
+```{r}
+# phenotype = "prostate_cancer_risk"
+# models_list = "/beagle3/haky/users/temi/projects/TFXcan/files/enpact_linearized_models.AR_MammaryGland.tsv"
+# output_directory = '/scratch/beagle3/temi/summary_tfxcan/prostate_cancer_risk'
+# gwas_folder = "/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/processed_sumstats/prostate_cancer_risk"
+# gwas_pattern = '.*.sumstats.txt.gz'
+# exec_file = "/beagle3/haky/users/temi/software/MetaXcan/software/SPrediXcan.py"
+# conda_environment = "/beagle3/haky/users/temi/software/conda_envs/imlabtools"
+
+# glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/run_summary_tfxcan.sbatch {phenotype} {models_list} {output_directory} {gwas_folder} {gwas_pattern} {exec_file} {conda_environment}")
+```
+
+## collect all summary TFXcan into one
+
+```{r}
+fpattern <- glue::glue("/scratch/beagle3/temi/summary_tfxcan/prostate_cancer_risk/\\*.prostate_cancer_risk.summaryTFXcan.csv")
+output_file <- "/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-10-21.complete.spredixcan.tsv"
+phenotype <- "prostate_cancer_risk"
+
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/gather_sTFXcan.sbatch {fpattern} {phenotype} {output_file}")
+```
+
+
+
+
+
+# Collect weights
 
 ```{r}
 date_2025 <- '2025-04-24'
@@ -916,13 +1114,27 @@ data.table::fwrite(models_metadata, '/beagle3/haky/users/temi/projects/TFXcan/fi
 "sbatch /beagle3/haky/users/temi/projects/TFXcan/src/collect_enpact_weights.sbatch /beagle3/haky/users/temi/projects/TFXcan/files/enpact_models.metadata.tsv /beagle3/haky/users/temi/projects/Enpact/data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept"
 ```
 
-## Create hdf5 database
-
-
+### Are they the same, or at least, really well-correlated?
 ```{r}
-library(rhdf5)
+old_stfxcan <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/important/prostate_cancer_risk.enpactScores.2024-09-30.spredixcan.complete.txt") %>% dplyr::rename(tfbs = gene)
+# data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-04-25.complete.spredixcan.txt")
+new_stfxcan <- data.table::fread("/beagle3/haky/users/temi/projects/Enpact/misc/reruns/prca_tfxcan/prostate_cancer_risk.enpactScores.2025-10-21.complete.spredixcan.tsv")
+common_loci <- intersect(old_stfxcan$tfbs, new_stfxcan$tfbs)
+dt_old <- subset(old_stfxcan, tfbs %in% common_loci) %>% dplyr::filter(tfbs %in% common_loci) %>% dplyr::arrange(match(tfbs, common_loci))
+dt_new <- subset(new_stfxcan, tfbs %in% common_loci) %>% dplyr::filter(tfbs %in% common_loci) %>% dplyr::arrange(match(tfbs, common_loci))
 ```
 
+```{r}
+plot(dt_old$zscore, dt_new$zscore)
+```
+
+```{r}
+cor.test(dt_old$zscore, dt_new$zscore)
+```
+
+### Create hdf5 database
+
+#### For prca loci
 
 ```{r}
 folder <- '/beagle3/haky/users/temi/projects/TFXcan-snakemake/data/prostate_cancer_risk_2024-09-30/aggregated_predictions/prostate_cancer_risk'
@@ -936,6 +1148,46 @@ individual_metadata <- data.table(individual = individuals, path = glue::glue("{
 
 individual_metadata %>%
     data.table::fwrite('/beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.eur_1000G.metadata.tsv', sep = '\t', quote = F, col.names = TRUE, row.names = FALSE)
+```
+
+
+#### For Baca ARBS - 1000G predictions
+
+```{r}
+folder <- '/beagle3/haky/users/temi/data/1KG_AR_prostate'
+individual_enformer_predictions <- list.files(folder, pattern = "*_aggByCollect_AR_Prostate.csv")
+```
+
+```{r}
+individuals <- gsub('_aggByCollect_AR_Prostate.csv', '', individual_enformer_predictions)
+individual_metadata <- data.table(individual = individuals, path = glue::glue("{folder}/{individual_enformer_predictions}"))
+
+individual_metadata %>%
+    data.table::fwrite('/beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.1000G.baca_arbs.metadata.tsv', sep = '\t', quote = F, col.names = TRUE, row.names = FALSE)
+```
+
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/create_h5database_from_csvs.sbatch /beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.1000G.baca_arbs.metadata.tsv /scratch/beagle3/temi/epigenomes/1KG_BACA_ARBS/BACA_ARBS.1KG.2025-10-21")
+```
+
+
+#### For Baca ARBS - Baca predictions
+
+```{r}
+folder <- '/beagle3/haky/users/temi/data/baca_AR_prostate'
+individual_enformer_predictions <- list.files(folder, pattern = "*_aggByMeanCenter_AR_Prostate.csv")
+```
+
+```{r}
+individuals <- gsub('_aggByMeanCenter_AR_Prostate.csv', '', individual_enformer_predictions)
+individual_metadata <- data.table(individual = individuals, path = glue::glue("{folder}/{individual_enformer_predictions}"))
+
+individual_metadata %>%
+    data.table::fwrite('/beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.BACA.baca_arbs.metadata.tsv', sep = '\t', quote = F, col.names = TRUE, row.names = FALSE)
+```
+
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/create_h5database_from_csvs.sbatch /beagle3/haky/users/temi/projects/TFXcan/files/individual_metadata.BACA.baca_arbs.metadata.tsv /scratch/beagle3/temi/epigenomes/baca_BACA_ARBS/BACA_ARBS.baca.2025-10-21")
 ```
 
 ## Predict with Enpact weights
@@ -1083,4 +1335,21 @@ new_scores$HG01771[1:10] - old_scores$HG01771[1:10]
 
 ```{r}
 wgts_intercept[1:5]
+```
+
+
+```{r}
+each_db <- DBI::dbConnect(RSQLite::SQLite(), "/scratch/beagle3/temi/lEnpact/enpact_models_linearization_2025-10-16/AR_MammaryGland/models/filtered_db/predict_db_AR_MammaryGland_filtered.db")
+dbListTables(each_db)
+extras <- dbGetQuery(each_db, 'SELECT * FROM extra LIMIT 5')
+dbDisconnect(each_db)
+```
+
+
+```{r}
+dbGetQuery(each_db, 'SELECT * FROM weights LIMIT 5')
+```
+
+```{r}
+dbDisconnect(each_db)
 ```

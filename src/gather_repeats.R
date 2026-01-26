@@ -2,8 +2,9 @@
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--output_basename", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),
+    make_option("--input_basename", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),
     make_option("--batch_list", help='batch name'),
+    make_option("--output_basename", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),
     make_option("--priorL", help='alpha value for enet', default="ebnm_point_exponential"),
     make_option("--priorF", help='number of cores to use', default="ebnm_point_exponential")
 )
@@ -27,8 +28,11 @@ library(magrittr)
 batch_list <- data.table::fread(opt$batch_list, header = FALSE)$V1
 # create regex pattern to match the batch names
 
-batch_files <- paste0(opt$output_basename, ".", batch_list, ".*", '.rds.gz') 
+
+batch_files <- paste0(opt$input_basename, ".", batch_list, ".*", '.rds.gz') 
+
 batch_files <- Sys.glob(batch_files) 
+
 
 if(all(file.exists(batch_files))){
     print(glue('INFO - Found {length(batch_files)} files'))
