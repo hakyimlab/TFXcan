@@ -1,0 +1,50 @@
+Tissue Site Detail	Abbreviation	Color	Samples from genotyped donors
+Adipose - Subcutaneous	ADPSBQ	#FF6600	581
+Adipose - Visceral (Omentum)	ADPVSC	#FFAA00	469
+Adrenal Gland	ADRNLG	#33DD33	233
+Artery - Aorta	ARTAORT	#FF5555	387
+Artery - Coronary	ARTCRN	#FFAA99	213
+Artery - Tibial	ARTTBL	#FF0000	584
+Brain - Amygdala	BRNAMY	#B8A9E0	129
+Brain - Anterior cingulate cortex (BA24)	BRNACC	#EEEE00	147
+Brain - Caudate (basal ganglia)	BRNCDT	#EEEE00	199
+Brain - Cerebellar Hemisphere [Frozen]	BRNCHB	#EEEE00	175
+Brain - Cerebellum [PAXgene]	BRNCHA	#EEEE00	209
+Brain - Cortex [PAXgene]	BRNCTXA	#EEEE00	205
+Brain - Frontal Cortex (BA9) [Frozen]	BRNCTXB	#EEEE00	175
+Brain - Hippocampus	BRNHPP	#EEEE00	165
+Brain - Hypothalamus	BRNHPT	#EEEE00	170
+Brain - Nucleus accumbens (basal ganglia)	BRNNCC	#EEEE00	202
+Brain - Putamen (basal ganglia)	BRNPTM	#EEEE00	170
+Brain - Spinal cord (cervical c-1)	BRNSPC	#EEEE00	126
+Brain - Substantia nigra	BRNSNG	#EEEE00	114
+Breast - Mammary Tissue	BREAST	#33CCCC	396
+Cells - EBV-transformed lymphocytes	LCL	#CC66FF	147
+Cells - Cultured fibroblasts	FIBRBLS	#AAEEFF	483
+Colon - Sigmoid	CLNSGM	#EEBB77	318
+Colon - Transverse	CLNTRN	#C9C955	368
+Esophagus - Gastroesophageal Junction	ESPGEJ	#8B7353	330
+Esophagus - Mucosa	ESPMCS	#552220	497
+Esophagus - Muscularis	ESPMSL	#B89988	465
+Heart - Atrial Appendage	HRTAA	#99B9FF	372
+Heart - Left Ventricle	HRTLV	#669099	386
+Kidney - Cortex	KDNCTX	#22FFDD	73
+Liver	LIVER	#AABB66	208
+Lung	LUNG	#99FF00	515
+Minor Salivary Gland	SLVRYG	#99B8B8	144
+Muscle - Skeletal	MSCLSK	#AAAAFF	706
+Nerve - Tibial	NERVET	#FFFF00	532
+Ovary	OVARY	#FFFAAF	167
+Pancreas	PNCREAS	#995522	305
+Pituitary	PTTARY	#AAFF99	237
+Prostate	PRSTTE	#DDDDDD	221
+Skin - Not Sun Exposed (Suprapubic)	SKINSN	#0000FF	517
+Skin - Sun Exposed (Lower leg)	SKINS	#7777FF	605
+Small Intestine - Terminal Ileum	SNTTRM	#555522	152
+Spleen	SPLEEN	#7FB855	227
+Stomach	STMC	#FFD099	324
+Testis	TESTIS	#AAAAAA	322
+Thyroid	THYROID	#006660	574
+Uterus	UTERUS	#FF66FF	129
+Vagina	VAGINA	#FF5599	141
+Whole Blood	WHLBLD	#FF0B8B	670

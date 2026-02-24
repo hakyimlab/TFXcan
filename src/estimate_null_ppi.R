@@ -5,7 +5,7 @@ option_list <- list(
     make_option("--query_db", help='Where to sample the nulls from? tsv'),
     make_option("--programs", help='TFXcan programs'),
     make_option("--outputfile", help='TFXcan programs'),
-    make_option("--topN", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores', default = 15),
+    make_option("--topN", help='', default = 15),
     make_option("--nReplicates", help='How many replicates?', default = 10000),
     make_option("--useseed", help='How many replicates?', default = 2025)
 )

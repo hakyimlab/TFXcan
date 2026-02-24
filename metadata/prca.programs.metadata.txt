@@ -1,0 +1,10 @@
+name	cluster	program_color
+Liver	Cluster_1	#BD777AFF
+CTCF	Cluster_2	#579EA4FF
+Bone Marrow	Cluster_3	#DF7713FF
+Colon	Cluster_4	#EEBB77
+Program 1	Cluster_5	#86AD34FF
+REST	Cluster_6	#81B28DFF
+Blood	Cluster_7	#FF0B8B
+Program 2	Cluster_8	#7E1A2FFF
+Hormone Receptors	Cluster_9	#F9C000FF
