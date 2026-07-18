@@ -1,7 +1,7 @@
 # Author: Temi
 # Date: Thursday August 10 2023
-# Description: script to create predictors, ground truth and info files
-# Usage: Rscript create_training_sets.R [options]
+# Description: reformat one model's Enpact scores (.rds array) into PredictDB-compatible weights/annotation txt files
+# Usage: Rscript formatForPredictDB.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
@@ -29,8 +29,9 @@ library(glue)
 
 rdsfile <- readRDS(opt$enpact_scores_file)
 escores <- rdsfile[, , opt$include_model] %>% as.data.frame() %>% tibble::rownames_to_column('NAME') %>% as.data.table()
-annot <- escores %>% 
+annot <- escores %>%
     dplyr::select(NAME) %>%
+    # locus names are formatted chr_start_end
     tidyr::separate(col = NAME, into=c('chr', 'start', 'end'), sep='_', remove=F) %>%
     dplyr::mutate(gene_id = NAME, gene_name = NAME, gene_type = 'protein_coding', start = as.numeric(start), end = as.numeric(end), chr = gsub('chr', '', chr)) %>%
     dplyr::select(chr, start, end, gene_id, gene_name, gene_type)

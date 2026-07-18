@@ -1,4 +1,9 @@
 #!/bin/bash
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: cluster wrapper for calculate_auprc.R (AUPRC of Enpact predictions vs. ground truth binding).
+# Usage: sbatch calculate_auprc.sbatch {models_list} {path_pattern} {output_file} {plots_directory}
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

@@ -1,4 +1,9 @@
-# Usage: Rscript create_training_sets.R [options]
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: compute AUPRC (area under the precision-recall curve) of Enpact model predictions vs. ground
+#   truth binding labels, for every TF-tissue model listed in models_list, on both the train and test splits.
+#   Optionally saves a precision-recall plot per TF-tissue pair.
+# Usage: Rscript calculate_auprc.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 

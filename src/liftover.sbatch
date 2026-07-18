@@ -1,4 +1,12 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Lifts over ALL bed files in a hardcoded input directory between genome builds
+#   (hg19->hg38), running UCSC liftOver in parallel (GNU parallel) across files. Takes
+#   liftover_exe/chain_file as args (unlike liftoverMultipleBeds.sbatch, which hardcodes them) --
+#   the input/output directories themselves are still hardcoded.
+# Usage: sbatch liftover.sbatch <liftover_exe> <chain_file>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH ---cpus-per-task=6
@@ -41,7 +49,7 @@ function lift_hg19_hg38(){
 
 export -f lift_hg19_hg38
 
-parallel -j 12 --joblog ${job_log} "lift_hg19_hg38 {1} ${liftover_cmd} ${chain_file} ${to_folder}" ::: ${input_beds[@]}
+parallel -j 12 --joblog ${job_log} "lift_hg19_hg38 {1} ${liftover_exe} ${chain_file} ${to_folder}" ::: ${input_beds[@]}
 
 #${mpiexec} -n ${NRANKS} --ppn ${NRANKS} --depth ${NDEPTH} --cpu-bind depth --env OMP_NUM_THREADS="${NTHREADS}" "${liftover_cmd}" "${input_bed}" "${chain_file}" "${output_bed}" "${unmapped_bed}"
 

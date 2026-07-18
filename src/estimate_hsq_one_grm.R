@@ -1,4 +1,10 @@
-
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: estimate SNP heritability of each ARBS phenotype against a single genome-wide merged GRM
+#   (as opposed to estimate_hsq.R, which does this per-chromosome), using calc_mle_from_grm() from
+#   notebooks/hsq.R. Wraps each per-phenotype estimate in tryCatch so one failure doesn't kill the run.
+#   All paths are hardcoded (no CLI args); the optparse block below is dead/unused.
+# Usage: Rscript estimate_hsq_one_grm.R
 
 # option_list <- list(
 #     make_option("--data", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),

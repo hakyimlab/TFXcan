@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Author: Temi
-# Description: Predict using cwas in PrediXcan framework
-# Usage: sbatch predict_baca_with_cwas.sbatch
+# Description: run formatForPredictDB.R to reformat Enpact scores into PredictDB weights/annotation files
+# Usage: sbatch formatForPredictDB.sbatch format_script rds_file enpact_scores_out enpact_annot_out model_name
 # Date: Mon July 24 2023
 # Dependencies: 
 

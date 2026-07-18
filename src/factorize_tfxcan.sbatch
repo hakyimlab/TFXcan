@@ -1,4 +1,13 @@
 #!/bin/bash
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: End-to-end consensus matrix factorization wrapper: prepare_summary_matrices.R (build
+#   z-ratio matrix + random loci splits from GWAS + TFXcan summary stats) -> repeat_flash.R in
+#   parallel across batches -> gather_repeats.R -> cluster_programs.R. This is the generalized/
+#   current version of the manual step-by-step process reproduceData.qmd walks through by hand for
+#   one specific analysis (prostate cancer risk).
+# Usage: sbatch factorize_tfxcan.sbatch <gwas_summary_statistic> <tfxcan_summary_statistic> <output_basename> <base_output_directory>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

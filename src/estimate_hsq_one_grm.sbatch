@@ -1,4 +1,10 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: cluster wrapper for estimate_hsq_one_grm.R (single merged-GRM heritability estimates). No CLI
+#   args; all paths are hardcoded inside the R script.
+# Usage: sbatch estimate_hsq_one_grm.sbatch
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

@@ -1,8 +1,13 @@
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: inner-join ground truth locus labels with aggregated epigenome features, write merged training table
+# Usage: Rscript merge_epigenome_ground_truth.R [options]
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--epigenome", help='data to train with enet'),
-    make_option("--ground_truth", help=''),
+    make_option("--epigenome", help='Path to aggregated epigenome feature matrix csv'),
+    make_option("--ground_truth", help='Path to ground truth locus/binding_class tsv (from create_training_data.R)'),
     make_option("--output_filename", type="character", help='output file')
 )
 

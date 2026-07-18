@@ -1,15 +1,23 @@
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: NOT part of the current active pipeline — an earlier "consensus flashier" script
+#   that generates its own random loci subsets in-process (via --niterations/--subset) and runs
+#   flashier on each with mclapply, instead of reading pre-made splits like repeat_flash.R does.
+#   Superseded by prepare_summary_matrices.R + repeat_flash.R. Kept for reference only.
+# Usage: Rscript consensus_flashier.R --data <matrix> --column_for_rownames <col> --output_basename <path> --priorL <ebnm_...> --priorF <ebnm_...> --greedy_Kmax <int> --subset <fraction> --niterations <int>
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--data", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),
-    make_option("--column_for_rownames", help=''),
-    make_option("--output_basename", help='.rds file to be created as the model'),
-    make_option("--priorL", help='alpha value for enet', default="ebnm_point_normal"),
-    make_option("--priorF", help='number of cores to use', default="ebnm_point_exponential"),
-    make_option("--transpose", type="logical", action='store_true', help='Should the data be transposed?'),
-    make_option("--greedy_Kmax", type="integer", default=100L, help='How many greedy iterations?'),
-    make_option("--subset", type="numeric", help='Subset of loci to use'),
-    make_option("--niterations", type="numeric", default = 200L, help='Number of iterations')
+    make_option("--column_for_rownames", help='name of the column in --data to use as row names when reading it in as text (.txt)'),
+    make_option("--output_basename", help='output path prefix; result written to {output_basename}.{priorL}-{priorF}.{niterations}Iters.rds.gz'),
+    make_option("--priorL", help='flashier EBNM prior function name for the loadings (L) matrix, e.g. ebnm_point_normal (see choosePrior() below)', default="ebnm_point_normal"),
+    make_option("--priorF", help='flashier EBNM prior function name for the factors (F) matrix, e.g. ebnm_point_exponential (see choosePrior() below)', default="ebnm_point_exponential"),
+    make_option("--transpose", type="logical", action='store_true', help='Should the data matrix be transposed after loading (only applies when --data is a .txt file)?'),
+    make_option("--greedy_Kmax", type="integer", default=100L, help='max number of factors flashier greedily adds before backfitting (flashier::flash greedy_Kmax arg)'),
+    make_option("--subset", type="numeric", help='fraction of loci to randomly subsample per iteration (e.g. 0.8 = 80% of loci)'),
+    make_option("--niterations", type="numeric", default = 200L, help='number of random-subset repeats to run flashier on, in parallel via mclapply')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

@@ -1,8 +1,13 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: runs calculateDistanceToMotifs.R in parallel, once per transcription factor in a list
+# Usage: sbatch calculateDistanceToMotifs.sbatch <output_basename> <list_of_transcription_factors>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
-#SBATCH --mem-per-cpu=4G    
+#SBATCH --mem-per-cpu=4G
 #SBATCH --job-name=calculate_distance
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/calculate_distance.out
@@ -24,6 +29,7 @@ list_of_transcription_factors=${2}
 start=`date +%s`
 
 # run the R script
+# NOTE: this calls the Enpact repo's copy of the script, not src/calculateDistanceToMotifs.R in this repo
 parallel -j 50 "Rscript /beagle3/haky/users/temi/projects/Enpact/src/calculateDistanceToMotifs.R \
     --transcription_factor {} --output_basename ${output_basename}" :::: ${list_of_transcription_factors}
 

@@ -1,6 +1,7 @@
-
-
-
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: aggregate per-locus Enformer predictions from a reference epigenome (per-chromosome hdf5s) into a feature CSV
+# Usage: python3 aggregate_epigenomes.py --loci_file --reference_epigenome_directory --output_file [--use_multiprocessing] [--pad_bins]
 
 import argparse, os, sys, multiprocessing, itertools
 import pandas as pd

@@ -1,3 +1,8 @@
+# Author: Temi
+# Date: Thursday October 16 2025
+# Description: bundle many per-individual aggregated epigenome CSVs into one feature matrix (hdf5) + metadata (tsv) pair
+# Usage: python3 create_h5database_from_csvs.py --metadata --output_basename
+
 import os, sys
 import pandas as pd, numpy as np
 import argparse
@@ -8,10 +13,10 @@ def list_of_ints(arg):
 
 # needed arguments 
 parser = argparse.ArgumentParser()
-parser.add_argument("--metadata", help="Path to file", type=str, default=None)
+parser.add_argument("--metadata", help="path to a tsv with 'individual' and 'path' columns, one row per per-individual aggregated epigenome CSV to bundle", type=str, default=None)
 # parser.add_argument("--process_by_haplotype", help="Path to file", action=argparse.BooleanOptionalAction)
 # parser.add_argument("--process_function", help="Path", type=str, default='sum')
-parser.add_argument("--output_basename", help="", type=str)
+parser.add_argument("--output_basename", help="prefix for the output files; writes '<output_basename>.metadata.tsv' and '<output_basename>.matrix.h5.gz'", type=str)
 args = parser.parse_args()
 
 # read in the metadata

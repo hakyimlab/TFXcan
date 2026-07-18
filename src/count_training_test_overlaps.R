@@ -1,11 +1,15 @@
-# Usage: Rscript create_training_sets.R [options]
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: check for train/test leakage by counting, for each TF-tissue model in enpact_metadata_file, how
+#   many loci in its training set also show up in its test set (exact locus-string match, not genomic overlap).
+# Usage: Rscript count_training_test_overlaps.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--enpact_metadata_file", help='A csv or tsv: transcription_factor, tissue'),
     make_option("--files_directory", help='pattern to match path e.g. /beagle3/haky/users/temi/projects/Enpact/data/enpact/training/train_test'),
-    make_option("--output_file")
+    make_option("--output_file", help='.tsv file to write the per-model overlap counts to')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

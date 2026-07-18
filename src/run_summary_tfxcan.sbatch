@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: run S-PrediXcan ("TFXcan") across many TF-tissue model DBs (from models_list) against one phenotype's GWAS
+# Usage: sbatch run_summary_tfxcan.sbatch phenotype models_list output_directory gwas_folder gwas_pattern exec_file conda_environment
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem-per-cpu=4G    
+#SBATCH --mem-per-cpu=4G
 #SBATCH --job-name=summary_TFXcan
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/summary_TFXcan.out

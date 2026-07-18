@@ -1,17 +1,20 @@
+# ARCHIVED — superseded by src/train_enpact.R. Kept for reference only.
 # Author: Temi
-# Date: Thursday July 27 2023
-# Description: script to train elastic net TFPred models
+# Date: Monday January 26 2026
+# Description: like trainEnpactModel.R, but trains the elastic net model after dropping a supplied list of
+#   feature columns (feature-ablation experiment). Note: there's an early `quit()` call below that stops the
+#   script right after printing opt — looks unfinished/left mid-debug.
 # Usage: Rscript train_enet.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--train_data_file", help='data to train with enet'),
-    make_option("--features_to_remove", help='data to train with enet', default = NULL),
+    make_option("--train_data_file", help='Training data file with binding_class + feature columns'),
+    make_option("--features_to_remove", help='Comma-separated list of feature column names to drop before training', default = NULL),
     make_option("--nfolds", type="integer", default=5L, help='How many cv folds?'),
-    make_option("--metadata", help='data to train with enet'),
-    make_option("--weights_file", help='data to train with enet'),
-    make_option("--model_rds_file", help='data to train with enet'),
+    make_option("--metadata", help='Label to use for the weights column name (e.g. TF_tissue identifier)'),
+    make_option("--weights_file", help='Output file to save the model weights (coefficients) to'),
+    make_option("--model_rds_file", help='.rds file to be created as the model'),
     make_option("--ncores", default = 12)
 )
 

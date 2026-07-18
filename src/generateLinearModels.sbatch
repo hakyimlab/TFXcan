@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: drives the PredictDb-nextflow pipeline to fit SNP-based ("linearized") elastic-net Enpact models
+# Usage: sbatch generateLinearModels.sbatch phenotype outputpath annotfile enpactfile geno_dir conda_env nextflow_command
+
 #SBATCH --job-name=lEnpact_training
 #SBATCH --partition=caslake
 #SBATCH --nodes=1

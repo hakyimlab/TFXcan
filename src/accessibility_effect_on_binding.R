@@ -1,23 +1,8 @@
 # Author: Temi
-# Date: Thursday July 27 2023
-# Description: script to train elastic net TFPred models
-# Usage: Rscript train_enet.R [options]
-
-# suppressPackageStartupMessages(library("optparse"))
-
-# option_list <- list(
-#     make_option("--train_data_file", help='data to train with enet'),
-#     make_option("--features_to_remove", help='', default = NULL),
-#     make_option("--nfolds", type="integer", default=5L, help='How many cv folds?'),
-#     make_option("--metadata", help='data to train with enet'),
-#     make_option("--weights_file", help='data to train with enet'),
-#     make_option("--model_rds_file", help='data to train with enet'),
-#     make_option("--ncores", default = 12)
-# )
-
-# opt <- parse_args(OptionParser(option_list=option_list))
-
-# print(opt)
+# Date: Monday January 26 2026
+# Description: tests whether chromatin accessibility (ATAC-seq peaks) affects predicted TF binding scores;
+#   per TF-tissue, fits score ~ bound/unbound-status + open/closed-chromatin-feature and writes out the model coefficients
+# Usage: Rscript accessibility_effect_on_binding.R (no CLI args -- all inputs/outputs are hardcoded below)
 
 library(tidyverse)
 library(glue)
@@ -30,6 +15,7 @@ library(foreach)
 library(GenomicRanges)
 
 
+# hardcoded inputs/outputs -- not exposed as flags, edit here to point at different data
 opt <- list()
 
 opt$input_dataframe <- "/beagle3/haky/users/temi/projects/TFXcan/experiments/atac/enpact_tf_tissues.test_path.tsv"
@@ -54,6 +40,7 @@ valid_chromosomes <- paste0('chr', 1:22)
 #     "(?<=[a-z])(?=[A-Z])",
 #     " "
 # )
+# keep only ATAC-seq entries, then split by tissue to build a per-tissue accessible-region background
 db_metadata.split <- db_metadata %>% dplyr::filter(Factor == 'ATAC-seq') %>% split(f = .$Tissue_type)
 names(db_metadata.split) <- gsub(' ', '', names(db_metadata.split))
 
@@ -112,7 +99,8 @@ estimate <- function(transcription_factor, tissue, test_data, background){
     data_eval <- bind_rows(motif.accessible, motif.inaccessible) %>% dplyr::rename(status = method) %>% 
         dplyr::mutate(group = paste0(feature, status))
 
-    out <- coef(summary(glm(score ~ status + feature, data = data_eval))) %>% 
+    # linear model of predicted binding score against bound/unbound status and open/closed chromatin
+    out <- coef(summary(glm(score ~ status + feature, data = data_eval))) %>%
         as.data.table(keep.rownames = 'term') %>% 
         dplyr::mutate(tf = transcription_factor, tissue = tissue) %>%
         dplyr::relocate(tf, tissue) %>%

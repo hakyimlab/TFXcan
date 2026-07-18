@@ -1,4 +1,12 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Lifts over ALL bed files in a hardcoded input directory between genome builds
+#   (hg19->hg38), running UCSC liftOver in parallel (GNU parallel) across files. liftover_cmd,
+#   chain_file, and the input/output directories are all hardcoded below — edit them directly
+#   rather than passing args.
+# Usage: sbatch liftoverMultipleBeds.sbatch   (no positional args — edit the hardcoded paths inside)
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH ---cpus-per-task=6

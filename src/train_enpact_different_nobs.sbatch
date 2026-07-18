@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: training-set-size ablation — for each num_bound in an array, build training data, aggregate epigenomes, merge with ground truth, and train an Enpact model
+# Usage: sbatch train_enpact_different_nobs.sbatch full_data output_basename reference_epigenome
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=12G    
+#SBATCH --mem-per-cpu=12G
 #SBATCH --job-name=train_different_nobs
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/train_different_nobs.out
@@ -19,7 +25,7 @@ full_data=${1}
 output_basename=${2}
 reference_epigenome=${3} # /beagle3/haky/data/enformer-reference-epigenome
 
-array_of_nobs=(50 100 200 500 1000 3000 5000 8000 10000 12500 15000 18000) # (50 100 200)   #
+array_of_nobs=(50 100 200 500 1000 3000 5000 8000 10000 12500 15000 18000) # training-set sizes to sweep # (50 100 200)   #
 n_array="${#array_of_nobs[@]}"
 
 # create data
@@ -31,6 +37,7 @@ echo "Exit status of creating data is: $status"
 
 # collect epigenomes
 if [ ${status} -eq 0 ]; then
+    # note: this calls the aggregate_epigenomes.py copy in the sibling TFPred-snakemake repo, not src/aggregate_epigenomes.py
     parallel -j ${n_array} --joblog /beagle3/haky/users/temi/projects/TFXcan/logs/train_different_nobs.job "python3 /beagle3/haky/users/temi/projects/TFPred-snakemake/workflow/src/aggregate_epigenomes.py --loci_file ${output_basename}_{}.loci.tsv --reference_epigenome_dir ${reference_epigenome} --output_file ${output_basename}_{}.epigenome.csv.gz --use_multiprocessing --pad_bins 0" ::: "${array_of_nobs[@]}"
 fi
 

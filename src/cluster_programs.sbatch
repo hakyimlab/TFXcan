@@ -1,4 +1,9 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Cluster wrapper for cluster_programs.R — consensus-clusters merged flashier runs into programs.
+# Usage: sbatch cluster_programs.sbatch <flash_results.rds.gz> <output_basename> <normalization: L2|L1|Linf>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6

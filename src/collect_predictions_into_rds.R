@@ -1,10 +1,15 @@
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: collect per-individual Enpact score files into one loci x individual x TF/tissue array (.rds)
+# Usage: Rscript collect_predictions_into_rds.R [options]
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--individuals", help='a list of loci'),
-    make_option("--gene_expression", help='rds file of the splits'),
-    make_option("--predictions_directory", help='rds file of the splits'),
-    make_option("--output_file", help='.rds file to be created as the model')
+    make_option("--individuals", help='Path to a list of individual IDs (no header)'),
+    make_option("--gene_expression", help="Path to gene expression matrix (genes x individuals, with a 'gene' column)"),
+    make_option("--predictions_directory", help='Directory containing per-individual <id>.enpact_scores.tsv.gz files'),
+    make_option("--output_file", help='Output path for the combined loci x individual x TF array (.rds)')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -30,7 +35,7 @@ predicted_binding <- purrr::map(dt_ids$V1, function(idd){
         mat_tf <- data.table::fread(ff) %>% tibble::column_to_rownames('locus') %>% as.matrix()
         # select from gexpr
         mat_gexpr.id <- mat_gexpr[, idd, drop = F]
-        # find common genes
+        # gene_expression is only used here, to restrict output to TSS with expression data (expression values themselves aren't kept)
         common_tss <- intersect(rownames(mat_gexpr.id), rownames(mat_tf))
 
         # arrange
@@ -53,5 +58,6 @@ myarray <- abind::abind(predicted_binding, along=3)
 dimnames(myarray)[[3]] <- names(predicted_binding)
 reshapedarray <- aperm(myarray, c(1, 3, 2), resize=TRUE)
 lapply(dimnames(reshapedarray), length)
-reshapedarray[1:3, 1:3, 1:3]
+print(reshapedarray[1:3, 1:3, 1:3])
+print(dim(reshapedarray))
 saveRDS(reshapedarray, file = opt$output_file, compress = "gzip")

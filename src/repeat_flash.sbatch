@@ -1,4 +1,11 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Runs repeat_flash.R in parallel across many batches (one job per batch name in
+#   batch_list), then merges the results with gather_repeats.R. Worker for the consensus matrix
+#   factorization / "tenerife" pipeline.
+# Usage: sbatch repeat_flash.sbatch <datafile> <output_basename> <priorL> <priorF> <greedy_Kmax> <batch_list> <splits_directory> <merged_output_basename>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
@@ -25,6 +32,9 @@ batch_list=${6}
 splits_directory=${7} #'/beagle3/haky/users/temi/projects/Enpact/data/tenerife/repeat_flash'
 merged_output_basename=${8}
 
+# NOTE: "prca_risk" below is hardcoded, left over from the original prostate-cancer-risk run this
+# script was written for. factorize_tfxcan.sbatch (the generalized/current wrapper) does NOT call
+# this .sbatch — it re-implements this same parallel loop with the right basename instead.
 parallel -a ${batch_list} --jobs 20 --joblog /beagle3/haky/users/temi/projects/TFXcan/logs/consensusFlashier.log \
     Rscript /beagle3/haky/users/temi/projects/TFXcan/src/repeat_flash.R \
     --data ${datafile} \
@@ -51,6 +61,9 @@ echo "Exit status of job is: $status"
 
 
 
+# Dead/superseded code below: an older "parallel vs serial mode" toggle that called
+# consensus_flashier.R (parallel) or repeat_flash.R (serial) directly instead of the
+# GNU parallel + repeat_flash.R + gather_repeats.R approach used above. Not run anymore.
 # if [[ ${run_in_parallel} == 'TRUE' ]]; then
 #     printf "[INFO] Running consensus_flashier.R in parallel mode\n"
 #     Rscript /beagle3/haky/users/temi/projects/Enpact/src/consensus_flashier.R \

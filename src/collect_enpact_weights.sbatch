@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Thursday October 16 2025
+# Description: cluster wrapper for collect_enpact_weights.R
+# Usage: sbatch collect_enpact_weights.sbatch models_metadata weights_file_basename
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
-#SBATCH --mem-per-cpu=4G    
+#SBATCH --mem-per-cpu=4G
 #SBATCH --job-name=collect_enpact_weights
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/collect_enpact_weights.out

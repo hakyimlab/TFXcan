@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: cluster wrapper for create_h5database_from_csvs.py, bundles per-individual aggregated epigenome CSVs into one hdf5 + metadata pair
+# Usage: sbatch create_h5database_from_csvs.sbatch metadata output_basename
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16

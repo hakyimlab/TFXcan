@@ -1,4 +1,11 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: build one GRM per input basename (e.g. one per chromosome), in parallel via GNU parallel, using
+#   GCTA's --make-grm. Unlike make_grm.sbatch (one merged GRM for everyone), this runs a separate GRM per file
+#   and adds --reml-no-constrain.
+# Usage: sbatch make_grm_single.sbatch <input_directory> <output_directory> <comma-separated input_basenames>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6

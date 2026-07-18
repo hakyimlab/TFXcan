@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: placeholder/scratch script -- just activates a conda env and echoes "Running test"; not part of the real pipeline
+# Usage: sbatch test.sbatch
+
 #SBATCH --job-name=test
 #SBATCH --partition=caslake
 #SBATCH --nodes=1

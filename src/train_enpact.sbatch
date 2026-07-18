@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Thursday August 28 2025
+# Description: cluster wrapper for train_enpact.R, trains the elastic-net Enpact model
+# Usage: sbatch train_enpact.sbatch train_data_file model_rds_file nfolds weights_file metadata [features_to_remove]
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
@@ -23,7 +29,7 @@ if [[ -n ${6} ]]; then
         --nfolds ${3} \
         --weights_file ${4} \
         --metadata ${5} \
-        --features_to_remove ${fremove}
+        --features_to_remove ${6}
 else
     Rscript /beagle3/haky/users/temi/projects/TFXcan/src/train_enpact.R \
     --train_data_file ${1} \

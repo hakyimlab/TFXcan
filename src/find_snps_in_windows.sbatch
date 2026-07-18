@@ -1,4 +1,8 @@
 #!/bin/bash
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: wrapper for find_snps_in_windows.R
+# Usage: sbatch find_snps_in_windows.sbatch (no args -- the R script's inputs/outputs are hardcoded)
 
 #SBATCH --job-name=find_snps_in_windows
 #SBATCH --partition=bigmem

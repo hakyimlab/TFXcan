@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: run cross_predict_enpact_scores.R in parallel (GNU parallel) across the TF-tissue models listed in a metadata file
+# Usage: sbatch cross_predict_enpact_scores.sbatch input_metadata weights_file output_basename
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=8G    
+#SBATCH --mem-per-cpu=8G
 #SBATCH --job-name=cross_predict
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/cross_predict.out

@@ -2,7 +2,7 @@
 
 # Author: Temi
 # Description: S-PrediXcan on EnpactScores
-# Usage: sbatch s-predixcan.sbatch
+# Usage: sbatch sTFXcan.sbatch db_name model_db covariances gwas_folder gwas_file_pattern exec_file output_file
 # Date: Wed Apr 3 2024
 # Dependencies: 
 

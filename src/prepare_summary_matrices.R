@@ -1,3 +1,10 @@
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: Builds the loci x TF/tissue z-ratio matrix from GWAS + TFXcan summary stats, then
+#   splits the loci into random-subset batches for repeat_flash.R to run flashier on. First step of
+#   the consensus matrix factorization ("tenerife") pipeline, driven by factorize_tfxcan.sbatch.
+# Usage: Rscript prepare_summary_matrices.R --gwas_summary_statistic <file> --tfxcan_summary_statistic <file> --output_basename <name> --output_directory <dir> --temporary_directory <dir> --number_resamples <int> --number_batches <int>
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
@@ -5,8 +12,8 @@ option_list <- list(
     make_option("--tfxcan_summary_statistic", help='[Input] TFXcan summary statistics'),
     make_option("--output_basename", help='[Input] The output file basename'),
     make_option("--output_directory", help='[Input] The output directory'),
-    make_option("--temporary_directory", help='[Input] The output directory'),
-    make_option("--number_resamples", default = 20, help='[Input] How many resamples?'),
+    make_option("--temporary_directory", help='[Input] Directory for intermediate files (random-subset batch rds/txt files consumed by repeat_flash.R)'),
+    make_option("--number_resamples", default = 20, help='[Input] How many random loci subsets (repeats) to generate in total, spread across --number_batches'),
     make_option("--number_batches", default = 5, help='[Input] How many batches to split resamples into?')
 )
 
@@ -87,6 +94,8 @@ data_list <- list()
 data_list[['zratios']] <- collect_matrices(mat_result)
 
 # divide or get eh Z-ratios
+# z-ratio = (TFXcan association z-score)^2 / (GWAS z-score)^2 per locus x TF/tissue pair — this is
+# the matrix that gets fed into flashier for factorization downstream.
 zratio_matdev <- (data_list[["zratios"]][["tfxcan"]])^2/(data_list[["zratios"]][["gwas"]][,,drop = TRUE])^2
 
 # there are missing values because I removed associations with pvalue at fdr < 0.05
@@ -108,7 +117,8 @@ random_loci <- purrr::map(1:opt$number_resamples, function(k){
     return(jj)
 })
 
-# split into 100 batches
+# split the resamples into --number_batches groups (round-robin by index), so each batch can be
+# run as a separate parallel repeat_flash.R job
 batches_loci <- purrr::map(1:opt$number_batches, function(k){
     jj <- random_loci[seq(k, opt$number_resamples, by = opt$number_batches) ] #|> unlist() #seq(k, 1, 1) 
     return(jj)

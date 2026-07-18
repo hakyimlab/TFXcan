@@ -18,6 +18,8 @@ results/*
 figures/*
 notebooks/recreateAnalysis_cache/*
 notebooks/recreateAnalysis_files/*
+notebooks/prepare-gene-modules_cache/*
+notebooks/prepare-gene-modules_files/*
 
 # include
 !scripts/

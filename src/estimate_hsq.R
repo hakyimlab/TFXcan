@@ -1,4 +1,11 @@
-
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: estimate SNP heritability of each ARBS (accessible regulatory binding site?) phenotype
+#   separately against each per-chromosome GRM (one hsq estimate per phenotype x chromosome), using
+#   calc_mle_from_grm() from notebooks/hsq.R. Compare with estimate_hsq_one_grm.R, which uses a single
+#   genome-wide merged GRM instead of per-chromosome GRMs. All paths are hardcoded (no CLI args); the
+#   optparse block below is dead/unused.
+# Usage: Rscript estimate_hsq.R
 
 # option_list <- list(
 #     make_option("--data", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),

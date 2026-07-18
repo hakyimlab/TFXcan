@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: cluster wrapper for collect_predictions_into_rds.R
+# Usage: sbatch collect_predictions_into_rds.sbatch individuals gene_expression predictions_directory output_file
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
-#SBATCH --mem-per-cpu=24G    
+#SBATCH --mem-per-cpu=24G
 #SBATCH --job-name=collect_predictions_into_rds
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/collect_predictions_into_rds.out

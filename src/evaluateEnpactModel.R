@@ -1,7 +1,7 @@
 # Author: Temi
 # Date: Thursday July 27 2023
 # Description: script to evaluate TFPred models on train and test data
-# Usage: Rscript create_training_sets.R [options]
+# Usage: Rscript evaluateEnpactModel.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 

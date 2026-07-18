@@ -1,10 +1,15 @@
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: sample a balanced set of bound/unbound training loci, resize to fixed-width windows, write ground truth + loci list
+# Usage: Rscript create_training_data.R [options]
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--full_data", help='data to train with enet'),
-    make_option("--seed", help='', default = 2025),
-    make_option("--num_bound", type="integer", help='How many cv folds?'),
-    make_option("--output_basename", help='', type = 'character')
+    make_option("--full_data", help='Path to full candidate sites table with chr/start/end/binding_class'),
+    make_option("--seed", help='Random seed for sampling sites', default = 2025),
+    make_option("--num_bound", type="integer", help='Number of sites to sample per binding_class (bound/unbound)'),
+    make_option("--output_basename", help='Output basename for the ground_truth.tsv and loci.tsv files', type = 'character')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -29,8 +34,9 @@ library(tidyverse)
 
 valid_chromosomes <- paste0('chr', 1:22)
 
-full_data <- data.table::fread(opt$full_data) %>% 
-    dplyr::filter(!chr %in% c('chr9', 'chr22')) %>% 
+# chr9/chr22 excluded here (likely held out elsewhere, e.g. as a test set)
+full_data <- data.table::fread(opt$full_data) %>%
+    dplyr::filter(!chr %in% c('chr9', 'chr22')) %>%
     dplyr::filter(chr %in% valid_chromosomes)
 
 set.seed(opt$seed)

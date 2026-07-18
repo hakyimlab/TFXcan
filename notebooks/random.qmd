@@ -1,0 +1,2438 @@
+---
+title: Connecting TFXcan's programs to gene regulatory networks
+date: "Tues Feb 3 2026"
+author: Temi
+fig-format: png
+fig-dpi: 800
+---
+
+# Introduction 
+
+The aim of this project here is to test concordance of predicted binding with 
+
+- gene regulatory networks 
+
+- known TF binding-gene expression data e.g. co-expression
+
+# Library loading and set up
+
+```{r}
+# cache.rebuid = TRUE, 
+knitr::opts_chunk$set(fig.width = 3, fig.height = 3, fig.format = 'png', fig.dpi = 800, cache = TRUE, cache.rebuild = FALSE)
+```
+```{r initial definitions}
+suppressMessages(library(tidyverse))
+suppressMessages(library(glue))
+```
+
+```{r message=F, warning=F}
+library(R.utils)
+library(data.table)
+library(qvalue)
+library(ggpubr)
+library(qqman)
+library(rstatix)
+library(ggplot2)
+library(PRROC)
+library(RColorBrewer)
+library(rhdf5)
+```
+
+```{r}
+qqunif.ggplot <- function(p, mlog10_p_thres=30, pch = NULL){
+    require(ggplot2)
+    ## thresholded by default at 1e-30
+    p=na.omit(p)
+    nn = length(p)
+    xx =  -log10((1:nn)/(nn+1))
+    
+    p_thres = 10^{-mlog10_p_thres}
+    if(sum(p < p_thres)){
+      warning(paste("thresholding p to ", p_thres))
+      p = pmax(p, p_thres)
+    }
+
+    dt <- data.table(pval = xx, dist = -sort(log10(p)))
+
+    if(is.null(pch)){
+        pch <- 19
+    }
+
+    pp <- ggplot2::ggplot(dt, aes(x = pval, y = dist)) +
+        geom_point(pch = pch) +
+        labs(x = expression(Expected~~-log[10](italic(p))),
+          y = expression(Observed~~-log[10](italic(p)))) +
+          geom_abline(aes(intercept = 0, slope = 1), col='gray', lty = 1)
+        
+    return(pp)
+}
+
+theme_simple <- theme_bw() + theme(
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(family = 'Helvetica', colour = 'black', size = 9.33),
+    text=element_text(size=9.33, colour = 'black', family = 'Helvetica'),
+    axis.text = element_text(hjust = 1), 
+    axis.text.x = element_text( hjust=0.5), 
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5)
+)
+
+qqcompare.ggplot <- function(p1, p2, names = c('observed', 'null'), mlog10_p_thres=30, pch = NULL){
+    require(ggplot2)
+    ## thresholded by default at 1e-30
+    p1 = na.omit(p1)
+    p2 = na.omit(p2)
+    p_thres = 10^{-mlog10_p_thres}
+    if(!is.null(p_thres)){pvec1 = pmax(p1, p_thres); pvec2 = pmax(p2, p_thres)}
+    nn = length(pvec1)
+    xx =  -log10((1:nn)/(nn+1))
+
+    if(is.null(pch)){
+        pch <- 19
+    }
+
+    pp <- ggplot2::ggplot() +
+        geom_point(aes(x = xx, y = -sort(log10(pvec1)), col = names[1]), pch = pch) +
+        geom_point(aes(x = xx, y = -sort(log10(pvec2)), col = names[2]), pch = pch) +
+        labs(x = expression(Expected~~-log[10](italic(p))),
+          y = expression(Observed~~-log[10](italic(p)))) +
+          geom_abline(aes(intercept = 0, slope = 1), col='gray', lty = 1)
+        
+    return(pp)
+}
+
+ggplot_qqplot <- function(x, y, pch = NULL){
+    qqdata <- qqplot(x = x, y = y, plot.it = F)
+    if(is.null(pch)){
+        pch <- 19
+    }
+    ggplot2::ggplot() +
+        geom_point(aes(x = qqdata$x, y = qqdata$y), pch = pch)
+}
+```
+
+I use some of the functions in these gists;
+
+```{r warning=F, message=F}
+devtools::source_gist('https://gist.github.com/TemiPete/250d9922b9516691f83bb1fd999a3ccc')
+devtools::source_gist('https://gist.github.com/hakyim/38431b74c6c0bf90c12f')
+devtools::source_gist('https://gist.github.com/hakyim/5d2251ea1a86009499e4ffdf47fe2735')
+devtools::source_gist('https://gist.github.com/TemiPete/e7214eb308c4116e2f10ee96401be0c2')
+devtools::source_gist('https://gist.github.com/TemiPete/b309a46e25ecec93127fb6756e68fb14')
+devtools::source_gist('https://gist.github.com/TemiPete/9c487a30e2c1a27a1d46b68128c82d10')
+
+devtools::source_gist("https://gist.github.com/TemiPete/d303781c7ddd9b6d8b4d0163804e80c2")
+```
+
+
+```{r}
+tfxcan_directory <- '/beagle3/haky/users/temi/projects/TFXcan'
+figures_directory <- "/beagle3/haky/users/temi/projects/experiments/gene_modules/figures"
+```
+
+```{r}
+# knitr::knit_exit()
+```
+
+
+# Main question: can we link TFXcan TF programs to gene regulatory networks?
+
+
+## What gene regulatory network? GRAND gene regulatory networks
+
+https://grand.networkmedicine.org/
+
+I downloaded 
+
+```{r}
+grn_directory <- '/scratch/beagle3/temi/GRNs'
+```
+
+Focus on protein-coding genes and their TSS
+```{r}
+tss_metadata <- data.table::fread("/beagle3/haky/users/temi/projects/dgtex/files/canonical_tss.matched_genes.tsv")
+# remove duplicates
+dups <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus) %>%
+    dplyr::group_by(locus) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt)) %>% 
+    dplyr::filter(cnt > 1)
+
+dt.tss_metadata <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus) %>%
+    dplyr::filter(!locus %in% dups$locus) %>% 
+    dplyr::distinct()
+```
+
+```{r}
+dt_LCL_grn <- data.table::fread(file.path(grn_directory, 'PANDA_LCL_Yoruba.csv')) 
+dim(dt_LCL_grn)
+dt_LCL_grn <- dt_LCL_grn %>% dplyr::select(any_of(c('ID', dt.tss_metadata$ensembl_gene_id)))
+dim(dt_LCL_grn); dt_LCL_grn[1:5, 1:10]
+```
+
+```{r}
+length(unique(colnames(dt_LCL_grn))); length(colnames(dt_LCL_grn))
+```
+
+```{r}
+mat_LCL_grn <- tibble::column_to_rownames(dt_LCL_grn, 'ID')
+mat_LCL_grn[1:5, 1:5]; dim(mat_LCL_grn)
+```
+
+```{r}
+# dt_LCL_grn <- dt_LCL_grn %>%
+#     tidyr::pivot_longer(cols = !ID, names_to = 'gene', values_to = 'connectivity')
+# dim(dt_LCL_grn); dt_LCL_grn[1:5, ]
+```
+
+```{r}
+# dt_LCL_grn %>%
+#     dplyr::group_by(ID) %>%
+#     dplyr::summarize(sumC = sum(connectivity > 0)) %>%
+#     dplyr::arrange(desc(sumC))
+```
+
+```{r}
+# dt_LCL_grn %>%
+#     dplyr::group_by(ID) %>%
+#     dplyr::filter(connectivity > 0) %>%
+#     dplyr::summarize(meanC = mean(connectivity)) %>%
+#     dplyr::arrange(desc(meanC))
+```
+
+#### What is the average connection Z-score across TFs
+```{r}
+avg.tf_connection <- base::rowMeans(mat_LCL_grn)
+summary(avg.tf_connection)
+```
+```{r}
+min.tf_connection <- apply(mat_LCL_grn, 1, min)
+summary(min.tf_connection)
+```
+```{r}
+max.tf_connection <- apply(mat_LCL_grn, 1, max)
+summary(max.tf_connection)
+```
+
+```{r}
+median.tf_connection <- apply(mat_LCL_grn, 1, median)
+summary(median.tf_connection)
+```
+
+```{r}
+sd.tf_connection <- apply(mat_LCL_grn, 1, sd)
+summary(sd.tf_connection)
+```
+
+
+# Does binding of a transcription factor at the tss of a gene correlate with the expression of that gene?
+
+## Download gene expression for Geuvadis indiviuals: https://www.ebi.ac.uk/biostudies/arrayexpress/studies/E-GEUV-1#processed-data
+## https://ftp.ebi.ac.uk/biostudies/fire/E-GEUV-/001/E-GEUV-1/Files/E-GEUV-1/analysis_results/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz
+
+Data:
+
+1. Gene expression in blood for Geuvadis individuals
+
+2. Predicted TF binding at TSS of protein-coding genes for the same individuals above
+
+## Predicted TF binding at TSS of protein-coding genes for Geuvadis
+
+First, I need to predict TF binding at the TSS
+
+- 
+
+In the steps below, I prepare the data
+```{r, eval = F}
+# I need to know the loci I want to predict for. I will read for one individual and use that information.
+tre <- h5ls("/beagle3/haky/data/Geuvadis_TSS_enformer_prediction/HG00116.h5")
+H5close()
+
+# Match tss names
+tss_metadata <- data.table::fread("/beagle3/haky/users/temi/projects/dgtex/files/canonical_tss.matched_genes.tsv")
+
+# 
+tss_predictions <- gsub('_predictions', '', tre$name)
+
+# 
+valid_tss <- intersect(tss_predictions, tss_metadata$locus)
+
+# loci
+dt_loci <- data.table::data.table(valid_tss) %>% setnames(c('tss'))
+dt_loci |> head()
+
+dt_loci %>%
+    data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.tss.tsv"), row.names = F, col.names = F, quote = F, sep = '\t')
+
+# This curates the individuals
+gexpr <- data.table::fread('/beagle3/haky/data/Geuvadis/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
+
+# individuals
+dt_ids <- colnames(gexpr)[-c(1:4)] %>%
+    data.table::data.table() %>% setnames(c('individual'))
+head(dt_ids)
+
+dt_ids %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.individuals.tsv"), row.names = F, col.names = F, quote = F, sep = '\t')
+```
+
+
+- This predicts TF binding
+```{r}
+llist <- file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.tss.tsv")
+ilist <- file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.individuals.tsv")
+weights <- file.path(tfxcan_directory, "data/chippeaks/weights/ENPACT_CHIPPEAKS_2026-01-02.compiled_weights.lambda.1se.txt.gz")
+#file.path(tfxcan_directory, 'data/enpact/weights/ENPACT_734_2025-04-24.compiled_weights.with_intercept.lambda.1se.txt.gz')
+input_directory <- '/beagle3/haky/data/Geuvadis_TSS_enformer_prediction'
+output_directory <- '/scratch/beagle3/temi/enpact_scores/geuvadis_tss_chippeaks_models'
+
+dir.create(output_directory, recursive = TRUE)
+
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/enpact_predict_hdf5.sbatch {llist} {weights} {ilist} {input_directory} {output_directory}")
+```
+
+
+- This collects into one rds.gz file
+
+```{r}
+wgts <- data.table::fread(file.path(tfxcan_directory, "data/chippeaks/weights/ENPACT_CHIPPEAKS_2026-01-02.compiled_weights.lambda.1se.txt.gz"))
+
+dim(wgts)
+
+gg <- strsplit(colnames(wgts), '_')
+tfs <- sapply(gg, getElement, 1)
+tissues <- sapply(gg, function(x){x[2]})
+
+unique(tfs) |> length(); unique(tissues) |> length()
+```
+
+```{r}
+ilist <- file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.individuals.tsv")
+efile <- file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.lcl.gene_expression.tsv.gz")
+predictions_directory <- '/scratch/midway3/temi/enpact_scores/geuvadis_tss_chippeaks_models'
+output_file <- '/scratch/midway3/temi/enpact_scores/geuvadis_tss.enpact_scores.chippeak_models.rds.gz'
+
+glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/collect_predictions_into_rds.sbatch {ilist} {efile} {predictions_directory} {output_file}")
+```
+
+
+## Gene expression in blood for Geuvadis individuals 
+
+Compile and correlate with observed gene expression
+
+```{r, eval= F}
+gexpr <- data.table::fread('/beagle3/haky/data/Geuvadis/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz')
+
+mat_gexpr <- gexpr %>%
+    tidyr::separate_wider_delim(Gene_Symbol, delim = '.', names = c('gene_name', 'id')) %>% dplyr::select(-c(TargetID, id, Chr, Coord)) %>%
+    dplyr::inner_join(dt.tss_metadata, by = c('gene_name' = 'ensembl_gene_id')) %>%
+    dplyr::relocate(gene_name, locus) %>% dplyr::select(-gene_name) %>%
+    tibble::column_to_rownames('locus') %>% as.matrix()
+
+mat_gexpr[1:5, 1:5]; dim(mat_gexpr)
+
+mat_gexpr %>% as.data.table(keep.rownames = 'gene') %>%
+    data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.lcl.gene_expression.tsv.gz"), sep = '\t', col.names = T, row.names = F, quote = F, compress = 'gzip')
+```
+
+I need to know the common individuals. 
+```{r}
+inds.binding <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.individuals.tsv"), header =F)$V1
+
+inds.expression <- colnames(gexpr)[-c(1:4)]
+
+length(inds.expression); length(inds.binding)
+```
+
+```{r}
+identical(sort(inds.expression), sort(inds.binding))
+```
+
+Correlation with gene expression
+```{r}
+
+#'/scratch/midway3/temi/enpact_scores/expression_vs_binding.enpact_scores.geuvadis.chippeak_models.data.rds.gz'
+
+#'/scratch/midway3/temi/enpact_scores/geuvadis_tss.enpact_scores.chippeak_models.rds.gz'
+efile <- file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.lcl.gene_expression.tsv.gz")
+binding_matrix <- '/scratch/midway3/temi/enpact_scores/geuvadis_tss.enpact_scores.chippeak_models.rds.gz'
+output_file_basename <- '/scratch/midway3/temi/enpact_scores/expression_vs_binding.enpact_scores.geuvadis.chippeak_models'
+
+glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/correlate_binding_expression.sbatch {binding_matrix} {efile} {output_file_basename}")
+```
+
+### Analysis of the correlation with gene expression
+```{r, cache.lazy = FALSE}
+regr.expr_binding <- data.table::fread('/scratch/midway3/temi/enpact_scores/expression_vs_binding.enpact_scores.geuvadis.chippeak_models.regression.tsv.gz') %>%
+    dplyr::filter(term == 'MX[i, ]') %>%
+    dplyr::rename(estimate = Estimate, se = `Std. Error`, tvalue = `t value`, pvalue = `Pr(>|t|)`) %>%
+    dplyr::mutate(zscore = estimate/se) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F)
+dim(regr.expr_binding); regr.expr_binding[1:5, ]
+```
+
+```{r}
+regr.expr_binding$tf |> unique() |> length()
+```
+
+```{r, cache.lazy = FALSE}
+corr.expr_binding <- data.table::fread('/scratch/midway3/temi/enpact_scores/expression_vs_binding.enpact_scores.geuvadis.chippeak_models.correlation.tsv.gz') %>%
+    dplyr::rename(tf_tissue = tf) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F)
+dim(corr.expr_binding); corr.expr_binding[1:5, ]
+```
+
+```{r}
+corr.expr_binding$tf |> unique() |> length()
+```
+
+### Are the p values of the correlation and regression equivalent?
+
+```{r, eval = F}
+ppn_concordance <- ggplot_qqplot(x = regr.expr_binding$pvalue, y = corr.expr_binding$spearman_pvalue, pch = '.') +
+geom_abline(intercept = 0, slope = 1, col = 'red') +
+theme_simple +
+labs(y = 'Correlation', x = 'Regression', subtitle = 'QQ plot of p values')
+
+ggsave(file.path(figures_directory, 'regression_vs_correlation.QQplot.pvalues.png'), ppn_concordance, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+
+## Is TF binding correlated with gene expression?
+
+```{r}
+pphist <- ggplot() +
+    geom_histogram(aes(x = corr.expr_binding$spearman_corr), col = 'black') +
+    labs(x = 'Correlation Coefficient', y = 'Number of TF binding-Target gene pairs') + theme_simple
+
+ggsave(file.path(figures_directory, 'binding_expression.correlation.coefficients.histogram.png'), pphist, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r, eval = F}
+pnqq <- qqunif.ggplot(corr.expr_binding$spearman_pvalue, pch = '.') +
+    theme_simple + labs(x = expression("Expected -log"[10]*"P"), y = expression("Observed -log"[10]*"P"))
+
+ggsave(file.path(figures_directory, 'binding_expression.correlation.pvalues.QQplot.png'), pnqq, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+## To compare with the GRAND GRN, I will use the regression Z-scores. 
+
+First, check that the estimates are not weird.
+
+```{r}
+summary(regr.expr_binding$estimate)
+```
+```{r, eval = F}
+pp_coefs <- ggplot() +
+    geom_histogram(aes(regr.expr_binding$estimate), col = 'black') +
+    theme_simple +
+    labs(y = 'Number of TF-tissue-gene trios', x = 'Beta')
+
+ggsave(file.path(figures_directory, 'histogram.tf_tissue_genes.regression_coefficients.png'), pp_coefs, width = 3000, height = 3000, dpi = 800, units = 'px')
+
+pp_coefs
+```
+
+```{r, eval = F}
+pp_zscore <- ggplot() +
+    geom_histogram(aes(regr.expr_binding$zscore), col = 'black') +
+    theme_simple +
+    labs(y = 'Number of TF-tissue-gene trios', x = 'Z-score')
+
+ggsave(file.path(figures_directory, 'histogram.tf_tissue_genes.regression_zscores.png'), pp_zscore, width = 3000, height = 3000, dpi = 800, units = 'px')
+
+pp_zscore
+```
+
+
+
+What are the most significant TF-tissue-gene trios?
+```{r}
+signif.binding_expr <- regr.expr_binding %>% 
+    dplyr::group_by(tf_tissue) %>%
+    dplyr::mutate(fdr_sig = qvalue::qvalue(pvalue, fdr.level = 0.05)$significant) %>% 
+    dplyr::filter(fdr_sig == TRUE)
+```
+
+```{r}
+head(signif.binding_expr); dim(signif.binding_expr)
+```
+
+```{r}
+dt.count_signif <- signif.binding_expr %>%
+    summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt))
+
+dt.count_signif
+```
+
+```{r, eval = F}
+dd <- dt.count_signif %>%
+    head(n = 20) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F) %>%
+    dplyr::arrange(desc(cnt)) %>%
+    dplyr::mutate(TF_tissue = factor(tf_tissue, level = tf_tissue))
+
+pp_number_significant <- dd %>%
+    ggplot(aes(x = TF_tissue, y = cnt, fill = tissue)) +
+    theme_simple +
+    geom_col(col = 'black', width = 0.8, position = 'dodge') +
+    theme(legend.position = "none") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    labs(subtitle = '', x = 'TF-Tissue', y = 'Number of Significantly Correlated\nBinding-Expression Pairs')
+
+
+ggsave(file.path(figures_directory, 'barplot.tf_tissue_genes.top_number_significant.png'), pp_number_significant, width = 5000, height = 3500, dpi = 800, units = 'px')
+
+pp_number_significant
+```
+
+```{r}
+ggplot() +
+    geom_boxplot(aes(y = dt.count_signif$cnt)) +
+    theme_simple +
+    labs(y = 'Number of Significantly Correlated\nBinding-Expression Pairs')
+```
+
+
+Are the genes all common?
+
+```{r, eval = F}
+grps.signif.binding_expr <- split(signif.binding_expr, signif.binding_expr$tf_tissue)
+```
+```{r, eval = F}
+genes_per_tfTissue <-  purrr::map(grps.signif.binding_expr, function(xx){
+    xx$gene
+})
+names(genes_per_tfTissue) <- names(grps.signif.binding_expr)
+
+common_genes <- purrr::reduce(genes_per_tfTissue, base::intersect)
+length(common_genes)
+```
+
+::: {.callout}
+These are distinct TSS across all TF-tissue pairs.
+:::
+
+
+### Correlation with Gene regulatory network
+
+```{r, eval = F}
+dt.ort_regr <- purrr::map(unique(regr.expr_binding$tf_tissue), function(ii){
+    tryCatch({
+        dta <- regr.expr_binding %>% dplyr::filter(tf_tissue == ii)
+        tf <- dta$tf |> unique()
+        dt_tfb <- dta %>%
+            dplyr::inner_join(dt.tss_metadata, by = c('gene' = 'locus'))
+        
+        cm_genes <- intersect(colnames(dt_LCL_grn), dt_tfb$ensembl_gene_id)
+
+        tf_expr_aa <- dt_tfb %>%
+            dplyr::filter(ensembl_gene_id %in% cm_genes) %>% dplyr::select(gene = ensembl_gene_id, zscore)
+    
+        network_aa <- dt_LCL_grn %>% 
+            dplyr::select(all_of(c('ID', cm_genes))) %>% 
+            dplyr::filter(ID == tf) %>% 
+            data.table::transpose(., keep.names = "ID", make.names = "ID") %>% 
+            setnames(c('gene', 'connectivity'))
+        mgd <- dplyr::inner_join(tf_expr_aa, network_aa, by = 'gene')
+        return(mgd)
+        
+    }, error = function(err){
+        return(NULL)
+    })
+    
+}, .progress = TRUE)
+
+names(dt.ort_regr) <- unique(regr.expr_binding$tf_tissue)
+dt.ort_regr <- Filter(Negate(is.null), dt.ort_regr)
+
+
+dt.ort_regr %>%
+    dplyr::bind_rows(., .id = 'tf_tissue') %>%
+    data.table::fwrite(., file.path(tfxcan_directory, 'experiments/gene_modules/files/tf_binding_expression.connectivity.data.chippeak_models.tsv.gz'), sep = '\t', compress = 'gzip', quote = F, col.names = T, row.names = F)
+```
+
+### Correlation for TF-Gene connectivity with Z-scores > 0 (positive)
+```{r}
+dt.ort_regr <- data.table::fread(file.path(tfxcan_directory, 'experiments/gene_modules/files/tf_binding_expression.connectivity.data.chippeak_models.tsv.gz')) 
+
+list.ort_regr <- dt.ort_regr %>% 
+    base::split(., .$tf_tissue)
+```
+
+```{r}
+result.grn_concordance <- purrr::map(names(list.ort_regr), function(ii){
+    gt <- list.ort_regr[[ii]]
+    ct <- with(gt, cor.test(abs(zscore), connectivity))
+    return(data.table(tf_tissue = ii, pvalue = ct$p.value, corr = ct$estimate))
+}, .progress = TRUE) %>% dplyr::bind_rows() %>% tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F)
+
+result.grn_concordance[1:5, ]; dim(result.grn_concordance)
+```
+
+
+```{r}
+pp_qqplot <- qqunif.ggplot(result.grn_concordance$pvalue) +
+    theme_simple + labs(x = expression("Expected -log"[10]*"P"), y = expression("Observed -log"[10]*"P"), subtitle = 'p values')
+
+ggsave(file.path(figures_directory, 'GRN_concordance.pvalues.QQplot.absZscore.png'), pp_qqplot, width = 2000, height = 2000, dpi = 800, units = 'px')
+pp_qqplot
+```
+
+```{r}
+summary(result.grn_concordance$corr)
+```
+
+The correlation is not that high. 
+
+```{r}
+result.grn_concordance.aggregated <- result.grn_concordance %>% dplyr::group_by(tf) %>% dplyr::summarize(acatP = ACAT::ACAT(pvalue))
+
+result.grn_concordance.aggregated[1:5, ]
+```
+
+
+```{r, eval = T}
+pp_qqplot <- qqunif.ggplot(result.grn_concordance.aggregated$acatP) +
+    theme_simple + labs(x = expression("Expected -log"[10]*"P"), y = expression("Observed -log"[10]*"P"), subtitle = 'ACAT aggregated p values')
+
+ggsave(file.path(figures_directory, 'GRN_concordance.acatP.QQplot.absZscore.png'), pp_qqplot, width = 2000, height = 2000, dpi = 800, units = 'px')
+pp_qqplot
+```
+
+How many are significant after multiple testing correction, FDR < 0.05?
+
+```{r}
+result.grn_concordance.signif <- result.grn_concordance %>%
+    dplyr::mutate(fdr_signif = qvalue::qvalue(pvalue, fdr.level = 0.05)$significant)
+```
+
+```{r}
+result.grn_concordance.signif$fdr_signif %>% table() %>% prop.table()
+```
+
+How many are truly correlated?
+```{r}
+1 - qvalue::qvalue(result.grn_concordance$pvalue, fdr.level = 0.05)$pi0
+```
+
+
+
+
+### Examples
+
+```{r}
+top12 <- result.grn_concordance.signif %>%
+    dplyr::filter(fdr_signif == TRUE) %>%
+    dplyr::arrange(desc(abs(corr))) %>%
+    dplyr::slice_head(n = 12) %>% pull(tf_tissue)
+```
+
+```{r, fig.width = 12, fig.height = 12}
+
+pp_top12 <- purrr::map(top12, function(tt){
+    dt.ort_regr %>%
+        dplyr::filter(tf_tissue == tt) %>% 
+        ggplot(aes(x = abs(zscore), y = connectivity)) +
+        geom_point() + theme_simple +
+        labs(subtitle = tt, x = '|Z score|', y = 'GRN Connectivity')
+})
+
+pp_b <- patchwork::wrap_plots(pp_top12, nrow = 4, ncol = 3) + patchwork::plot_layout(axis_titles = "collect")
+
+
+ggsave(file.path(figures_directory, 'GRN_concordance.scatterplot.absZscore_connectivity.png'), pp_b, width = 6500, height = 6500, dpi = 800, units = 'px')
+
+pp_b
+
+```
+
+
+This is weird. It seems as if the edge weights are bimodal. Some are positive, others are negative. I need to see if TFXcan replicates this. 
+
+```{r, fig.width = 12, fig.height = 16}
+pp_boxtop12 <- purrr::map(top12, function(tp){
+    dt.ort_regr %>%
+        dplyr::filter(tf_tissue == tp) %>%
+        dplyr::mutate(grp = ifelse(connectivity > 0, 'pos', 'neg')) %>%
+        ggplot(aes(x = grp, y = abs(zscore), fill = grp)) +
+        geom_boxplot(col = 'black', outlier.shape = NA) +
+        geom_jitter(alpha = 0.1, color = 'grey', size = 0.2) +
+        labs(x = 'GRN Connectivity', y = '|TFXcan Z-score|', subtitle = tp) + theme_simple
+})
+
+pp_b <- patchwork::wrap_plots(pp_boxtop12, nrow = 4, ncol = 3) + patchwork::plot_layout(axis_titles = "collect")
+
+
+ggsave(file.path(figures_directory, 'GRN_concordance.boxplot.absZscore_connectivity.png'), pp_b, width = 9000, height = 9000, dpi = 800, units = 'px')
+
+pp_b
+```
+
+
+### Enrichment in relevant tissues vs. others
+
+I carried out this test in Blood tissues. I can test if the p values are enriched in Blood vs other tissues.
+
+```{r}
+pval.blood <- result.grn_concordance %>% dplyr::filter(tissue %in% c('Blood', 'BoneMarrow', 'Thymus', "Cordblood", "LymphNode")) %>% dplyr::pull(pvalue)
+pval.others <- result.grn_concordance %>% dplyr::filter(!tissue %in% c('Blood', 'BoneMarrow', 'Thymus', "Cordblood", "LymphNode")) %>% dplyr::pull(pvalue)
+```
+
+```{r}
+ppqq <- ggplot_qqplot(pval.others, pval.blood, pch = NULL) +
+    geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed') +
+    labs(x = expression(-log[10] * 'P (Other Tissues)'), y = expression(-log[10] * 'P (Blood, Bone Marrow, Thymus, Lymph)'), subtitle = "") +
+    theme_simple
+
+ggsave(file.path(figures_directory, 'GRN_concordance.enrichment.blood_vs_other_tissues.QQplot.png'), ppqq, width = 3000, height = 3000, dpi = 800, units = 'px')
+
+ppqq
+```
+
+Sadly, there is no enrichment in blood vs. other tissues.
+
+# Does variation in TF gene expression correlate with binding-expression?
+
+## Data preparation and correlation
+
+```{r}
+# Collect TFs from TFXcan
+tfxcan_tfs <- '/beagle3/haky/users/temi/projects/TFPred-snakemake/data/ENPACT_CHIPPEAKS_2026-01-02/statistics/ENPACT_CHIPPEAKS_2026-01-02.compiled_stats.txt'
+dt.tfxcan_tfs <- data.table::fread(tfxcan_tfs) %>% dplyr::filter(type == 'test')
+head(dt.tfxcan_tfs); dim(dt.tfxcan_tfs)
+```
+
+```{r}
+tss_metadata <- data.table::fread("/beagle3/haky/users/temi/projects/dgtex/files/canonical_tss.matched_genes.tsv")
+# remove duplicates
+dups <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::group_by(locus) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt)) %>% 
+    dplyr::filter(cnt > 1)
+
+dt.tss_metadata <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::filter(!locus %in% dups$locus) %>% 
+    dplyr::distinct()
+```
+
+```{r}
+# available.tfs <- available.tf_gene %>% dplyr::select(tf) %>% distinct()
+# available.genes <- available.tf_gene %>% dplyr::select(gene) %>% dplyr::inner_join(dt.tss_metadata, by = c('gene' = 'locus')) %>% distinct()
+```
+I need to subset the individuals that I have TF binding data for
+
+```{r, eval = F}
+# tfxcan.geu.individuals <- "/scratch/midway3/temi/enpact_scores/geuvadis_tss_chippeaks_models"
+# inds <- list.files(tfxcan.geu.individuals) %>% strsplit('\\.') %>% sapply(getElement, 1)
+
+gexpr_processed <- data.table::fread('/beagle3/haky/data/Geuvadis/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz') %>%
+    tidyr::separate_wider_delim(Gene_Symbol, delim = '.', names = c('gene_name', 'id')) %>% dplyr::select(-c(TargetID, id, Chr, Coord)) %>%
+    dplyr::inner_join(dt.tss_metadata, by = c('gene_name' = 'ensembl_gene_id')) %>%
+    dplyr::relocate(gene_name, locus, external_gene_name)
+
+gexpr_processed <- gexpr_processed %>% dplyr::select(-locus)
+gexpr_processed[1:5, ]; dim(gexpr_processed)
+```
+
+```{r, eval = F}
+protcod_genes.expression <- gexpr_processed %>%
+    dplyr::select(-external_gene_name)
+dim(protcod_genes.expression)
+
+# nontf_genes.expression <- gexpr_processed %>%
+#     dplyr::filter(!external_gene_name %in% dt.tfxcan_tfs$assay) %>%
+#     dplyr::select(-external_gene_name)
+# dim(nontf_genes.expression)
+
+
+length(protcod_genes.expression$gene_name) == length(unique(protcod_genes.expression$gene_name))
+
+# length(nontf_genes.expression$gene_name) == length(unique(nontf_genes.expression$gene_name))
+
+protcod_genes.expression %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.protein_coding_genes.matrixA.tsv.gz"), row.names = F, col.names = T, quote = F, sep = '\t', compress = 'gzip')
+
+protcod_genes.expression %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.protein_coding_genes.matrixB.tsv.gz"), row.names = F, col.names = T, quote = F, sep = '\t', compress = 'gzip')
+```
+
+
+```{r}
+# test.expr <- tf_genes.expression %>% dplyr::filter(gene_name %in% c('ENSG00000152284', 'ENSG00000094631', 'ENSG00000130382'))
+
+# test.expr %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.test.matrix.tsv.gz"), row.names = T, col.names = T, quote = F, sep = '\t', compress = 'gzip')
+```
+
+This correlates tf expression with target gene expression
+```{r}
+matA <- file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.protein_coding_genes.matrixA.tsv.gz")
+matB <- file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.protein_coding_genes.matrixB.tsv.gz")
+matTEMP <- "/scratch/beagle3/temi/gene_modules/coexpression/temp" #"/scratch/beagle3/temi/gene_modules/correlations/temp"
+dir.create(matTEMP, recursive = TRUE)
+matRES <- file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.co_expression.protein_coding_genes.correlations.tsv.gz")
+```
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/correlate_binding_expression.acrs.sbatch {matA} {matB} {matTEMP} {matRES}")
+```
+
+
+## Analysis of results
+Here I will merge with the TFXcan promoter results and remove nearby, cis-regulators.
+
+```{r}
+dt.corr.expr.tf_nontf <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.tf_vs_nontf_genes.correlations.tsv.gz"))
+dim(dt.corr.expr.tf_nontf); dt.corr.expr.tf_nontf[1:5, ]
+```
+
+```{r, cache.lazy = FALSE}
+
+if(!base::exists("corr.expr_binding")){
+    corr.expr_binding <- data.table::fread('/scratch/midway3/temi/enpact_scores/expression_vs_binding.enpact_scores.geuvadis.chippeak_models.correlation.tsv.gz') %>%
+    dplyr::rename(tf_tissue = tf) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F)
+    dim(corr.expr_binding); corr.expr_binding[1:5, ]
+} else {
+    dim(corr.expr_binding); corr.expr_binding[1:5, ]
+}
+
+```
+
+```{r}
+summary(corr.expr_binding$spearman_corr); summary(abs(corr.expr_binding$spearman_corr)); summary(dt.corr.expr.tf_nontf$corr_coef); summary(abs(dt.corr.expr.tf_nontf$corr_coef))
+```
+
+```{r, eval = F}
+tss_metadata <- data.table::fread("/beagle3/haky/users/temi/projects/dgtex/files/canonical_tss.matched_genes.tsv")
+# remove duplicates
+dups <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::group_by(locus) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt)) %>% 
+    dplyr::filter(cnt > 1)
+
+dt.tss_metadata <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::filter(!locus %in% dups$locus) %>% 
+    dplyr::distinct()
+
+#
+gene_info <- dt.tss_metadata %>% dplyr::select(ensembl_gene_id, locus)
+
+#
+gene_info.2 <- dt.tss_metadata %>% dplyr::select(ensembl_gene_id, external_gene_name)
+```
+
+For this analysis I will focus on blood TFs in TFXcan
+
+```{r, eval = F}
+# , 'BoneMarrow', "Cordblood"
+blood.expr_binding <- corr.expr_binding %>%
+    dplyr::filter(tissue %in% c('Blood')) %>%
+    dplyr::rename(pvalue = spearman_pvalue)
+
+blood.expr_binding[1:5, ]; dim(blood.expr_binding)
+
+# 
+
+mod.corr.expr_binding <- dplyr::inner_join(blood.expr_binding, gene_info, by = c('gene' = 'locus')) %>%
+    dplyr::left_join(gene_info.2, by = c('tf' = 'external_gene_name'), suffix = c('.target_gene', '.tf_gene')) %>%
+    dplyr::select(ensembl_gene_id.target_gene, ensembl_gene_id.tf_gene, pvalue, spearman_corr) %>%
+    dplyr::rename(target_gene = ensembl_gene_id.target_gene, tf_gene = ensembl_gene_id.tf_gene)
+mod.corr.expr_binding[1:5, ]
+
+# Merge or join with the TF gene-Target gene data
+dt.binding_expression.concordance <- dplyr::inner_join(dt.corr.expr.tf_nontf, mod.corr.expr_binding, by = c('target_gene', 'tf_gene'), suffix = c('.expr', '.binding')) %>% dplyr::rename(corr.expr = corr_coef, corr.binding = spearman_corr)
+
+
+dt.binding_expression.concordance[1:5, ]; dim(dt.binding_expression.concordance)
+
+```
+
+### Remove nearby genes
+
+```{r, eval = F}
+trans_targets <- data.table::fread('/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/downloads/DatasetS1_trans-PrediXcan_whole_blood_FHS_results.txt.gz') %>% dplyr::select(trans_gene = predgene, target_gene = obsgene, FHS_beta, FHS_pval)
+trans_targets[1:3, ]; dim(trans_targets)
+```
+
+Select for these trans targets. To do this correctly, I should select target genes for each trans gene and use that as a basis to select within the co-expression/binding results. 
+```{r}
+# dt_results <- dt.binding_expression.concordance %>%
+#     dplyr::filter(tf_gene %in% trans_targets$trans_gene & target_gene %in% trans_targets$target_gene)
+
+# dt_results[1:5, ]; dim(dt_results)
+```
+
+```{r, eval = F}
+tfM <- dt.binding_expression.concordance %>%
+    dplyr::filter(tf_gene %in% trans_targets$trans_gene)
+
+# split the coexpression binding data by tf gene
+tfM_split <- base::split(tfM, f = tfM$tf_gene)
+
+# split the predixcan data by trans gene
+pxM_split <- trans_targets %>% dplyr::filter(trans_gene %in% names(tfM_split)) %>%
+    base::split(., f = .$trans_gene)
+
+# ensure that the names are equally ordered
+cnames <- intersect(names(tfM_split), names(pxM_split))
+tfM_split <- tfM_split[cnames]
+pxM_split <- pxM_split[cnames]
+```
+
+```{r, eval = F}
+length(names(tfM_split)); length(names(pxM_split))
+```
+
+```{r, eval = F}
+sapply(pxM_split, nrow)
+```
+
+```{r, eval = F}
+# for each tf_gene, which is also a trans_gene/target, select the target genes within the tfM data
+select.tfM_split <- purrr::map(cnames, function(cn){
+    # tfM_split[[cn]] %>%
+    #     dplyr::filter(target_gene %in% pxM_split[[cn]]$target_gene)
+    tfM_split[[cn]] %>%
+        dplyr::inner_join(pxM_split[[cn]], by = c('tf_gene' = 'trans_gene', 'target_gene'))
+}) %>%
+    dplyr::bind_rows()
+
+select.tfM_split %>%
+    data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "coexpression_binding_transregulation.data.tsv.gz"), row.names = F, col.names = T, quote = F, sep = '\t', compress = 'gzip')
+```
+
+### First, analyze the coexpression results
+#### What is 5-point summary stats of the p values and correlation coefficients?
+
+```{r}
+summary(dt.corr.expr.tf_nontf$corr_coef); summary(dt.corr.expr.tf_nontf$pvalue)
+```
+
+
+### What is the distribution of the correlation coefficients?
+
+```{r}
+dt.corr.expr.tf_nontf$corr_coef |> summary()
+```
+
+```{r}
+pp.all_corr <- ggplot() +
+    geom_histogram(aes(x = dt.corr.expr.tf_nontf$corr_coef), fill = 'grey', col = 'black') +
+    theme_simple +
+    labs(x = 'Correlation Coefficient', y = 'TF gene-Target gene pair', subtitle = 'Correlation of\ngene expression')
+pp.all_corr
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.coefficients.histogram.png"), pp.all_corr, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+```{r}
+pp.all_corr.2 <- ggplot() +
+    geom_boxplot(aes(y = dt.corr.expr.tf_nontf$corr_coef), fill = 'grey', col = 'black') +
+    theme_simple +
+    labs(y = 'Correlation Coefficient', x = '', subtitle = 'Correlation of\ngene expression') +
+    theme(
+        axis.title.x = element_blank(), # Removes the x-axis title
+        axis.text.x = element_blank(),  # Removes the tick labels
+        axis.ticks.x = element_blank()  # Removes the tick marks
+    )
+
+pp.all_corr.2
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.coefficients.boxplot.png"), pp.all_corr.2, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+::: {.callout}
+There is high correlation between expression of some TFs and non-TF genes
+:::
+
+### Median correlations
+
+```{r}
+med_correlations <- dt.corr.expr.tf_nontf %>%
+    dplyr::group_by(tf_gene) %>%
+    dplyr::summarize(medCorr = median(corr_coef, na.rm = TRUE))
+```
+
+```{r}
+pp.median_corr <- ggplot() +
+    geom_boxplot(aes(y = med_correlations$medCorr), fill = 'grey', col = 'black') +
+    theme_simple +
+    labs(y = 'Correlation Coefficient', x = '', subtitle = 'Correlation of\ngene expression') +
+    theme(
+        axis.title.x = element_blank(), # Removes the x-axis title
+        axis.text.x = element_blank(),  # Removes the tick labels
+        axis.ticks.x = element_blank()  # Removes the tick marks
+    )
+
+pp.median_corr
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.median_coefficients.boxplot.png"), pp.median_corr, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+### Are the p values significant?
+
+```{r}
+pp.all_pvalues <- qqunif.ggplot(dt.corr.expr.tf_nontf$pvalue, pch = '.') + theme_simple
+pp.all_pvalues
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.QQplot.pvalues.png"), pp.all_pvalues, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+### Using ACAT to aggregate the p values
+
+```{r}
+perTFGeneAcat <- dt.corr.expr.tf_nontf %>%
+    dplyr::group_by(tf_gene) %>%
+    dplyr::summarize(acatP = ACAT::ACAT(pvalue))
+perTFGeneAcat[1:5, ]
+```
+
+```{r}
+pp.acat_pvalues <- qqunif.ggplot(perTFGeneAcat$acatP, pch = '.') + theme_simple
+pp.acat_pvalues
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.QQplot.acat_pvalues.png"), pp.acat_pvalues, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+::: {.callout}
+These correlations are significant
+:::
+
+### Is every TF-gene correlated with at least one non-TF-gene?
+
+```{r}
+perGeneMaxCorr <- dt.corr.expr.tf_nontf %>%
+    dplyr::group_by(tf_gene) %>%
+    dplyr::summarize(maxCorr = max(abs(corr_coef), na.rm = TRUE))
+perGeneMaxCorr[1:5, ]
+```
+
+```{r}
+pp.max_corr <- ggplot() +
+    geom_histogram(aes(x = perGeneMaxCorr$maxCorr), fill = 'grey', col = 'black') +
+    theme_simple +
+    labs(x = 'Max Correlation Coefficient\nper TF gene', y = 'Number of TF genes', subtitle = 'Max Correlation of gene\nexpression per TF gene')
+pp.max_corr 
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.max_per_tf_corr.histogram.png"), pp.max_corr, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+
+### Using pi1 values, what is the proportion of truly correlated gene per TF-gene?
+```{r}
+pi1_estimator <- function(x){
+    x <- x[x != 0]
+    1 - qvalue::qvalue(x)$pi0
+}
+
+perTFGenePi1 <- dt.corr.expr.tf_nontf %>%
+    dplyr::group_by(tf_gene) %>%
+    dplyr::summarize(pi1 = pi1_estimator(pvalue))
+perTFGenePi1[1:5, ]
+```
+
+```{r}
+pp.pi1 <- ggplot() +
+    geom_histogram(aes(x = perTFGenePi1$pi1), fill = 'grey', col = 'black') +
+    theme_simple +
+    labs(x = 'pi1', y = 'Number of TF genes', subtitle = 'Proportion of truly\ncorrelated genes per TF gene')
+pp.pi1
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, "coexpression.correlation.pi1.histogram.png"), pp.pi1, width = 2000, height = 2000, units = 'px', dpi = 800)
+```
+
+### Can I show single examples?
+
+```{r}
+tf_genes.expression <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.tf_genes.matrix.tsv.gz")) %>% tibble::column_to_rownames('gene_name') %>% as.matrix()
+
+nontf_genes.expression <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.nontf_genes.matrix.tsv.gz")) %>% tibble::column_to_rownames('gene_name') %>% as.matrix()
+
+coln <- intersect(colnames(tf_genes.expression), colnames(nontf_genes.expression))
+
+tf_genes.expression <- tf_genes.expression[, coln]
+nontf_genes.expression <- nontf_genes.expression[, coln]
+
+tf_genes.expression[1:5, 1:5]; nontf_genes.expression[1:5, 1:5]
+```
+
+```{r}
+# top 12 most correlated
+top12 <- dt.corr.expr.tf_nontf %>%
+    dplyr::arrange(desc(abs(corr_coef))) %>%
+    head(n = 12)
+```
+
+```{r, fig.width = 12, fig.height = 12}
+p12 <- purrr::map(1:nrow(top12), function(i){
+    temp <- top12[i, ]
+    ggplot() +
+        geom_point(aes(x = tf_genes.expression[temp$tf_gene, ], y = nontf_genes.expression[temp$target_gene, ])) +
+        theme_simple +
+        labs(x = glue("{temp$tf_gene}, TF"), y = glue("{temp$target_gene}, Target Gene"))
+}, .progress = TRUE)
+
+ppw.p12 <- patchwork::wrap_plots(p12, nrow = 4, ncol = 3) + patchwork::plot_layout(axis_titles = "collect")
+ppw.p12
+```
+
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, 'coexpression.scatterplot.examples.png'), ppw.p12, width = 6500, height = 6500, dpi = 800, units = 'px')
+```
+
+## Analysis of the coexpression, binding, and transregulation results after removing nearby genes
+
+```{r}
+dt_results <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "coexpression_binding_transregulation.data.tsv.gz"))
+dim(dt_results); dt_results[1:3, ]
+```
+
+```{r}
+# merge with metadata to add gene names)
+mtd <- dt.tss_metadata %>% dplyr::select(ensembl_gene_id, external_gene_name)
+
+dt_results <- dt_results %>%
+    dplyr::inner_join(mtd, by = c('tf_gene' = 'ensembl_gene_id')) %>%
+    dplyr::rename(tf_gene_name = external_gene_name) %>%
+    dplyr::inner_join(mtd, by = c('target_gene' = 'ensembl_gene_id')) %>%
+    dplyr::rename(target_gene_name = external_gene_name)
+
+dt_results[1:3, ]
+```
+
+### Correlate with promoter-TFXcan
+
+Does predicted variability in TF gene-Target gene expression correlate with TF binding-Target gene?
+
+```{r}
+# how many of these do I have left?
+dt_results$tf_gene |> unique() |> length()
+dt_results$corr.expr |> summary()
+dt_results$corr.binding |> summary()
+```
+
+How are the p values distributed?
+
+```{r, fig.width = 12}
+qq_expr <- qqunif.ggplot(p = dt_results$pvalue.expr) + theme_simple + labs(subtitle = 'Coexpression')
+
+qq_binding <- qqunif.ggplot(p = dt_results$pvalue.binding) + theme_simple + labs(subtitle = 'Binding')
+
+qq_transreg <- qqunif.ggplot(p = dt_results$FHS_pval) + theme_simple + labs(subtitle = 'Transregulation')
+
+ppw.qqthree <- patchwork::wrap_plots(qq_expr, qq_binding, qq_transreg, nrow = 1, ncol = 3) + patchwork::plot_layout(axis = "collect_y")
+ppw.qqthree
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, 'coexpression_binding_transregulation.QQplots.png'), ppw.qqthree, width = 6500, height = 2500, dpi = 800, units = 'px')
+```
+
+### How are these split per TF gene?
+
+If a TF is significantly coexpressed with a gene, is coregulation significant too?
+
+```{r}
+list.concordance <- base::split(dt_results, f = dt_results$tf_gene_name)
+length(list.concordance)
+```
+
+```{r}
+list.concordance[[1]]$pvalue.binding |> hist()
+```
+
+```{r}
+list.concordance[[1]]$pvalue.expr |> hist()
+```
+
+
+```{r}
+pvs <- purrr::map(names(list.concordance), function(lc){
+    with(list.concordance[[lc]], cor.test(x = abs(pvalue.expr), y = abs(pvalue.binding)))$p.value
+}) %>% unlist()
+```
+
+```{r}
+hist(pvs)
+```
+
+Correlation of co-expression and binding for each TF-gene, absolute values
+```{r, eval = F}
+plots_abs_corr <- purrr::map(names(list.concordance), function(lc){
+    ggplot(list.concordance[[lc]], aes(x = abs(corr.expr), y = abs(corr.binding))) +
+    geom_point() +
+    theme_simple + 
+    geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed') +
+    labs(x = '|correlation of coexpression|', y = '|correlation of binding|', subtitle = glue::glue("{lc}: coexpression vs binding"))
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.abs_correlations.pdf'), gridExtra::marrangeGrob(grobs = plots_abs_corr, nrow=1, ncol=1))
+```
+
+
+Correlation of co-expression and binding for each TF-gene, raw values
+```{r, eval = F}
+plots_corr <- purrr::map(names(list.concordance), function(lc){
+    ggplot(list.concordance[[lc]], aes(x = corr.expr, y = corr.binding)) +
+    geom_point() +
+    theme_simple +
+    geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed') +
+    labs(x = 'correlation of expression', y = 'correlation of binding', subtitle = glue::glue("{lc}: coexpression vs binding"))
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.correlations.pdf'), gridExtra::marrangeGrob(grobs = plots_corr, nrow=1, ncol=1))
+```
+qqplot, comparing each p values against the null
+```{r, eval = F}
+# purrr and plot
+plotlist <- purrr::map(names(list.concordance), function(lc){
+    tgene <- list.concordance[[lc]] %>%
+        dplyr::filter(pvalue.expr != 0, pvalue.binding != 0)
+
+    qqcompare.ggplot(p1 = tgene$pvalue.expr, p2 = tgene$pvalue.binding, names = c('Coexpression', 'Binding')) + theme_simple + scale_color_manual(name = '', values = c('Coexpression' = 'red', 'Binding' = 'darkgreen')) +
+    labs(subtitle = glue('{lc}: QQ plot of p values'))
+
+    # ggplot_qqplot(x = tgene$pvalue.tfxcan, y = tgene$pvalue.gtex) +
+    #     geom_abline(intercept = 0, slope = 1, col = 'red') +
+    #     theme_simple +
+    #     labs(x = 'TFXcan', y = 'GTEx', subtitle = glue('{cll}: QQ plot of p values'))
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.QQplot.pvalues.pdf'), gridExtra::marrangeGrob(grobs = plotlist, nrow=1, ncol=1))
+```
+
+```{r, eval = F}
+plotlist <- purrr::map(names(list.concordance), function(lc){
+    tgene <- list.concordance[[lc]] %>%
+        dplyr::filter(pvalue.expr != 0, pvalue.binding != 0)
+
+    tgene %>%
+        ggplot(aes(-log10(pvalue.expr), -log10(pvalue.binding))) + 
+        geom_point() +
+        theme_simple +
+        labs(subtitle = glue('{lc}: -log10(p values)')) +
+        geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed')
+}, .progress = TRUE)
+
+
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.neglog10.pvalues.pdf'), gridExtra::marrangeGrob(grobs = plotlist, nrow=1, ncol=1))
+```
+
+### Compare coexpression with binding
+
+```{r, eval = F}
+plotlist <- purrr::map(names(list.concordance), function(lc){
+    with(list.concordance[[lc]], ggplot_qqplot(-log10(pvalue.expr), -log10(pvalue.binding))) +
+        theme_simple +
+        labs(x = "Coexpression", y = 'Binding', subtitle = glue('{lc}: QQ plot -log10(p values)')) +
+        geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed')
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.QQplot.neglog10.pvalues.pdf'), gridExtra::marrangeGrob(grobs = plotlist, nrow=1, ncol=1))
+```
+
+### Compare coexpression with transregulation
+
+```{r, eval = F}
+plotlist <- purrr::map(names(list.concordance), function(lc){
+    with(list.concordance[[lc]], ggplot_qqplot(-log10(FHS_pval), -log10(pvalue.expr))) +
+        theme_simple +
+        labs(x = "Transregulation", y = 'Coexpression', subtitle = glue('{lc}: QQ plot -log10(p values)')) +
+        geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed')
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'coexpression_vs_transregulation.QQplot.neglog10.pvalues.pdf'), gridExtra::marrangeGrob(grobs = plotlist, nrow=1, ncol=1))
+```
+
+### Compare binding with transregulation
+```{r, eval = F}
+plotlist <- purrr::map(names(list.concordance), function(lc){
+    with(list.concordance[[lc]], ggplot_qqplot(-log10(FHS_pval), -log10(pvalue.binding))) +
+        theme_simple +
+        labs(x = "Transregulation", y = 'Binding', subtitle = glue('{lc}: QQ plot -log10(p values)')) +
+        geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed')
+}, .progress = TRUE)
+
+ggsave(file.path(figures_directory, 'binding_vs_transregulation.QQplot.neglog10.pvalues.pdf'), gridExtra::marrangeGrob(grobs = plotlist, nrow=1, ncol=1))
+```
+
+
+### Bonferroni adjustment
+```{r}
+num_bonferroni <- purrr::map(list.concordance, function(dt){
+    dt %>%
+        dplyr::mutate(ln = nrow(.), nexpr_signif = pvalue.expr < (0.05/ln), binding_signif = pvalue.binding < (0.05/ln)) %>%
+        dplyr::group_by(tf_gene) %>%
+        dplyr::summarize(num_expr_signif = sum(nexpr_signif == TRUE), num_binding_signif = sum(binding_signif == TRUE))
+}, .progress = TRUE) %>%
+    dplyr::bind_rows()
+```
+
+```{r}
+num_bonferroni$num_expr_signif |> summary();
+num_bonferroni$num_binding_signif |> summary()
+```
+
+- Aggregate using ACAT
+
+```{r}
+pi1list <- purrr::map(names(list.concordance), function(lc){
+    list.concordance[[lc]] %>%
+        dplyr::group_by(tf_gene_name) %>%
+        dplyr::summarize(pi1.expr = 1 - qvalue::qvalue(pvalue.expr)$pi0,
+            pi1.binding = 1 - qvalue::qvalue(pvalue.binding)$pi0)
+}, .progress = TRUE) %>%
+    dplyr::bind_rows()
+```
+
+```{r}
+ppn_pi1 <- pi1list %>%
+    ggplot(aes(x = pi1.expr, y = pi1.binding)) +
+    geom_point() +
+    theme_simple +
+    labs(x = "Expression (pi1)", y = 'Binding (pi1)', subtitle = 'Proportion of truly correlated\n(binding or expression) \nTF-target genes') +
+    geom_abline(intercept = 0, slope = 1, col = 'grey', linetype = 'dashed')
+ppn_pi1
+```
+
+```{r, eval = F}
+ggsave(file.path(figures_directory, 'coexpression_vs_binding.pi1_values.png'), ppn_pi1, width = 2000, height = 2000, dpi = 800, units = 'px')
+```
+
+### Can co-expression or binding predict transregulation?
+
+```{r}
+library(PRROC)
+label <- as.integer(dt_results$FHS_pval < 0.05)
+roc_expr <- PRROC::roc.curve(scores.class0 = -log10(dt_results$pvalue.expr), weights.class0 = label, curve = TRUE)
+roc_binding <- PRROC::roc.curve(scores.class0 = -log10(dt_results$pvalue.binding), weights.class0 = label, curve = TRUE)
+
+plot(roc_expr);    roc_expr$auc
+plot(roc_binding); roc_binding$auc
+
+```
+
+### Are the most significant transregulators significant in coexpression or binding?
+
+```{r}
+# qqcompare.ggplot(
+#   p1 = dt_results$pvalue.expr,
+#   p2 = dt_results$FHS_pval,
+#   names = c('Expression', 'Transregulation')
+# ) + theme_simple
+
+```
+
+```{r}
+pi1_expr <- 1 - qvalue::qvalue(dt_results$pvalue.expr)$pi0
+pi1_transreg <- 1 - qvalue::qvalue(dt_results$FHS_pval)$pi0
+pi1_binding <- 1 - qvalue::qvalue(dt_results$pvalue.binding)$pi0
+cat("pi1 expression:      ", pi1_expr, "\n")
+cat("pi1 transregulation: ", pi1_transreg, "\n")
+cat("pi1 binding: ", pi1_binding, "\n")
+```
+
+```{r}
+pwtest <- wilcox.test(
+  -log10(dt_results$pvalue.expr),
+  -log10(dt_results$FHS_pval),
+  paired = TRUE,
+  alternative = "greater"  # test if expression is more enriched
+)
+
+pwtest$p.value
+```
+
+```{r}
+cutoff <- 0.05
+expr_sig <- dt_results$pvalue.expr < (cutoff/nrow(dt_results))
+transreg_sig <- dt_results$FHS_pval < (cutoff/nrow(dt_results))
+
+tab <- table(expr_sig, transreg_sig)
+tab
+mcnemar.test(tab)  # tests asymmetry: are pairs where only expr is sig > pairs where only transreg is sig?
+```
+
+```{r}
+cutoff <- 0.05
+binding_sig <- dt_results$pvalue.binding < (cutoff/nrow(dt_results))
+transreg_sig <- dt_results$FHS_pval < (cutoff/nrow(dt_results))
+
+tab <- table(binding_sig, transreg_sig)
+tab
+mcnemar.test(tab)  # tests asymmetry: are pairs where only expr is sig > pairs where only transreg is sig?
+```
+
+
+```{r}
+# library(mediation)
+# # For one TF-target pair:
+# tf_expr    <- tf_genes.expression["ENSG...", ]
+# binding    <- # enpact score vector for this TF-target pair
+# target_expr <- nontf_genes.expression["ENSG...", ]
+
+# df <- data.frame(tf_expr, binding, target_expr)
+# m.mediator <- lm(binding ~ tf_expr, data = df)
+# m.outcome  <- lm(target_expr ~ tf_expr + binding, data = df)
+# med <- mediation::mediate(m.mediator, m.outcome, treat = "tf_expr", mediator = "binding")
+# summary(med)
+
+```
+
+### Jaccard clustering of TF target gene sets
+
+```{r}
+sig_targets <- dt_results %>%
+    dplyr::filter(FHS_pval < 0.05) %>%
+    base::split(., .$tf_gene_name) %>%
+    purrr::map(~ .$target_gene)
+
+# Pairwise Jaccard
+jaccard <- function(a, b) length(intersect(a, b)) / length(union(a, b))
+
+tfs <- names(sig_targets)
+jmat <- outer(tfs, tfs, Vectorize(function(i, j) jaccard(sig_targets[[i]], sig_targets[[j]])))
+dimnames(jmat) <- list(tfs, tfs)
+
+ComplexHeatmap::Heatmap(jmat, col = brewer.pal(n = 8, name = "Reds"), cluster_rows = T, cluster_columns = T, column_names_rot = 90, 
+        heatmap_legend_param = list(title = expression("Similarity")), row_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'))
+
+```
+
+```{r}
+sig_targets <- dt_results %>%
+    dplyr::filter(pvalue.expr < (cutoff/nrow(dt_results))) %>%
+    base::split(., .$tf_gene_name) %>%
+    purrr::map(~ .$target_gene)
+
+# Pairwise Jaccard
+jaccard <- function(a, b) length(intersect(a, b)) / length(union(a, b))
+
+tfs <- names(sig_targets)
+jmat <- outer(tfs, tfs, Vectorize(function(i, j) jaccard(sig_targets[[i]], sig_targets[[j]])))
+dimnames(jmat) <- list(tfs, tfs)
+
+ComplexHeatmap::Heatmap(jmat, col = brewer.pal(n = 8, name = "Reds"), cluster_rows = T, cluster_columns = T, column_names_rot = 90, 
+        heatmap_legend_param = list(title = expression("Similarity")), row_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'))
+```
+
+```{r}
+sig_targets <- dt_results %>%
+    dplyr::filter(pvalue.binding < 0.05) %>%
+    base::split(., .$tf_gene_name) %>%
+    purrr::map(~ .$target_gene)
+
+# Pairwise Jaccard
+jaccard <- function(a, b) length(intersect(a, b)) / length(union(a, b))
+
+tfs <- names(sig_targets)
+jmat <- outer(tfs, tfs, Vectorize(function(i, j) jaccard(sig_targets[[i]], sig_targets[[j]])))
+dimnames(jmat) <- list(tfs, tfs)
+
+ComplexHeatmap::Heatmap(jmat, col = brewer.pal(n = 8, name = "Reds"), cluster_rows = T, cluster_columns = T, column_names_rot = 90, 
+        heatmap_legend_param = list(title = expression("Similarity")), row_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'))
+```
+
+
+### Do TFs in the same family tend to bind to the same overlapping genes?
+
+```{r}
+library(openxlsx)
+```
+
+```{r}
+tf_family <- openxlsx::read.xlsx('/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/downloads/1-s2.0-S0092867418301065-mmc2.xlsx', sheet = 2, startRow = 2) %>% dplyr::filter(X4 == 'Yes') %>% dplyr::select(ID, Name, DBD) %>%
+    dplyr::filter(DBD != 'Unknown')
+```
+
+```{r}
+dim(tf_family); tf_family[1:5, ]
+```
+
+```{r}
+# Use FHS transregulation as "regulated targets" (most stringent)
+sig_targets <- dt_results %>%
+    dplyr::filter(pvalue.binding < (0.05/nrow(dt_results))) %>%
+    base::split(., .$tf_gene_name) %>%
+    purrr::map(~ .$target_gene)
+
+tfs <- names(sig_targets)
+jaccard <- function(a, b) length(intersect(a, b)) / length(union(a, b))
+jmat <- outer(tfs, tfs, Vectorize(function(i, j) jaccard(sig_targets[[i]], sig_targets[[j]])))
+dimnames(jmat) <- list(tfs, tfs)
+```
+
+```{r}
+# Long-format pairwise Jaccard (upper triangle only)
+jlong <- as.data.frame(as.table(jmat)) %>%
+    setNames(c('tf1', 'tf2', 'jaccard')) %>%
+    dplyr::filter(as.character(tf1) != as.character(tf2))  # avoid duplicates
+
+# Join family annotation for both TFs
+jlong <- jlong %>%
+    dplyr::inner_join(tf_family, by = c('tf1' = 'Name')) %>%
+    dplyr::rename(family1 = DBD) %>%
+    dplyr::inner_join(tf_family, by = c('tf2' = 'Name')) %>%
+    dplyr::rename(family2 = DBD) %>%
+    dplyr::mutate(same_family = family1 == family2) %>%
+    dplyr::filter(!is.na(same_family)) %>% 
+    dplyr::filter(tf1 != tf2)
+```
+
+```{r}
+# jlong %>% dplyr::filter(!is.na(same_family)) %>% dplyr::filter(tf1 != tf2) %>% dplyr::filter(same_family == TRUE)
+```
+
+```{r}
+obs_diff <- with(jlong, mean(jaccard[same_family]) - mean(jaccard[!same_family]))
+
+set.seed(2025)
+perm_diffs <- replicate(1000, {
+    shuffled <- jlong %>% dplyr::mutate(same_family = sample(same_family))
+    with(shuffled, mean(jaccard[same_family]) - mean(jaccard[!same_family]))
+})
+
+perm_pval <- mean(perm_diffs >= obs_diff)
+```
+
+```{r}
+hist(perm_diffs, xlab = 'Difference in Jaccard similarity', ylab = 'Number of TF regulators')
+abline(v = obs_diff, col = "red", lwd = 2, lty = 2) 
+```
+
+```{r}
+pp.jaccard.perm <- ggplot(jlong %>% dplyr::filter(!is.na(same_family)), 
+       aes(x = same_family, y = jaccard, fill = same_family)) +
+    geom_boxplot(outlier.shape = NA, col = 'black') +
+    geom_jitter(alpha = 0.2, size = 0.6, color = 'grey') +
+    theme_simple +
+    scale_x_discrete(labels = c('Different family', 'Same family')) +
+    labs(x = '', y = 'Jaccard similarity of target sets',
+         subtitle = 'Do same-family TFs share more targets?') +
+    theme(legend.position = 'none')
+
+
+pp.jaccard.perm
+
+ggsave(file.path(figures_directory, 'jaccard_TF_family.png'), pp.jaccard.perm, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+jlong %>% dplyr::filter(!is.na(same_family)) %>% dplyr::filter(same_family == TRUE)
+```
+
+```{r}
+wtest <- wilcox.test(jaccard ~ same_family, data = jlong %>% dplyr::filter(!is.na(same_family))) 
+```
+
+```{r}
+wtest$p.value
+```
+
+```{r}
+jlong %>% dplyr::filter(!is.na(same_family)) %>% dplyr::filter(same_family == TRUE)
+```
+
+
+4. Mediation: does binding mediate TF expression → target expression?
+You have all three variables. Test if TF binding at the target TSS is on the causal path between TF gene expression and target gene expression using mediation:
+
+```{r, eval = F}
+library(mediation)
+# For one TF-target pair:
+tf_expr    <- tf_genes.expression["ENSG...", ]
+binding    <- # enpact score vector for this TF-target pair
+target_expr <- nontf_genes.expression["ENSG...", ]
+
+df <- data.frame(tf_expr, binding, target_expr)
+m.mediator <- lm(binding ~ tf_expr, data = df)
+m.outcome  <- lm(target_expr ~ tf_expr + binding, data = df)
+med <- mediation::mediate(m.mediator, m.outcome, treat = "tf_expr", mediator = "binding")
+summary(med)
+```
+
+
+6. Pathway enrichment on concordant TF target sets
+For TFs where all three signals agree (co-expression + binding + transregulation significant), test if their target genes are enriched for known pathways:
+
+```{r}
+library(clusterProfiler)
+library(org.Hs.eg.db)
+```
+
+```{r}
+concordant_targets <- dt_results %>%
+    dplyr::filter(pvalue.expr < 0.05, pvalue.binding < 0.05, FHS_pval < 0.05) %>%
+    dplyr::pull(target_gene) %>% unique()
+
+enrichment_result <- enrichGO(gene = concordant_targets, OrgDb = org.Hs.eg.db, keyType = "ENSEMBL", ont = "BP")
+```
+
+```{r}
+enrichment_result
+```
+
+```{r}
+dotplot(enrichment_result,showCategory=20,font.size=10,label_format=70)+
+  scale_size_continuous(range=c(1, 7))+
+  theme_minimal() +
+  ggtitle("GO Enrichment of up-regulated genes")
+```
+
+
+### Split TFs into 4 kinds
+1. Signif expression = signif binding
+2. Signif expression != signif binding
+
+```{r}
+dt_bonferroni <- purrr::map(list.concordance, function(dt){
+    dt %>%
+        dplyr::mutate(ln = nrow(.), expr_signif = pvalue.expr < (0.05/ln), binding_signif = pvalue.binding < (0.05/ln))
+}, .progress = TRUE) %>%
+    dplyr::bind_rows()
+```
+
+
+### UpSet plot of TF-target pair significance across all three signals
+
+```{r}
+library(UpSetR)
+
+# Build a per-TF-target membership matrix for all three signals
+# Use Bonferroni threshold for expr and binding (as computed above),
+# and nominal p < 0.05 for transregulation (FHS)
+upset_input <- purrr::map(list.concordance, function(dt){
+    dt %>%
+        dplyr::mutate(
+            ln             = nrow(.),
+            expr_signif    = as.integer(pvalue.expr     < (0.05 / ln)),
+            binding_signif = as.integer(pvalue.binding  < (0.05 / ln)),
+            transreg_signif = as.integer(FHS_pval       < (0.05 / ln))
+        )
+}, .progress = TRUE) %>%
+    dplyr::bind_rows() %>%
+    dplyr::select(expr_signif, binding_signif, transreg_signif)
+
+pp_upset <- UpSetR::upset(
+    upset_input,
+    sets            = c('expr_signif', 'binding_signif', 'transreg_signif'),
+    sets.bar.color  = c('#E41A1C', '#377EB8', '#4DAF4A'),
+    order.by        = 'freq',
+    mainbar.y.label = 'Number of TF-target pairs',
+    sets.x.label    = 'Total significant pairs',
+    text.scale      = c(1.2, 1.1, 1, 1, 1.1, 0.9)
+)
+
+pp_upset
+```
+
+```{r, eval = F}
+png(file.path(figures_directory, 'upset.expr_binding_transreg.significance.png'),
+    width = 5500, height = 3500, res = 800)
+pp_upset
+dev.off()
+```
+
+
+
+```{r, cache = FALSE}
+utils::sessionInfo()
+
+knitr::knit_exit()
+```
+
+
+## Examples
+
+```{r}
+dt.binding_expression.concordance$corr_coef %>% summary();
+
+dt.binding_expression.concordance$spearman_corr %>% summary()
+```
+
+```{r}
+dt.binding_expression.concordance %>%
+    dplyr::slice_max(corr_coef)
+```
+
+```{r}
+dt.binding_expression.concordance %>%
+    dplyr::slice_max(spearman_corr)
+```
+
+```{r}
+perGeneCorrList <- purrr::map(names(list.concordance), function(lc){
+    list.concordance[[lc]] %>%
+        dplyr::group_by(tf_gene) %>%
+        dplyr::summarize(corr = cor.test(corr_coef, spearman_corr)$estimate)
+}, .progress = TRUE) %>%
+    dplyr::bind_rows() %>%
+    dplyr::arrange(desc(corr))
+```
+
+```{r}
+ppn_corr <- perGeneCorrList %>%
+    ggplot(aes(x = corr)) +
+    geom_histogram(col = 'black') +
+    theme_simple +
+    labs(x = "Correlation Coefficient", y = 'Number of TFs', subtitle = 'Correlation')
+
+ggsave(file.path(figures_directory, 'expression_vs_binding.correlation_of_correlations.png'), ppn_corr, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+::: {.callout}
+
+The effect of binding on expression and effect of expression on expression are not well-correlated.
+:::
+
+```{r}
+dt.binding_expression.concordance %>% dplyr::filter(corr_coef > 0.6 & spearman_corr > 0.6)
+```
+
+```{r}
+perTFGeneAcat <- dt.binding_expression.concordance %>%
+    dplyr::group_by(tf_gene) %>%
+    dplyr::summarize(acatP = ACAT::ACAT(pvalue))
+perTFGeneAcat[1:5, ]
+```
+
+```{r}
+pp.acat_pvalues <- qqunif.ggplot(perTFGeneAcat$meanCorr) + theme_simple
+
+ggsave(file.path(figures_directory, "tfGene_vs_targetGene.qqplot.acat_pvalues.png"), pp.acat_pvalues, width = 3000, height = 3000, units = 'px', dpi = 800)
+```
+
+```{r}
+dt.binding_expression.concordance %>%
+    dplyr::filter(pvalue.tfxcan != 0) %>% dplyr::slice_head(n = 1000) %>% with(., cor.test(-log10(pvalue.tfxcan), -log10(pvalue.gtex)))
+```
+
+```{r}
+length(unique(dt.binding_expression.concordance$tf_gene))
+```
+
+```{r}
+tgene <- dt.binding_expression.concordance %>%
+    dplyr::filter(tf_gene == 'ENSG00000152284')
+```
+
+```{r}
+pppvalues <- qqcompare.ggplot(p1 = tgene$pvalue.tfxcan, p2 = tgene$pvalue.gtex, names = c('TFXcan', 'GTEx')) + theme_simple + scale_color_manual(name = '', values = c('TFXcan' = 'darkgreen', 'GTEx' = 'red'))
+pppvalues
+# ggsave(file.path(figures_directory, '../qqplot.GATA1_ACRs.pvalues.png'), pppvalues, width = 3000, height = 3000, dpi = 800, units = 'px')
+
+# pppvalues <- ggplot_qqplot(x = tgene$pvalue.tfxcan), y = tgene$pvalue.gtex)) +
+
+#  +
+# labs(x = 'TFXcan', y = 'GTEx', subtitle = 'QQ plot of p values')
+```
+
+
+
+```{r}
+qqcompare.ggplot <- function(p1, p2, names = c('observed', 'null'), mlog10_p_thres=30)
+```
+
+```{r}
+with(dt.binding_expression.concordance[1:1000, ], cor.test(-log10(pvalue.tfxcan), -log10(pvalue.gtex)))
+```
+
+
+
+
+
+
+```{r}
+summary(dt.res.pvalues$pvalue)
+```
+
+```{r}
+1 - qvalue::qvalue(dt.res.pvalues$pvalue)$pi0
+```
+
+```{r}
+pppvalues <- ggplot_qqplot(y = regulated_genes$pvalue, x = non_regulated_genes$pvalue) +
+geom_abline(intercept = 0, slope = 1, col = 'red') +
+theme_simple +
+labs(y = 'ACRs target genes', x = 'ACRs non-target genes', subtitle = 'QQ plot of p values')
+
+ggsave(file.path(figures_directory, '../qqplot.GATA1_ACRs.pvalues.png'), pppvalues, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+dt.binding_expression.concordance %>%
+    dplyr::filter(pvalue.tfxcan == 0) %>% dplyr::slice_head(n = 1)
+```
+
+```{r}
+unique(dt.binding_expression.concordance$tf_gene)[1:4]
+```
+
+
+```{r}
+dt.binding_expression.concordance %>%
+    dplyr::filter(tf_gene == 'ENSG00000152284', gene == 'ENSG00000140807')
+```
+
+```{r}
+dt.res.merged %>%
+    dplyr::filter(tf_gene == 'ENSG00000152284', gene == 'ENSG00000140807')
+```
+
+```{r}
+
+comnam <- intersect(colnames(nontf_genes.expression), colnames(tf_genes.expression))
+
+nx <- nontf_genes.expression %>% dplyr::filter(gene_name == 'ENSG00000140807') %>% dplyr::select(-all_of(c('gene_name'))) %>% as.matrix()
+
+nx <- nx[, comnam[-1]]
+
+ny <- tf_genes.expression %>% dplyr::filter(gene_name == 'ENSG00000152284') %>% dplyr::select(-all_of(c('gene_name', 'locus'))) %>% as.matrix()
+
+ny <- ny[, comnam[-1]]
+```
+
+```{r}
+length(nx); length(ny)
+```
+
+```{r}
+cte <- cor.test(nx, ny)
+cte$estimate; cte$p.value
+```
+
+
+
+
+
+
+
+
+```{r}
+knitr::knit_exit()
+```
+
+
+
+# Enhancer-target gene
+
+Enhancer's downloaded from: http://www.licpathway.net/ENdb/index.php
+
+http://reggen.iiitd.edu.in:1207/ePerturbDB-html/downloads.php
+
+```{r}
+enhancers_directory <- '/beagle3/haky/data/enhancers'
+```
+```{r}
+utils::download.file("http://www.licpathway.net/ENdb/download/enhancer_main.txt", destfile = file.path(enhancers_directory, 'enhancer_main.txt'))
+```
+
+
+```{r}
+dt <- data.table::fread(file.path(enhancers_directory, 'enhancer_perturbation/enh_perturb.tsv'))
+
+```
+
+
+# Chromatin accessibility - Target genes association
+
+```{r}
+perturbation_directory <- '/beagle3/haky/users/temi/data/enhancers/perturbation'
+```
+What TFs and genes do I have?
+TFs from Enpact
+Genes from Geuvadis LCL expression
+```{r}
+corr.expr_binding <- data.table::fread('/scratch/midway3/temi/enpact_scores/expression.regression.enpact_scores.geuvadis.chippeak_models.tsv.gz') %>%
+    dplyr::filter(term == 'binding') %>%
+    dplyr::rename(estimate = Estimate, se = `Std. Error`, tvalue = `t value`, pvalue = `Pr(>|t|)`) %>%
+    dplyr::mutate(zscore = estimate/se) %>%
+    tidyr::separate_wider_delim(col = tf_tissue, names = c('tf', 'tissue'), delim = '_', cols_remove = F)
+dim(corr.expr_binding); corr.expr_binding[1:5, ]
+```
+
+```{r}
+tss_metadata <- data.table::fread("/beagle3/haky/users/temi/projects/dgtex/files/canonical_tss.matched_genes.tsv")
+# remove duplicates
+dups <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::group_by(locus) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt)) %>% 
+    dplyr::filter(cnt > 1)
+
+dt.tss_metadata <- tss_metadata %>%
+    dplyr::select(ensembl_gene_id, locus, external_gene_name) %>%
+    dplyr::filter(!locus %in% dups$locus) %>% 
+    dplyr::distinct()
+```
+
+```{r}
+available.tf_gene <- corr.expr_binding %>%
+    dplyr::select(tf, gene) %>% distinct()
+
+available.tfs <- available.tf_gene %>% dplyr::select(tf) %>% distinct()
+available.genes <- available.tf_gene %>% dplyr::select(gene) %>% dplyr::inner_join(dt.tss_metadata, by = c('gene' = 'locus')) %>% distinct()
+```
+
+```{r}
+available.genes <- data.table::fread('/beagle3/haky/data/Geuvadis/expression/GD462.GeneQuantRPKM.50FN.samplename.resk10.txt.gz') %>%
+    dplyr::select(TargetID, Gene_Symbol, Chr, Coord) %>%
+    tidyr::separate_wider_delim(Gene_Symbol, delim = '.', names = c('gene_name', 'id')) %>% dplyr::select(-c(TargetID, id, Chr, Coord)) %>%
+    dplyr::inner_join(available.genes, by = c('gene_name' = 'ensembl_gene_id'))
+available.genes[1:5, ]
+```
+
+```{r}
+dt_genes <- data.table::fread(file.path(perturbation_directory, 'genes_tf.tsv'))
+dt_accessibility <- data.table::fread(file.path(perturbation_directory, 'accessible_regions_tf.tsv')) 
+```
+
+```{r}
+dt_perturbation <- dplyr::inner_join(dt_genes, dt_accessibility, by = 'perturbation_name', suffix = c('.gene', '.accessibility')) 
+dim(dt_perturbation)
+```
+
+
+```{r}
+dt_genes %>%
+    dplyr::group_by(perturbation_name) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt))
+```
+
+```{r}
+dt_accessibility %>%
+    dplyr::group_by(perturbation_name) %>%
+    dplyr::summarize(cnt = n()) %>%
+    dplyr::arrange(desc(cnt))
+```
+
+```{r}
+dt_perturbation.large <- dt_perturbation %>% dplyr::filter(abs(log2FC.gene) > 1.5, abs(log2FC.accessibility) > 1.5)
+dim(dt_perturbation.large)
+```
+
+```{r}
+dt_perturbation.large[1:5, ]
+```
+
+Pick one TF: GATA1
+
+Select all accessibility (ACR) and target genes
+```{r}
+GATA1.pert <- dt_perturbation.large %>% dplyr::filter(perturbation_name == 'GATA1') %>% dplyr::filter(gene_ID %in% available.genes$external_gene_name)
+GATA1.pert[1:5, ]; dim(GATA1.pert)
+```
+
+```{r}
+GATA1.pert$log2FC.gene |> summary()
+GATA1.pert$log2FC.accessibility |> summary()
+```
+
+
+```{r}
+# prepare the data
+GATA1.pert.acrs <- GATA1.pert %>% dplyr::select(peak_locus) %>% dplyr::mutate(peak_locus = gsub("-", '_', peak_locus)) %>% distinct() %>% tidyr::separate_wider_delim(peak_locus, delim = '_', names = c('chrom', 'start', 'end'), cols_remove = FALSE) %>% dplyr::mutate(across(c('start', 'end'), as.numeric)) %>% dplyr::mutate(width = end - start)
+
+
+GATA1.pert.acrs %>% dplyr::select(peak_locus) %>%
+    data.table::fwrite(file.path(tfxcan_directory, 
+    'experiments/gene_modules/data/GATA1.ACRs.tsv'), col.names = F, row.names = F, quote = F, sep = '\t')
+```
+
+```{r}
+GATA1.pert.acrs$width |> summary()
+```
+
+
+## Predict epigenomic features and TF binding
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/enformer_predict.sbatch /beagle3/haky/users/temi/projects/TFXcan-snakemake/workflow/enformer/enformer_predict.py /beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/data/GATA1.ACRs.enformer_params.yaml")
+```
+
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/enformer_merge.sbatch /beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/data/GATA1_ACRs.aggregation_config.yaml /scratch/beagle3/temi/gene_modules/epigenomes GATA1_ACRs.epigenomes.h5")
+```
+
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/enformer_process.sbatch /scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.h5 /scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed")
+```
+
+```{r}
+# /beagle3/haky/users/temi/projects/TFXcan/src/enpact_predict.sbatch
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/enpact_predict.sbatch /scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.matrix.h5.gz /beagle3/haky/users/temi/projects/TFXcan/data/chippeaks/weights/ENPACT_CHIPPEAKS_2026-01-02.compiled_weights.lambda.1se.txt.gz /scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.metadata.tsv /scratch/beagle3/temi/gene_modules/enpact_scores/GATA1_ACRs/GATA1_ACRs")
+```
+
+
+## Gather all predictions into 1
+
+```{r}
+calculate_regression_of_two_matrices <- function(ma, mb, matrix_names = c('matrixA', 'matrixB')){
+    # match the names
+    common_genes <- intersect(rownames(ma), rownames(mb))
+    common_names <- intersect(colnames(ma), colnames(mb))
+
+    MX <- ma[common_genes, common_names]
+    MY <- mb[common_genes, common_names]
+
+    if(all((nrow(MX) == nrow(MY)) & (ncol(MX) == ncol(MY)))){
+        splitX <- base::asplit(MX, 1)
+        splitY <- base::asplit(MY, 1)
+        
+        test_results <- mapply(function(x1, x2){
+            tryCatch({
+                lt <- data.table(expr = x1, binding = x2)
+                test <- with(lt, lm(expr ~ binding)) %>% summary() %>% coef() %>% as.data.table(keep.rownames = 'term')
+                return(test)
+            }, error = function(err){
+                return(NULL)
+            })
+        }, splitX, splitY, SIMPLIFY = FALSE)
+
+        dt_results <- Filter(Negate(is.null), test_results) 
+        
+        return(dt_results)
+    } else {
+        stop("ERROR - Dimensions or names of input matrices are not the same")
+    }
+}
+```
+
+```{r}
+
+```
+
+```{r}
+gexpr <- data.table::fread(file.path(tfxcan_directory, "experiments/gene_modules/files", "geuvadis.lcl.gene_expression.tsv.gz")) %>%
+    dplyr::inner_join(dt.tss_metadata, by = c('gene' = 'locus')) %>%
+    dplyr::relocate(external_gene_name, ensembl_gene_id) %>%
+    dplyr::select(-c(external_gene_name, gene))
+gexpr[1:5, 1:5]
+```
+
+```{r}
+```
+
+```{r}
+GATA1_blood.enpact_scores <- data.table::fread("/scratch/beagle3/temi/gene_modules/enpact_scores/GATA1_ACRs/GATA1_ACRs.GATA1_Blood.enpact_scores.txt")
+GATA1_blood.enpact_scores[1:5, 1:5]
+```
+
+```{r}
+fastlm = function(xx,yy)
+{
+  ## compute betahat (regression coef) and pvalue with Ftest
+  ## for now it does not take covariates
+
+  df1 = 2
+  df0 = 1
+  ind = !is.na(xx) & !is.na(yy)
+  xx = xx[ind]
+  yy = yy[ind]
+  n = sum(ind)
+  xbar = mean(xx)
+  ybar = mean(yy)
+  xx = xx - xbar
+  yy = yy - ybar
+
+  SXX = sum( xx^2 )
+  SYY = sum( yy^2 )
+  SXY = sum( xx * yy )
+
+  betahat = SXY / SXX
+
+  RSS1 = sum( ( yy - xx * betahat )^2 )
+  RSS0 = SYY
+
+  fstat = ( ( RSS0 - RSS1 ) / ( df1 - df0 ) )  / ( RSS1 / ( n - df1 ) )
+  pval = 1 - pf(fstat, df1 = ( df1 - df0 ), df2 = ( n - df1 ))
+  res = list(betahat = betahat, pval = pval)
+
+  return(res)
+}
+```
+
+```{r}
+exprMat <- gexpr %>% tibble::column_to_rownames('ensembl_gene_id') %>% as.matrix()
+exprMat[1:5, 1:5]
+```
+
+```{r}
+bindingMat <- GATA1_blood.enpact_scores %>% tibble::column_to_rownames('NAME') %>% as.matrix()
+bindingMat[1:5, 1:5]
+```
+
+```{r}
+cnames <- intersect(colnames(exprMat), colnames(bindingMat))
+length(cnames)
+```
+
+```{r}
+exprMat <- exprMat[, cnames]
+bindingMat <- bindingMat[, cnames]
+
+dim(exprMat); dim(bindingMat)
+```
+
+
+```{r}
+exprMat %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "gene_expression.matrix.tsv"), row.names = T, col.names = T, quote = F, sep = '\t')
+
+bindingMat %>% data.table::fwrite(file.path(tfxcan_directory, "experiments/gene_modules/files", "predicted_binding.matrix.tsv"), row.names = T, col.names = T, quote = F, sep = '\t')
+```
+
+
+```{r}
+glue::glue("sbatch /beagle3/haky/users/temi/projects/TFXcan/src/correlate_binding_expression.acrs.sbatch /beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/predicted_binding.matrix.tsv /beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/gene_expression.matrix.tsv /beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/GATA1_ACRs.correlation")
+```
+
+```{r}
+res.pvalues <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/GATA1_ACRs.correlation.pvalues.tsv.gz")
+dim(res.pvalues); res.pvalues[1:5, 1:5]
+```
+
+```{r}
+dt.res.pvalues <- tidyr::pivot_longer(res.pvalues, cols = !V1, names_to = 'acr', values_to = 'pvalue') %>%
+    dplyr::inner_join(dt.tss_metadata, by = c('V1' = 'ensembl_gene_id'))
+dim(dt.res.pvalues); dt.res.pvalues[1:5, ]
+```
+
+
+```{r}
+regulated_genes <- dt.res.pvalues %>%
+    dplyr::filter(external_gene_name %in% GATA1.pert$gene_ID)
+
+non_regulated_genes <- dt.res.pvalues %>%
+    dplyr::filter(!external_gene_name %in% GATA1.pert$gene_ID)
+
+dim(regulated_genes); dim(non_regulated_genes)
+```
+
+```{r}
+pppvalues <- ggplot_qqplot(y = regulated_genes$pvalue, x = non_regulated_genes$pvalue) +
+geom_abline(intercept = 0, slope = 1, col = 'red') +
+theme_simple +
+labs(y = 'ACRs target genes', x = 'ACRs non-target genes', subtitle = 'QQ plot of p values')
+
+ggsave(file.path(figures_directory, '../qqplot.GATA1_ACRs.pvalues.png'), pppvalues, width = 3000, height = 3000, dpi = 800, units = 'px')
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+res.corrcoef <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/GATA1_ACRs.correlation.corrcoef.tsv.gz")
+dim(res.corrcoef); res.corrcoef[1:5, 1:5]
+```
+
+```{r}
+dt.res.corrcoef <- tidyr::pivot_longer(res.corrcoef, cols = !V1, names_to = 'acr', values_to = 'corrcoef') %>%
+    dplyr::inner_join(dt.tss_metadata, by = c('V1' = 'ensembl_gene_id'))
+dim(dt.res.corrcoef); dt.res.corrcoef[1:5, ]
+```
+
+```{r}
+regulated_genes <- dt.res.corrcoef %>%
+    dplyr::filter(external_gene_name %in% GATA1.pert$gene_ID)
+
+non_regulated_genes <- dt.res.corrcoef %>%
+    dplyr::filter(!external_gene_name %in% GATA1.pert$gene_ID)
+
+dim(regulated_genes); dim(non_regulated_genes)
+```
+
+```{r}
+ggplot_qqplot(y = regulated_genes$corrcoef, x = non_regulated_genes$corrcoef) +
+geom_abline(intercept = 0, slope = 1, col = 'red') +
+theme_simple +
+labs(y = 'ACRs target genes', x = 'ACRs non-target genes', subtitle = 'QQ plot of correlation coefficient')
+```
+
+```{r}
+summary(abs(regulated_genes$corrcoef))
+```
+
+```{r}
+summary(abs(non_regulated_genes$corrcoef))
+```
+
+
+
+
+
+
+```{r}
+out <- apply(bindingMat[1:100, ], 1, function(col_b){
+  apply(exprMat[1:100, ], 1, function(col2, col1) {
+    cor.test(col2, col1)$p.value
+  }, col1=col_b)
+})
+```
+
+```{r}
+min(out)
+```
+
+## Correlation with gene expression
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+Xmat <- rhdf5::h5ls(file = "/scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.matrix.h5.gz")
+h5closeAll()
+```
+
+```{r}
+Xmat <- rhdf5::h5read(file = "/scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.matrix.h5.gz", name = '/matrix/block0_values')
+Bmat <- rhdf5::h5read(file = "/scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.matrix.h5.gz", name = '/matrix/axis0')
+```
+
+```{r}
+dim(Xmat); Xmat[1:10, 1:5]
+```
+
+```{r}
+Mdata <- data.table::fread(file = "/scratch/beagle3/temi/gene_modules/epigenomes/GATA1_ACRs.epigenomes.processed.metadata.tsv")
+```
+
+
+
+
+Filter to genes in LCL
+
+```{r}
+avgenes <- TAL1.pert$gene_ID |> unique()
+avgenes <- avgenes[which(avgenes %in% available.genes$external_gene_name)]
+```
+
+
+```{r}
+dt_genes$log2FC |> summary()
+```
+
+```{r}
+dt_genes.large <- dt_genes %>% dplyr::filter(abs(log2FC) > 1.5)
+dim(dt_genes.large)
+```
+
+```{r}
+dt_genes %>% dplyr::filter(perturbation_name %in% available.tfs$tf) %>% dplyr::filter(gene_ID %in% available.genes$external_gene_name)
+```
+
+```{r}
+dt_accessibility <- data.table::fread(file.path(perturbation_directory, 'accessible_regions_tf.tsv')) 
+```
+
+```{r}
+summary(dt_accessibility$log2FC)
+```
+
+```{r}
+dt_accessibility.large <- dt_accessibility %>% dplyr::filter(abs(log2FC) > 1.5)
+dim(dt_accessibility.large)
+```
+
+```{r}
+dt_accessibility.large$perturbation_name %>% unique()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+# this runs one locus at a time
+# change to calculate LD
+# https://merrimanlab.github.io/docs/locuszooms/multiple_lz_plots/
+
+
+
+
+```{r}
+# res.pvalues <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/gene_expression.tf_vs_nontf_genes.pvalues.tsv.gz")
+# dim(res.pvalues); res.pvalues[1:5, 1:5]
+
+# res.corrcoef <- data.table::fread("/beagle3/haky/users/temi/projects/TFXcan/experiments/gene_modules/files/gene_expression.tf_vs_nontf_genes.corrcoef.tsv.gz")
+# dim(res.corrcoef); res.corrcoef[1:5, 1:5]
+```
+
+```{r}
+# dt.res.pvalues <- tidyr::pivot_longer(res.pvalues, cols = !V1, names_to = 'tf_gene', values_to = 'pvalue') %>%
+#     dplyr::rename(gene = V1) %>%
+#     dplyr::arrange(pvalue)
+# dim(dt.res.pvalues); dt.res.pvalues[1:5, ]
+```
+
+```{r}
+# dt.res.corrcoefs <- tidyr::pivot_longer(res.corrcoef, cols = !V1, names_to = 'tf_gene', values_to = 'corrcoef') %>%
+#     dplyr::rename(gene = V1) %>%
+#     dplyr::arrange(corrcoef)
+# dim(dt.res.corrcoefs); dt.res.corrcoefs[1:5, ]
+```
+
+```{r}
+# dt.res.merged <- dplyr::inner_join(dt.res.pvalues, dt.res.corrcoefs, by = c('tf_gene', 'gene')) %>%
+#     dplyr::rename(target_gene = gene)
+# dt.res.merged[1:5, ]; dim(dt.res.merged)
+
+
+# ```{r}
+# temp.merger <- dplyr::inner_join(dt.res.merged, dt.res.merged.2, by = c('tf_gene', 'target_gene'), suffix = c('.comp', '.incomp'))
+# temp.merger[1:5, ]
+# ```
+# ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+- make heatmaps
+
+```{r}
+library(ComplexHeatmap)
+library(cowplot)
+```
+
+```{r}
+mat.corrcoef <- dt.res.merged.2 %>% pivot_wider(id_cols = tf_gene, names_from = target_gene, values_from = corr_coef) %>% tibble::column_to_rownames('tf_gene') %>% as.matrix()
+
+dim(mat.corrcoef); mat.corrcoef[1:3, 1:3]
+```
+
+```{r}
+matPlot <- mat.corrcoef[,]
+
+# col_fun = circlize::colorRamp2(seq(quantile(matPlot, 0.01), quantile(matPlot, 0.99), len = 9), brewer.pal(9, "Reds"))
+# brewer.pal(n = 8, name = "Reds")
+```
+
+```{r}
+dim(matPlot)
+```
+
+```{r}
+matOrder <- dt.res.merged.2 %>% dplyr::group_by(target_gene) %>%
+    dplyr::summarize(medCorr = median(corr_coef, na.rm = TRUE)) %>%
+    dplyr::arrange(desc(medCorr))
+matOrder[1:5, ]; tail(matOrder)
+```
+
+```{r}
+joinedMat <- cbind(matPlot[, matOrder$target_gene[1:300]], matPlot[, rev(rev(matOrder$target_gene)[1:300])])
+dim(joinedMat)
+```
+
+```{r}
+subset_pval_heatmap <- joinedMat %>% 
+    ComplexHeatmap::Heatmap(col = col_fun, cluster_rows = F, cluster_columns = F, column_names_rot = 90, 
+        heatmap_legend_param = list(title = expression("Corr")), row_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'), column_names_gp = grid::gpar(fontsize = 7, fontfamily = 'Helvetica'), rect_gp = grid::gpar(col = "black", lwd = 1),
+        use_raster = TRUE, raster_resize_mat = TRUE, raster_by_magick = TRUE)
+    # ComplexHeatmap::draw() %>% 
+    # grid.grabExpr() %>%
+    # ggdraw()
+
+# subset_pval_heatmap
+```
+
+```{r}
+# subset_pval_heatmap <- matPlot[1:3000, ] %>% densityHeatmap(show_quantiles = F, col = col_fun) 
+# %>%
+#     ComplexHeatmap::draw() %>% 
+#     grid.grabExpr() %>%
+#     ggdraw()
+```
+
+```{r}
+png(file=file.path(figures_directory, "tfGene_vs_targetGene.heatmap.png"), width = 15000, height = 15000, units = 'px', res = 200)
+ComplexHeatmap::draw(subset_pval_heatmap)
+dev.off()
+```
+
+
+
+```{r}
+# ggsave(file.path(figures_directory, "tfGene_vs_targetGene.heatmap.pdf"), subset_pval_heatmap, width = 48000, height = 100000, limitsize = FALSE)
+```
+
+- heatmap of correlation
+
+```{r}
+# corrHeatMapMat <- res.corrcoef %>%
+#     tibble::column_to_rownames('V1') %>% as.matrix()
+
+# uMat <- corrHeatMapMat[, 1:200]
+# col_fun = circlize::colorRamp2(seq(quantile(uMat, 0.01), quantile(uMat, 0.99), len = 9), brewer.pal(9, "Reds"))
+
+# corrHeatMapPlot <- uMat %>% 
+#     ComplexHeatmap::Heatmap(col = col_fun, cluster_rows = T, cluster_columns = F, 
+#         heatmap_legend_param = list(title = expression("Correlation\nCoefficient")), rect_gp = gpar(col = NA),
+#         use_raster = TRUE, raster_resize_mat = TRUE, raster_by_magick = TRUE, show_column_names = FALSE, show_row_names = FALSE) %>%
+#     ComplexHeatmap::draw() %>% 
+#     grid.grabExpr() %>%
+#     cowplot::ggdraw()
+
+# corrHeatMapPlot
+
+# ggsave(file.path(figures_directory, "tfGene_vs_targetGene.corr.heatmap.png"), corrHeatMapPlot, width = 48000, height = 48000, unit = 'px', limitsize = FALSE)
+```
+
+```{r}
+
+```

@@ -1,18 +1,26 @@
- 
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Runs flashier factorization once per random loci subset in a single batch (the
+#   active, parallelized worker of the consensus matrix factorization / "tenerife" pipeline).
+#   Meant to be called many times in parallel across batches, see repeat_flash.sbatch.
+# Usage: Rscript repeat_flash.R --data <zratio matrix .rds> --splits <batch splits .rds> --batch <name> --output_basename <path> --priorL <ebnm_...> --priorF <ebnm_...> --greedy_Kmax <int>
 
 suppressPackageStartupMessages(library("optparse"))
 
+# --subset and --niterations below are leftover from the earlier runFlashier.R/consensus_flashier.R
+# scripts this was forked from; they're not used anywhere in this script (the actual splits come
+# from --splits, one batch at a time).
 option_list <- list(
     make_option("--data", help='data preferrably in .rds format of a matrix of GWAS loci by TF/tissue paris of ratios of z-scores'),
-    make_option("--splits", help='rds file of the splits'),
-    make_option("--batch", help='batch name'),
-    make_option("--output_basename", help='.rds file to be created as the model'),
-    make_option("--priorL", help='alpha value for enet', default="ebnm_point_exponential"),
-    make_option("--priorF", help='number of cores to use', default="ebnm_point_exponential"),
-    make_option("--transpose", type="logical", action='store_true', help='Should the data be transposed?'),
-    make_option("--greedy_Kmax", type="integer", default=100L, help='How many greedy iterations?'),
-    make_option("--subset", type="numeric", help='Subset of loci to use', default=0.8),
-    make_option("--niterations", type="numeric", default = 500L, help='Number of iterations')
+    make_option("--splits", help='rds file (one batch) of random loci-index subsets to run flashier on, produced by prepare_summary_matrices.R'),
+    make_option("--batch", help='name of this batch (must match a name inside the splits rds and the {batch} placeholder in --splits/output file paths)'),
+    make_option("--output_basename", help='output path prefix; results are written to {output_basename}.{batch}.{priorL}-{priorF}.Iters.rds.gz'),
+    make_option("--priorL", help='flashier EBNM prior function name for the loadings (L) matrix, e.g. ebnm_point_exponential (see choosePrior() below)', default="ebnm_point_exponential"),
+    make_option("--priorF", help='flashier EBNM prior function name for the factors (F) matrix, e.g. ebnm_point_exponential (see choosePrior() below)', default="ebnm_point_exponential"),
+    make_option("--transpose", type="logical", action='store_true', help='Should the data be transposed? (unused in this script currently; only referenced in the commented-out txt-reading block below)'),
+    make_option("--greedy_Kmax", type="integer", default=100L, help='max number of factors flashier greedily adds before backfitting (flashier::flash greedy_Kmax arg) — higher allows more latent factors but costs more compute'),
+    make_option("--subset", type="numeric", help='[unused here] fraction of loci to subsample per iteration', default=0.8),
+    make_option("--niterations", type="numeric", default = 500L, help='[unused here] number of repeat iterations')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -30,7 +38,7 @@ if(what_extension %in% c('rds', 'rds.gz')){
     dt <- readRDS(opt$data)
 } 
 
-what_extension <- tools::file_ext(opt$split)
+what_extension <- tools::file_ext(opt$splits)
 if(what_extension %in% c('rds', 'rds.gz')){
     sp <- readRDS(opt$splits)[[1]]
     print(glue('INFO - {opt$batch} has {length(sp)} splits'))
@@ -48,6 +56,7 @@ if(what_extension %in% c('rds', 'rds.gz')){
 
 print(glue('INFO - Input data has {nrow(dt)} loci and {ncol(dt)} samples'))
 
+# maps a prior name string (from --priorL/--priorF) to the actual ebnm_* function flashier expects
 choosePrior <- function(inputPrior){
     out <- switch(as.character(inputPrior),
         'ebnm_point_normal' = ebnm_point_normal,
@@ -63,12 +72,14 @@ choosePrior <- function(inputPrior){
 priors <- c(priorL = choosePrior(opt$priorL), priorF = choosePrior(opt$priorF))
 
 # create a list of random loci
-
+# dead code: random subsetting used to happen in this script (see also runFlashier.R/consensus_flashier.R);
+# now the subsets are pre-made by prepare_summary_matrices.R and just read in via --splits above.
 # random_loci <- purrr::map(1:opt$niterations, function(k){
 #     jj <- sample(nrow(dt), round(nrow(dt) * 0.8))
 #     return(jj)
 # })
 
+# run flashier once per loci subset ("split") in this batch
 flash_result <- purrr::map(1:length(sp), function(k){
 
     picked_loci <- sp[[k]]

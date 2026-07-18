@@ -1,3 +1,4 @@
+# ARCHIVED — superseded by src/train_enpact.R. Kept for reference only.
 # Author: Temi
 # Date: Thursday July 27 2023
 # Description: script to train elastic net TFPred models
@@ -6,11 +7,11 @@
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--train_data_file", help='data to train with enet'),
+    make_option("--train_data_file", help='Training data file with binding_class + feature columns'),
     make_option("--model_rds_file", help='.rds file to be created as the model'),
     make_option("--nfolds", type="integer", default=5L, help='How many cv folds?'),
-    make_option("--weights_file", help='data to train with enet'),
-    make_option("--metadata", help='data to train with enet')
+    make_option("--weights_file", help='Output file to save the model weights (coefficients) to'),
+    make_option("--metadata", help='Label to use for the weights column name (e.g. TF_tissue identifier)')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

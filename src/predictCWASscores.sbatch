@@ -2,7 +2,7 @@
 
 # Author: Temi
 # Description: Predict using cwas in PrediXcan framework
-# Usage: sbatch predict_baca_with_cwas.sbatch
+# Usage: sbatch predictCWASscores.sbatch db_folder txt_genotypes txt_samples exec_file output_folder
 # Date: Mon July 24 2023
 # Dependencies: 
 
@@ -66,6 +66,7 @@ function predict () {
     readarray -t arrr < ${dblist}
 
     for model_db in ${arrr[@]}; do
+        # pull the TF/tissue name out of the db filename (last underscore-separated token, minus extension)
         m_name=$( echo ${model_db} | rev | cut -d '/' -f 1 | cut -d '_' -f 1 | rev )
         m_name=${m_name%.*}
         echo "INFO - Running ${m_name}"

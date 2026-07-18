@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: cluster wrapper for calculateEnpactScores.R, applies Enpact weights to individuals' CSV features
+# Usage: sbatch calculateEnpactScores.sbatch data_directory individuals_list enpact_weights output_file files_pattern [for_models]
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12

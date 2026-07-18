@@ -1,4 +1,10 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: build a genome-wide GRM (genetic relationship matrix) for the Baca cohort from the merged
+#   plink bfiles, using GCTA's --make-grm. Paths are hardcoded, not passed in as args.
+# Usage: sbatch make_grm.sbatch
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
@@ -15,6 +21,7 @@ date
 module load parallel
 module load plink/1.90b6.21
 
+# earlier step: merge per-chromosome plink files into one bfile set (left here for reference, not run)
 # plink --merge-list "/beagle3/haky/users/temi/projects/Enpact/misc/mergelist.txt" --make-bed --out /project2/haky/Data/baca_cwas/vcfs/hg38/merged_files/bfiles/baca_individuals.plink.merged
 
 
@@ -22,6 +29,8 @@ gcta_executable="/beagle3/haky/users/temi/software/gcta-1.94.4-linux-kernel-3-x8
 
 ${gcta_executable} --bfile "/project2/haky/Data/baca_cwas/vcfs/hg38/merged_files/bfiles/baca_individuals.plink.merged" --make-grm --out "/project2/haky/Data/baca_cwas/vcfs/hg38/merged_files/grm/baca_individuals.plink.merged"
 
+# earlier version of this script: took input_directory/output_directory/input_basenames as args and built
+# one GRM per basename in parallel (this is basically what make_grm_single.sbatch does now)
 # input_directory=${1}
 # output_directory=${2}
 # input_basenames=${3}

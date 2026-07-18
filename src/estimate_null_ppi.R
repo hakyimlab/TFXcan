@@ -1,13 +1,21 @@
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: build a null distribution of STRING PPI interactions/scores for each consensus TF program, by
+#   repeatedly sampling random TF sets (of the same size as the program's top-N TFs) and counting how many of
+#   those random pairs show up in the STRING PPI database. Used to test whether a program's real TFs interact
+#   more than expected by chance.
+# Usage: sbatch estimate_null_ppi.sbatch {ppi_db} {query_db} {programs} {outputfile}
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--ppi_db", help='STRING PPI tsv'),
     make_option("--query_db", help='Where to sample the nulls from? tsv'),
-    make_option("--programs", help='TFXcan programs'),
-    make_option("--outputfile", help='TFXcan programs'),
-    make_option("--topN", help='', default = 15),
-    make_option("--nReplicates", help='How many replicates?', default = 10000),
-    make_option("--useseed", help='How many replicates?', default = 2025)
+    make_option("--programs", help='RDS file of consensus TF/tissue programs (clusters), from the matrix factorization step'),
+    make_option("--outputfile", help='.rds file to write the null PPI distributions (per program) to'),
+    make_option("--topN", help='Number of top-contributing TFs to take per program before building the null', default = 15),
+    make_option("--nReplicates", help='How many random TF sets (replicates) to sample per program?', default = 10000),
+    make_option("--useseed", help='Random seed for sampling the null TF sets', default = 2025)
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -96,7 +104,8 @@ names(top.n.TFs.programs) <- program_names
 
 
 full_null_dt <- purrr::map(names(top.n.TFs.programs), function(nxn){
-    #outfile <- glue::glue("{tfxcan_directory}/experiments/validation/ppi/STRINGPPI.{nxn}.null_interactions.tsv")
+    # per-program null-interactions tsv, written alongside the final --outputfile rds
+    outfile <- glue::glue("{dirname(opt$outputfile)}/{nxn}.null_interactions.tsv")
     message(glue::glue("INFO - Simulating nulls for {nxn}..."))
     res <- tryCatch({
         dtd <- nrow(top.n.TFs.programs[[nxn]])

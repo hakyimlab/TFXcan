@@ -1,4 +1,9 @@
-# Usage: Rscript create_training_sets.R [options]
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: run a Wilcoxon rank-sum test comparing Enpact's predicted binding scores (TFPred_score) between
+#   bound (binding_class == 1) and unbound (binding_class == 0) loci, for every TF-tissue model listed in
+#   models_list, on both the train and test splits.
+# Usage: Rscript calculate_wilcoxon_test.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 

@@ -1,4 +1,8 @@
 #!/bin/bash
+# Author: Temi
+# Date: Monday January 26 2026
+# Description: cluster wrapper for estimate_null_ppi.R (null PPI distribution per consensus TF program).
+# Usage: sbatch estimate_null_ppi.sbatch {ppi_db} {query_db} {programs} {outputfile}
 
 #SBATCH --job-name=estimate_null_ppi
 #SBATCH --partition=caslake

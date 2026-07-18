@@ -1,13 +1,13 @@
 # Author: Temi
 # Date: Friday July 26 2024
-# Description: script to create predictors, ground truth and info files
-# Usage: Rscript create_training_sets.R [options]
+# Description: gather per-TF-tissue Enpact model weights (lambda.1se and lambda.min) into two compiled weights files
+# Usage: Rscript collect_enpact_weights.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--models_metadata", help='A transcription factor e.g. AR'),
-    make_option("--weights_file_basename", help='file to write weights to')
+    make_option("--models_metadata", help="Path to tsv with per-model 'path' and 'model' columns"),
+    make_option("--weights_file_basename", help='Output basename; writes <basename>.lambda.1se.txt.gz and .lambda.min.txt.gz')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

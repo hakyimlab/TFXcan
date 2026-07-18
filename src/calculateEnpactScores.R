@@ -1,18 +1,19 @@
 # Author: Temi
 # Date: Thursday August 10 2023
-# Description: script to create predictors, ground truth and info files
-# Usage: Rscript create_training_sets.R [options]
+# Description: apply compiled Enpact weights to per-individual aggregated CSV features, output a loci x model x individual score array
+# Usage: Rscript calculateEnpactScores.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--data_directory", help="The folder with the epigenome data"),
     make_option("--individuals_list", help='The list of individuals for which you want to predict'),
-    make_option("--enpact_weights"),
-    make_option("--output_file"),
-    make_option("--files_pattern"),
-    make_option("--for_models", default = NULL),
-    make_option("--epifeatures_file", default = NULL)
+    make_option("--enpact_weights", help='Path to compiled Enpact weights file (tsv.gz)'),
+    make_option("--output_file", help='Output path for the scores array (.rds)'),
+    make_option("--files_pattern", help='Filename suffix pattern to match each individual\'s feature CSV'),
+    make_option("--for_models", default = NULL, help='Model column name to restrict scoring to (default: all models)'),
+    # UNSURE: epifeatures_file is never referenced later in this script
+    make_option("--epifeatures_file", default = NULL, help='Unused; declared but not referenced in the script')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -122,7 +123,7 @@ out <- purrr::map(.x=Y_hats, function(each_dt){
 
 names(out) <- individuals
 
-# combine into an array
+# combine into an array; falls back to 2D if there's only one individual (can't stack along dim 3)
 myarray <- tryCatch({
     abind::abind(out, along=3)
 }, error = function(e){
@@ -134,6 +135,7 @@ if(length(dimarray) == 2){
     #myarray <- array(myarray, dim=c(dimarray[1], 1, dimarray[2]))
     saveRDS(myarray, file = opt$output_file, compress = "gzip")
 } else if(length(dimarray) == 3){
+    # reorder to loci x individuals x models
     reshapedarray <- aperm(myarray, c(1, 3, 2), resize=TRUE)
     # print(dimarray)
     # print(dimnames(reshapedarray))

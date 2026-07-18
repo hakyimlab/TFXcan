@@ -1,8 +1,13 @@
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: for a given TF, finds the distance from each GWAS locus to the nearest HOMER motif instance for that TF
+# Usage: Rscript calculateDistanceToMotifs.R --transcription_factor <TF> --output_basename <path>
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--transcription_factor", help='A GWAS summary statistics file; should be a tsv file with columns: chrom, pos, ref, alt, pval, beta, se, zscore'),
-    make_option("--output_basename", help='the output folder')
+    make_option("--transcription_factor", help='transcription factor name (e.g. AR); used to look up its HOMER motif file'),
+    make_option("--output_basename", help='output file prefix; ".distance_to_<TF>_motif.txt.gz" is appended')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -17,6 +22,7 @@ library(plyranges) |> suppressPackageStartupMessages()
 glue::glue('INFO - Running for {opt$transcription_factor}...')
 
 # get the loci list
+# NOTE: hardcoded input path, not a flag -- this script only works for this one PrCa z-ratio matrix as-is
 Y_mat <- readRDS("/beagle3/haky/users/temi/projects/Enpact/data/tenerife/PrCa.tfxcan.zratios.matrix.rds")
 
 gwas_loci <- rownames(Y_mat) %>% strsplit(":") %>% do.call('rbind', .) %>% data.table::as.data.table()

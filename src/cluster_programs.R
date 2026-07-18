@@ -1,10 +1,15 @@
-
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Consensus-clusters the repeated flashier factorizations (from gather_repeats.R) into
+#   "programs" — LDF-decomposes each flashier run, finds the best number of clusters (clara +
+#   silhouette), then clusters the correlations of all factor loadings and assigns loci to clusters.
+# Usage: Rscript cluster_programs.R --flash_results <merged .rds from gather_repeats.R> --output_basename <path> --normalization <L2|L1|Linf>
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--flash_results", help='[input] An rds (list) of multiple iterations of flashier'),
-    make_option("--output_basename", help='[output] A dataframe file of the cluster assignments'),
+    make_option("--output_basename", help='[output] path prefix; writes several files off this (silhouette scores, program matrix, correlation matrix, cluster assignments, loci-to-cluster assignments)'),
     make_option("--normalization", default='L2', help='[input] The normalization method to use. Default is f (L2 norm). Other options are Linf, L1')
 )
 

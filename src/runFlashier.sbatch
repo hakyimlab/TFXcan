@@ -1,4 +1,11 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: NOT part of the current active pipeline — cluster wrapper for runFlashier.R, an
+#   earlier single-run flashier factorization. Superseded by repeat_flash.R/repeat_flash.sbatch.
+#   Kept for reference only.
+# Usage: sbatch runFlashier.sbatch <datafile> <column_for_rownames> <output_basename> <priorL> <priorF> <transpose: TRUE|FALSE> <greedy_Kmax>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

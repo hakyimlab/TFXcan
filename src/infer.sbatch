@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Author: Temi
-# Description: S-PrediXcan on EnpactScores
-# Usage: sbatch s-predixcan.sbatch
+# Description: generic wrapper that runs an arbitrary epigenome-extraction python script (script path passed as arg 1) with --loci_file/--reference_epigenome_dir/--output_file/--use_multiprocessing
+# Usage: sbatch infer.sbatch exec_py input_file ref_epigenome output_file
 # Date: Wed Apr 3 2024
-# Dependencies: 
+# Dependencies:
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

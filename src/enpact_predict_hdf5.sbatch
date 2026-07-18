@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: run enpact_predict_hdf5.R in parallel (GNU parallel) across a list of individuals
+# Usage: sbatch enpact_predict_hdf5.sbatch loci_list weights individuals_list input_directory output_directory
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem-per-cpu=12G    
+#SBATCH --mem-per-cpu=12G
 #SBATCH --job-name=enpact_predict_hdf5
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/enpact_predict_hdf5.out

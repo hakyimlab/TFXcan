@@ -1,16 +1,17 @@
 # Author: Temi
 # Date: Thursday July 27 2023
-# Description: script to train elastic net TFPred models
-# Usage: Rscript train_enet.R [options]
+# Description: test an Enpact weights matrix on held-out data after dropping the same removed features as training, save predictions
+# Usage: Rscript test_enpact_different_features.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--test_data_file", help='data to train with enet'),
-    make_option("--features_to_remove", help='data to train with enet', default = NULL),
-    make_option("--metadata", help='data to train with enet'),
-    make_option("--weights_file", help='data to train with enet'),
-    make_option("--predictions_file", help='data to train with enet')
+    make_option("--test_data_file", help='Path to held-out test data (features + locus/binding_class columns)'),
+    make_option("--features_to_remove", help='Comma-separated feature columns to drop (must match training)', default = NULL),
+    # UNSURE: --metadata is declared but never referenced later in this script
+    make_option("--metadata", help='Unused; declared but not referenced in the script'),
+    make_option("--weights_file", help='Path to Enpact weights file (tsv) to evaluate'),
+    make_option("--predictions_file", help='Output path for the predictions (gzipped tsv)')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

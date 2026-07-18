@@ -1,4 +1,9 @@
 #!/bin/bash
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: cluster wrapper for count_training_test_overlaps.R (train/test locus overlap check per model).
+# Usage: sbatch count_training_test_overlaps.sbatch {enpact_metadata_file} {files_directory} {output_file}
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8

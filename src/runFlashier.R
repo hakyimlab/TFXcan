@@ -1,15 +1,20 @@
-
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: NOT part of the current active pipeline — an earlier single-run (non-batched)
+#   flashier factorization script, superseded by repeat_flash.R (see the commented-out block at
+#   the bottom of repeat_flash.sbatch for the old call pattern). Kept for reference only.
+# Usage: Rscript runFlashier.R --data <matrix> --column_for_rownames <col> --output_basename <path> --priorL <ebnm_...> --priorF <ebnm_...> [--transpose] --greedy_Kmax <int>
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--data", help='data to train with enet'),
-    make_option("--column_for_rownames", help=''),
-    make_option("--output_basename", help='.rds file to be created as the model'),
-    make_option("--priorL", help='alpha value for enet', default="ebnm_point_normal"),
-    make_option("--priorF", help='number of cores to use', default="ebnm_point_exponential"),
-    make_option("--transpose", type="logical", action='store_true', help='Should the data be transposed?'),
-    make_option("--greedy_Kmax", type="integer", default=100L, help='How many greedy iterations?')
+    make_option("--data", help='data matrix to factorize (.txt/.csv read with fread, or already-formatted matrix); see column_for_rownames/transpose below'),
+    make_option("--column_for_rownames", help='name of the column in --data to use as row names when converting it to a matrix'),
+    make_option("--output_basename", help='output path prefix; result written to {output_basename}.{priorL}-{priorF}.rds.gz'),
+    make_option("--priorL", help='flashier EBNM prior function name for the loadings (L) matrix, e.g. ebnm_point_normal (see choosePrior() below)', default="ebnm_point_normal"),
+    make_option("--priorF", help='flashier EBNM prior function name for the factors (F) matrix, e.g. ebnm_point_exponential (see choosePrior() below)', default="ebnm_point_exponential"),
+    make_option("--transpose", type="logical", action='store_true', help='Should the data matrix be transposed after loading?'),
+    make_option("--greedy_Kmax", type="integer", default=100L, help='max number of factors flashier greedily adds before backfitting (flashier::flash greedy_Kmax arg)')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

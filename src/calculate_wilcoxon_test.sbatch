@@ -1,4 +1,9 @@
 #!/bin/bash
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: cluster wrapper for calculate_wilcoxon_test.R (bound vs. unbound Wilcoxon test per TF-tissue model).
+# Usage: sbatch calculate_wilcoxon_test.sbatch {models_list} {path_pattern} {output_file}
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

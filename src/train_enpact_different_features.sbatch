@@ -1,8 +1,14 @@
 #!/bin/bash
+
+# Author: Temi
+# Date: Friday August 15 2025
+# Description: despite the name, this just wraps train_enpact.R (training_data, output_basename, metadata); the old feature-dropping call is commented out below, unused
+# Usage: sbatch train_enpact_different_features.sbatch training_data output_basename metadata
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=12G    
+#SBATCH --mem-per-cpu=12G
 #SBATCH --job-name=train_enpact_features
 #SBATCH --account=pi-haky
 #SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/train_enpact_features.out

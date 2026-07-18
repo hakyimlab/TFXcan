@@ -1,0 +1,666 @@
+---
+title: "Simulated figures"
+format: html
+---
+
+```{r setup}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(patchwork)
+library(ggseqlogo)
+library(tidygraph)
+library(ggraph)
+
+# palette (single categorical hue, light mode) - see dataviz conventions
+BLUE      <- "#2a78d6"
+INK       <- "#0b0b0b"
+INK_MUTED <- "#898781"
+BASELINE  <- "#c3c2b7"
+GRID_COL  <- "#e1e0d9"
+SURFACE   <- "#fcfcfb"
+```
+
+## Simulated ChIP-seq peak
+
+```{r chipseq-functions}
+#' Simulate a ChIP-seq-like coverage track over a small genomic interval.
+#'
+#' Background reads are Poisson noise; the peak is an asymmetric
+#' (skewed) Gaussian bump, smoothed with a moving average to mimic
+#' fragment-extension / binning smoothing seen in genome browser tracks.
+simulate_chipseq_track <- function(start = 1e6,
+                                    length = 3000,      # bp span
+                                    n_points = 1500,
+                                    peak_center_frac = 0.45,
+                                    peak_width = 180,   # bp
+                                    peak_height = 48,
+                                    background_mean = 3.0,
+                                    skew = 0.35,
+                                    seed = 7) {
+  set.seed(seed)
+
+  x <- seq(start, start + length, length.out = n_points)
+  center <- start + peak_center_frac * length
+
+  sigma_left  <- peak_width * (1 - skew)
+  sigma_right <- peak_width * (1 + skew)
+  sigma <- ifelse(x < center, sigma_left, sigma_right)
+  peak_shape <- exp(-0.5 * ((x - center) / sigma)^2)
+
+  signal_mean <- background_mean + peak_height * peak_shape
+  raw_counts <- rpois(n_points, lambda = pmax(signal_mean, 0.05))
+
+  window <- 15
+  smoothed <- as.numeric(stats::filter(raw_counts, rep(1 / window, window), sides = 2))
+  smoothed <- zoo::na.locf(smoothed, na.rm = FALSE)
+  smoothed <- zoo::na.locf(smoothed, na.rm = FALSE, fromLast = TRUE)
+
+  threshold <- background_mean + 0.35 * peak_height
+  above <- smoothed > threshold
+  if (any(above)) {
+    call_start <- min(x[above])
+    call_end   <- max(x[above])
+  } else {
+    call_start <- center - peak_width
+    call_end   <- center + peak_width
+  }
+  summit_pos <- x[which.max(smoothed)]
+
+  tibble(position = x, signal = smoothed) |>
+    tidyr::drop_na() |>
+    mutate(call_start = call_start, call_end = call_end, summit = summit_pos)
+}
+
+#' Plot a simulated ChIP-seq track: signal panel + called-peak bar beneath it.
+plot_chipseq_track <- function(df, title = "Simulated ChIP-seq signal") {
+  call_start <- df$call_start[1]
+  call_end   <- df$call_end[1]
+  summit_pos <- df$summit[1]
+  summit_y   <- df$signal[which.min(abs(df$position - summit_pos))]
+
+  p_track <- ggplot(df, aes(position, signal)) +
+    geom_area(fill = BLUE, alpha = 0.18) +
+    geom_line(color = BLUE, linewidth = 0.8) +
+    annotate("point", x = summit_pos, y = summit_y, color = BLUE, size = 2,
+             shape = 21, fill = BLUE, stroke = 0.6) +
+    scale_x_continuous(labels = scales::comma, expand = expansion(mult = c(0, 0.03))) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
+    labs(title = title, x = NULL, y = "Signal\n(reads per bin)") +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_line(color = GRID_COL, linewidth = 0.3),
+      axis.line.x        = element_blank(),
+      axis.ticks         = element_blank(),
+      axis.text          = element_text(color = INK_MUTED, size = 8),
+      axis.title.y       = element_text(color = INK_MUTED, size = 9),
+      plot.title         = element_text(color = INK, size = 12, hjust = 0),
+      plot.background     = element_rect(fill = SURFACE, color = NA),
+      panel.background    = element_rect(fill = SURFACE, color = NA),
+      plot.margin         = margin(t = 5, r = 14, b = 5, l = 5)
+    )
+
+  p_call <- ggplot() +
+    geom_rect(aes(xmin = call_start, xmax = call_end, ymin = 0.15, ymax = 0.85),
+              fill = BLUE) +
+    scale_x_continuous(labels = scales::comma,
+                        limits = range(df$position), expand = expansion(mult = c(0, 0.03))) +
+    scale_y_continuous(limits = c(0, 1)) +
+    labs(x = "Genomic position (bp)", y = "Peak\ncall") +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid  = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks  = element_blank(),
+      axis.text.x = element_text(color = INK_MUTED, size = 8),
+      axis.title  = element_text(color = INK_MUTED, size = 9),
+      axis.title.y = element_text(angle = 0, vjust = 0.5),
+      plot.background  = element_rect(fill = SURFACE, color = NA),
+      panel.background = element_rect(fill = SURFACE, color = NA),
+      plot.margin      = margin(t = 5, r = 14, b = 5, l = 5)
+    )
+
+  p_track / p_call + plot_layout(heights = c(5, 1))
+}
+```
+
+```{r chipseq-plot, fig.width=8, fig.height=3.6}
+chipseq_df <- simulate_chipseq_track()
+plot_chipseq_track(chipseq_df)
+```
+
+```{r}
+ggsave(
+  filename = "simulated_tf_chipseq_track.pdf",
+  plot = plot_chipseq_track(chipseq_df),
+  device = "pdf",
+  width = 2.5, height = 1.2, units = "in"
+)
+```
+
+## Simulated transcription factor motif logo
+
+```{r motif-functions}
+#' Simulate a position weight matrix (PWM) for a transcription factor motif.
+#'
+#' Conservation (the dominant base's probability at each position) tapers
+#' from a conserved core to more degenerate flanks, like a real TF motif
+#' (e.g. an E-box-like "CANNTG" core flanked by weaker positions).
+simulate_pwm <- function(width = 10,
+                          center_conservation = 0.85,
+                          edge_conservation = 0.28,
+                          seed = 42,
+                          overrides = list()) {
+  set.seed(seed)
+  bases <- c("A", "C", "G", "T")
+  mid <- (width + 1) / 2
+  spread <- width / 4
+  conservation <- edge_conservation +
+    (center_conservation - edge_conservation) * exp(-0.5 * ((seq_len(width) - mid) / spread)^2)
+
+  consensus_bases <- sample(bases, width, replace = TRUE)
+  for (pos in names(overrides)) {
+    consensus_bases[as.integer(pos)] <- overrides[[pos]]
+  }
+
+  pwm <- matrix(0, nrow = 4, ncol = width, dimnames = list(bases, NULL))
+  for (i in seq_len(width)) {
+    dom <- conservation[i]
+    dom_idx <- which(bases == consensus_bases[i])
+    other_idx <- setdiff(seq_along(bases), dom_idx)
+
+    raw <- rgamma(3, shape = 2)
+    split <- raw / sum(raw) * (1 - dom)
+
+    probs <- numeric(4)
+    probs[dom_idx] <- dom
+    probs[other_idx] <- split
+    pwm[, i] <- probs
+  }
+  pwm
+}
+
+#' Plot a true sequence logo (stretched letter glyphs, ggseqlogo) from a PWM.
+#' If flank_ellipsis is TRUE, "..." is drawn just past both ends to signal
+#' that the real sequence continues beyond the shown positions.
+plot_seqlogo <- function(pwm, title = "Simulated TF motif", flank_ellipsis = FALSE) {
+  consensus <- paste(rownames(pwm)[apply(pwm, 2, which.max)], collapse = "")
+  width <- ncol(pwm)
+
+  p <- ggseqlogo(pwm, method = "bits") +
+    labs(title = NULL) +
+    theme(
+      axis.text.x        = element_blank(),
+      axis.text.y        = element_blank(),
+      axis.title.x       = element_blank(),
+      axis.title.y       = element_blank(),
+      axis.ticks.x       = element_blank(),
+      axis.ticks.y       = element_blank(),
+      axis.line          = element_blank(),
+      plot.title         = element_text(color = INK, size = 12, hjust = 0),
+      plot.background    = element_rect(fill = SURFACE, color = NA),
+      panel.background   = element_rect(fill = SURFACE, color = NA)
+    )
+
+  if (flank_ellipsis) {
+    p <- p +
+      annotate("text", x = 0.1, y = 1, label = "...", size = 10,
+               color = INK_MUTED, fontface = "bold") +
+      annotate("text", x = width + 0.9, y = 1, label = "...", size = 10,
+               color = INK_MUTED, fontface = "bold") +
+      coord_cartesian(clip = "off") +
+      theme(plot.margin = margin(t = 5, r = 20, b = 5, l = 20))
+  }
+
+  p
+}
+```
+
+```{r motif-plot, fig.width=5, fig.height=3}
+pwm <- simulate_pwm(width = 10)
+plot_seqlogo(pwm)
+```
+
+```{r motif-save}
+ggsave(
+  filename = "simulated_tf_motif_logo.pdf",
+  plot = plot_seqlogo(pwm),
+  device = "pdf",
+  width = 2.5, height = 1.2, units = "in"
+)
+```
+
+A second, flatter motif: same seed (so it's the same underlying random draw as
+the first), with position 6's dominant base swapped from T to A, and lower
+conservation throughout so no position gets as tall.
+
+```{r motif-plot-2, fig.width=5, fig.height=3}
+pwm2 <- simulate_pwm(
+  width = 10,
+  center_conservation = 0.55,
+  edge_conservation = 0.18,
+  seed = 42,
+  overrides = list(`6` = "A")
+)
+plot_seqlogo(pwm2)
+```
+
+```{r motif-save-2}
+ggsave(
+  filename = "simulated_tf_motif_logo_2.pdf",
+  plot = plot_seqlogo(pwm2),
+  device = "pdf",
+  width = 2.5, height = 1.2, units = "in"
+)
+```
+
+A third figure: the two logos above, combined side by side.
+
+```{r motif-plot-combined, fig.width=8, fig.height=3}
+plot_seqlogo(pwm) | plot_seqlogo(pwm2)
+```
+
+```{r motif-save-combined}
+ggsave(
+  filename = "simulated_tf_motif_logo_combined.pdf",
+  plot = plot_seqlogo(pwm) | plot_seqlogo(pwm2),
+  device = "pdf",
+  width = 5, height = 1.2, units = "in"
+)
+```
+
+A fourth, fully-conserved logo: every position has exactly one allele at
+probability 1 (uniform 2 bits everywhere), rather than a mix of bases like
+the first two -- a hard consensus sequence with no degeneracy.
+
+```{r motif-consensus-functions}
+#' Simulate a fully-conserved "hard" consensus PWM: probability 1 for one
+#' base at every position, 0 for the other three -- uniform height (2 bits)
+#' across the whole logo, no degeneracy at any position.
+simulate_consensus_pwm <- function(width = 10, seed = 3, consensus = NULL) {
+  set.seed(seed)
+  bases <- c("A", "C", "G", "T")
+  if (is.null(consensus)) consensus <- sample(bases, width, replace = TRUE)
+
+  pwm <- matrix(0, nrow = 4, ncol = width, dimnames = list(bases, NULL))
+  for (i in seq_len(width)) pwm[consensus[i], i] <- 1
+  pwm
+}
+```
+
+```{r motif-plot-consensus, fig.width=5, fig.height=3}
+pwm_consensus <- simulate_consensus_pwm(width = 20)
+plot_seqlogo(pwm_consensus, flank_ellipsis = FALSE)
+```
+
+```{r motif-save-consensus}
+ggsave(
+  filename = "simulated_tf_motif_logo_consensus.pdf",
+  plot = plot_seqlogo(pwm_consensus, flank_ellipsis = FALSE),
+  device = "pdf",
+  width = 5.5, height = 1.2, units = "in"
+)
+```
+
+## Simulated GWAS Manhattan plot
+
+```{r manhattan-functions}
+#' Simulate GWAS summary statistics across chromosomes.
+#'
+#' Per-SNP p-values are uniform under the null; a handful of association
+#' peaks are injected as localized bumps in -log10(p) (mimicking an LD
+#' block around a causal variant), similar in spirit to the ChIP-seq peak
+#' simulation above.
+simulate_gwas <- function(n_chr = 22,
+                           snps_per_chr = 300,
+                           n_peaks = 4,
+                           peak_height = 6,
+                           peak_width_frac = 0.02,
+                           seed = 1) {
+  set.seed(seed)
+  chr_lengths <- round(3e8 * exp(-0.06 * seq_len(n_chr)))
+
+  df <- purrr::map_dfr(seq_len(n_chr), function(chr) {
+    len <- chr_lengths[chr]
+    pos <- sort(sample(seq_len(len), snps_per_chr))
+    tibble(chr = chr, pos = pos, neglog10p = -log10(runif(snps_per_chr)))
+  })
+
+  peak_chrs <- sample(seq_len(n_chr), n_peaks)
+  for (chr_i in peak_chrs) {
+    len <- chr_lengths[chr_i]
+    peak_pos <- sample(seq_len(len), 1)
+    width <- len * peak_width_frac
+    idx <- which(df$chr == chr_i)
+    d <- abs(df$pos[idx] - peak_pos)
+    bump <- peak_height * exp(-0.5 * (d / width)^2) * runif(length(idx), 0.7, 1)
+    df$neglog10p[idx] <- df$neglog10p[idx] + bump
+  }
+
+  chr_offsets <- setNames(c(0, cumsum(as.numeric(chr_lengths))[-n_chr]), seq_len(n_chr))
+  df |>
+    mutate(cum_pos = pos + chr_offsets[as.character(chr)],
+           chr = factor(chr, levels = seq_len(n_chr)))
+}
+
+#' Plot a black-and-white Manhattan plot (points alternate ink/muted-ink by
+#' chromosome; identity is carried by the x-axis chromosome labels, not color).
+plot_manhattan <- function(df,
+                            genome_wide_threshold = -log10(5e-8),
+                            suggestive_threshold = -log10(1e-5),
+                            title = NULL,
+                            subtitle = "Genome-wide association") {
+  chr_axis <- df |>
+    group_by(chr) |>
+    summarise(mid = (min(cum_pos) + max(cum_pos)) / 2, .groups = "drop")
+
+  ggplot(df, aes(cum_pos, neglog10p, color = chr)) +
+    geom_point(size = 0.7, alpha = 0.85, show.legend = FALSE) +
+    # geom_hline(yintercept = genome_wide_threshold, linetype = "dashed",
+    #            color = INK, linewidth = 0.4) +
+    # geom_hline(yintercept = suggestive_threshold, linetype = "dotted",
+    #            color = INK_MUTED, linewidth = 0.4) +
+    scale_color_manual(values = rep(c(INK, INK_MUTED), length.out = nlevels(df$chr))) +
+    scale_x_continuous(breaks = chr_axis$mid, labels = chr_axis$chr,
+                        expand = expansion(mult = 0.01)) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.08))) +
+    labs(title = title, subtitle = subtitle, x = "Chromosome", y = "-log10(pvalue)") +
+    theme_minimal(base_size = 11) +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.grid.major.y = element_line(color = GRID_COL, linewidth = 0.3),
+      axis.text.x   = element_text(size = 6, color = INK),
+      axis.text.y   = element_blank(),
+      axis.ticks.y  = element_blank(),
+      axis.title.x  = element_text(color = INK, size = 9),
+      axis.title.y  = element_blank(),
+      plot.title    = element_text(color = INK, size = 12, hjust = 0),
+      plot.subtitle = element_text(color = INK_MUTED, size = 10, hjust = 0),
+      plot.background  = element_rect(fill = SURFACE, color = NA),
+      panel.background = element_rect(fill = SURFACE, color = NA)
+    )
+}
+```
+
+```{r manhattan-plot, fig.width=9, fig.height=3.5}
+gwas_df <- simulate_gwas()
+plot_manhattan(gwas_df)
+```
+
+
+```{r}
+ggsave(
+  filename = "/beagle3/haky/users/temi/projects/TFXcan/misc/simulated_manhattan_plot.pdf",
+  plot = plot_manhattan(gwas_df),
+  device = "pdf",
+  width = 5, height = 1.2, units = "in"
+)
+```
+
+## Simulated multi-track epigenome locus view
+
+```{r epigenome-functions}
+#' Simulate a set of epigenomic tracks over one small locus: sharp promoter
+#' and accessibility peaks, a broader active-enhancer mark, transcription
+#' decaying across the gene body, a repressive domain and methylation that
+#' anti-correlate with the active marks, and CTCF boundary peaks flanking
+#' the locus -- the standard "browser track" view of a locus's epigenome.
+simulate_epigenome_locus <- function(start = 1e6,
+                                      length = 4000,
+                                      n_points = 800,
+                                      promoter_frac = 0.25,
+                                      enhancer_frac = 0.65,
+                                      seed = 11,
+                                      smooth_window = 25) {
+  set.seed(seed)
+  x <- seq(start, start + length, length.out = n_points)
+  bump <- function(x, center, width) exp(-0.5 * ((x - center) / width)^2)
+
+  promoter <- start + promoter_frac * length
+  enhancer <- start + enhancer_frac * length
+  domain_center <- (promoter + enhancer) / 2
+  domain_width  <- (enhancer - promoter)
+
+  h3k4me3  <- 2 + 40 * bump(x, promoter, 60)
+  h3k27ac  <- 3 + 15 * bump(x, promoter, 150) + 30 * bump(x, enhancer, 200)
+  atac     <- 1 + 25 * bump(x, promoter, 40) + 20 * bump(x, enhancer, 50)
+  cage     <- 1 + 45 * bump(x, promoter, 25)
+  h3k27me3 <- 24 - 20 * bump(x, domain_center, domain_width)
+  ctdf_left  <- start + 0.04 * length
+  ctdf_right <- start + 0.94 * length
+  ctcf     <- 1 + 35 * bump(x, ctdf_left, 50) + 32 * bump(x, ctdf_right, 50)
+
+  smooth <- function(v, window = smooth_window) {
+    s <- as.numeric(stats::filter(v, rep(1 / window, window), sides = 2))
+    s <- zoo::na.locf(s, na.rm = FALSE)
+    zoo::na.locf(s, na.rm = FALSE, fromLast = TRUE)
+  }
+  noisy_track <- function(mu) smooth(rpois(length(mu), lambda = pmax(mu, 0.05)))
+
+  tibble(
+    position = x,
+    H3K4me3  = noisy_track(h3k4me3),
+    H3K27ac  = noisy_track(h3k27ac),
+    ATAC     = noisy_track(atac),
+    CAGE     = noisy_track(cage),
+    H3K27me3 = noisy_track(h3k27me3),
+    CTCF     = noisy_track(ctcf)
+  )
+}
+
+#' Stack the simulated tracks genome-browser-style: one row per mark, a
+#' fixed categorical color per track (identity, not magnitude), no axes --
+#' just the shapes, for a compact illustration.
+plot_epigenome_tracks <- function(df) {
+  track_colors <- c(H3K4me3 = BLUE, H3K27ac = "#1baf7a", ATAC = "#eda100",
+                     CAGE = "#4a3aa7", H3K27me3 = "#e34948", CTCF = "#e87ba4")
+  track_names <- names(track_colors)
+
+  make_panel <- function(track) {
+    ggplot(df, aes(x = position, y = .data[[track]])) +
+      geom_area(fill = track_colors[[track]], alpha = 0.18) +
+      geom_line(color = track_colors[[track]], linewidth = 0.7) +
+      scale_x_continuous(expand = expansion(mult = c(0, 0.02))) +
+      scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+      labs(x = NULL, y = track) +
+      theme_minimal(base_size = 10) +
+      theme(
+        panel.grid   = element_blank(),
+        axis.text    = element_blank(),
+        axis.ticks   = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(color = INK_MUTED, size = 8, angle = 0,
+                                     vjust = 0.5, hjust = 1),
+        plot.background  = element_rect(fill = SURFACE, color = NA),
+        panel.background = element_rect(fill = SURFACE, color = NA),
+        plot.margin = margin(t = 2, r = 8, b = 2, l = 2)
+      )
+  }
+
+  panels <- lapply(track_names, make_panel)
+  patchwork::wrap_plots(panels, ncol = 1)
+}
+```
+
+```{r epigenome-plot, fig.width=6, fig.height=6}
+epi_df <- simulate_epigenome_locus()
+plot_epigenome_tracks(epi_df)
+```
+```{r}
+ggsave(
+  filename = "/beagle3/haky/users/temi/projects/TFXcan/misc/simulated_epigenomes.pdf",
+  plot = plot_epigenome_tracks(epi_df),
+  device = "pdf",
+  width = 2, height = 2.2, units = "in"
+)
+```
+
+## Simulated network
+
+```{r network-functions}
+#' Simulate several small random (Erdos-Renyi) networks and scatter them
+#' across a shared canvas. Each network gets its own force-directed layout,
+#' then that layout is translated to a randomly placed (non-overlapping)
+#' cluster center, so all networks can be drawn on one set of axes.
+simulate_multi_network <- function(n_networks = 5,
+                                    min_nodes = 4, max_nodes = 8,
+                                    edge_prob = 0.45,
+                                    canvas_size = 10,
+                                    min_separation = 3.2,
+                                    seed = 5) {
+  set.seed(seed)
+
+  centers <- tibble(cx = numeric(0), cy = numeric(0))
+  while (nrow(centers) < n_networks) {
+    cand <- c(runif(1, 0, canvas_size), runif(1, 0, canvas_size))
+    ok <- nrow(centers) == 0 ||
+      min(sqrt((centers$cx - cand[1])^2 + (centers$cy - cand[2])^2)) > min_separation
+    if (ok) centers <- bind_rows(centers, tibble(cx = cand[1], cy = cand[2]))
+  }
+
+  nodes_list <- vector("list", n_networks)
+  edges_list <- vector("list", n_networks)
+
+  for (i in seq_len(n_networks)) {
+    n_nodes <- sample(min_nodes:max_nodes, 1)
+    g <- igraph::sample_gnp(n_nodes, p = edge_prob)
+    xy <- igraph::layout_with_fr(g)
+
+    nodes_list[[i]] <- tibble(
+      network = i,
+      id = seq_len(n_nodes),
+      x = xy[, 1] * 0.6 + centers$cx[i],
+      y = xy[, 2] * 0.6 + centers$cy[i]
+    )
+
+    em <- igraph::as_edgelist(g, names = FALSE)
+    edges_list[[i]] <- if (nrow(em) > 0) {
+      tibble(
+        network = i,
+        x    = nodes_list[[i]]$x[em[, 1]],
+        y    = nodes_list[[i]]$y[em[, 1]],
+        xend = nodes_list[[i]]$x[em[, 2]],
+        yend = nodes_list[[i]]$y[em[, 2]]
+      )
+    } else {
+      tibble(network = integer(0), x = double(0), y = double(0),
+             xend = double(0), yend = double(0))
+    }
+  }
+
+  list(
+    nodes = bind_rows(nodes_list) |> mutate(network = factor(network)),
+    edges = bind_rows(edges_list) |> mutate(network = factor(network, levels = levels(bind_rows(nodes_list)$network)))
+  )
+}
+
+#' Plot the scattered networks: one fixed categorical hue per network so
+#' each cluster's identity is unambiguous, muted edges, no axes or legend
+#' (cluster membership is already visually obvious from color + position).
+plot_multi_network <- function(net_data) {
+  net_colors <- setNames(
+    c(BLUE, "#1baf7a", "#eda100", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834", "#008300"),
+    NULL
+  )[seq_len(nlevels(net_data$nodes$network))]
+  names(net_colors) <- levels(net_data$nodes$network)
+
+  ggplot() +
+    geom_segment(data = net_data$edges,
+                 aes(x = x, y = y, xend = xend, yend = yend, color = network),
+                 linewidth = 0.3, alpha = 0.8, show.legend = FALSE) +
+    geom_point(data = net_data$nodes, aes(x = x, y = y, color = network),
+               size = 2, show.legend = FALSE) +
+    scale_color_manual(values = net_colors) +
+    coord_equal() +
+    theme_void() +
+    theme(
+      plot.background  = element_rect(fill = SURFACE, color = NA),
+      panel.background = element_rect(fill = SURFACE, color = NA)
+    )
+}
+```
+
+```{r network-plot, fig.width=6, fig.height=6}
+multi_net <- simulate_multi_network()
+plot_multi_network(multi_net)
+```
+
+```{r}
+ggsave(
+  filename = "/beagle3/haky/users/temi/projects/TFXcan/misc/simulated_networks.pdf",
+  plot = plot_multi_network(multi_net),
+  device = "pdf",
+  width = 2, height = 2.2, units = "in"
+)
+```
+
+## Simulated multilayer perceptron schematic
+
+```{r mlp-functions}
+#' Simulate a feed-forward MLP's node/edge layout: one column per layer,
+#' nodes stacked and vertically centered within each column, and every
+#' node in layer i connected to every node in layer i+1 (fully connected).
+simulate_mlp <- function(layer_sizes = c(4, 6, 6, 3), layer_gap = 3, seed = 1) {
+  set.seed(seed)
+  n_layers <- length(layer_sizes)
+
+  nodes <- purrr::imap_dfr(layer_sizes, function(n, layer) {
+    tibble(layer = layer, node = seq_len(n),
+           x = layer * layer_gap, y = seq_len(n) - (n + 1) / 2)
+  })
+
+  edges <- purrr::map_dfr(seq_len(n_layers - 1), function(i) {
+    from <- nodes[nodes$layer == i, ]
+    to   <- nodes[nodes$layer == i + 1, ]
+    combos <- expand.grid(from_i = seq_len(nrow(from)), to_i = seq_len(nrow(to)))
+    tibble(
+      x0 = from$x[combos$from_i], y0 = from$y[combos$from_i],
+      x1 = to$x[combos$to_i],     y1 = to$y[combos$to_i]
+    )
+  })
+
+  list(nodes = nodes, edges = edges)
+}
+
+#' Plot the MLP schematic: one fixed categorical color per layer (column
+#' position already conveys layer identity, so no legend), muted edges,
+#' no axes -- a clean architecture diagram.
+#' 
+#' 
+plot_mlp <- function(mlp_data) {
+  n_layers <- length(unique(mlp_data$nodes$layer))
+  layer_colors <- rep(c(BLUE, "#1baf7a", "#eda100", "#4a3aa7", "#e34948", "#e87ba4"),
+                       length.out = n_layers)
+
+  ggplot() +
+    geom_segment(data = mlp_data$edges, aes(x = x0, y = y0, xend = x1, yend = y1), linewidth = 0.1, alpha = 0.7) +
+    geom_point(data = mlp_data$nodes, aes(x = x, y = y, color = factor(layer)),
+               size = 1, show.legend = FALSE, color = 'black', fill = "grey") +
+    scale_color_manual(values = layer_colors) +
+    coord_equal() +
+    theme_void() +
+    theme(
+      plot.background  = element_rect(fill = SURFACE, color = NA),
+      panel.background = element_rect(fill = SURFACE, color = NA)
+    )
+}
+```
+
+```{r mlp-plot, fig.width=7, fig.height=5}
+mlp_data <- simulate_mlp(layer_sizes = c(4, 6, 6, 3))
+plot_mlp(mlp_data)
+```
+
+
+```{r}
+ggsave(
+  filename = "/beagle3/haky/users/temi/projects/TFXcan/misc/simulated_mlp.pdf",
+  plot = plot_mlp(mlp_data),
+  device = "pdf",
+  width = 1, height = 2, units = "in"
+)
+```

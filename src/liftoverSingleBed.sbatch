@@ -1,4 +1,9 @@
 #!/bin/bash
+# Author: Temi
+# Date: Wednesday June 18 2025
+# Description: Lifts over ONE bed file's coordinates between genome builds using UCSC's liftOver binary.
+# Usage: sbatch liftoverSingleBed.sbatch <liftover_exe> <chain_file> <input_bed> <output_prefix> <unmapped_prefix>
+
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4

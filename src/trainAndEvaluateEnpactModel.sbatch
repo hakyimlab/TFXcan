@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Author: Temi
-# Description: S-PrediXcan on EnpactScores
-# Usage: sbatch s-predixcan.sbatch
+# Description: trains an Enpact model (if missing) then evaluates it on train/test data
+# Usage: sbatch trainAndEvaluateEnpactModel.sbatch train_script evaluate_script train_data eval_data model_rds basename_eval_output
 # Date: Wed Apr 3 2024
 # Dependencies: 
 

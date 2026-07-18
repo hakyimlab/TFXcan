@@ -1,11 +1,16 @@
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: apply Enpact weights to one individual's HDF5 features, output per-locus Enpact scores
+# Usage: Rscript enpact_predict_hdf5.R [options]
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
     make_option("--loci_list", help='a list of loci'),
-    make_option("--weights", help='rds file of the splits'),
-    make_option("--individual", help='rds file of the splits'),
-    make_option("--input_directory", help='rds file of the splits'),
-    make_option("--output_basename", help='.rds file to be created as the model')
+    make_option("--weights", help="Path to Enpact weights file (tsv, with a 'feature' column)"),
+    make_option("--individual", help='Individual ID (used to find <input_directory>/<individual>.h5)'),
+    make_option("--input_directory", help='Directory containing per-individual HDF5 feature files'),
+    make_option("--output_basename", help='Output basename; writes <basename>.enpact_scores.tsv.gz')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -36,7 +41,7 @@ if(file.exists(iFile)){
             epigenome <- t(matrix(rowMeans(exc)))
             return(epigenome)
         }, error = function(err){
-            return(matrix(NA, ncol = 5313, nrow = 1))
+            return(matrix(NA, ncol = 5313, nrow = 1)) # 5313 = number of Enformer output tracks
         })
     }, .progress = TRUE) %>% do.call('rbind', .)
     rownames(tempout) <- valid_tss
@@ -49,7 +54,7 @@ if(file.exists(iFile)){
 # print(tempout[1:5, 1:5])
 
 
-# predict using weights
+# predict using weights: features x weight matrix, plus intercept (row 1 of wgts)
 Xpred <- as.matrix(tempout %*% wgts[-1,,drop = FALSE]) + wgts[1,]
 # print(Xpred[1:5, 1:5])
 dtpred <- Xpred %>% as.data.table(keep.rownames = 'locus')

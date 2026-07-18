@@ -2,7 +2,7 @@
 
 # Author: Temi
 # Description: Predict using ltfpred in PrediXcan framework
-# Usage: sbatch predict_baca_with_ltfpred.sbatch
+# Usage: sbatch predictENPACTscores.sbatch db_name model_db txt_genotypes txt_samples exec_file output_folder output_basename
 # Date: Mon July 24 2023
 # Dependencies: 
 

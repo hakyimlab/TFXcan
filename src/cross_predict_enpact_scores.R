@@ -1,10 +1,15 @@
+# Author: Temi
+# Date: Tuesday February 24 2026
+# Description: apply one TF-tissue model's Enpact weights to a (possibly different-context) test feature matrix, i.e. cross-prediction
+# Usage: Rscript cross_predict_enpact_scores.R [options]
+
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--tf_tissue", help=''),
-    make_option("--weights_file", help='.txt file to be created'),
-    make_option("--output_basename", help='.txt file to be created'),
-    make_option("--input_file", help='.txt file to be created')
+    make_option("--tf_tissue", help='TF_tissue model name (column in the weights file) to apply'),
+    make_option("--weights_file", help='Path to compiled Enpact weights file (tsv.gz)'),
+    make_option("--output_basename", help='Output basename; writes <basename>.test.<tf_tissue>.CHIPPEAKS.tsv.gz'),
+    make_option("--input_file", help='Path to test feature matrix csv (locus + f_* columns)')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))

@@ -1,18 +1,18 @@
 # Author: Temi
 # Date: Thursday July 27 2023
 # Description: script to train elastic net TFPred models
-# Usage: Rscript train_enet.R [options]
+# Usage: Rscript train_enpact.R [options]
 
 suppressPackageStartupMessages(library("optparse"))
 
 option_list <- list(
-    make_option("--train_data_file", help='data to train with enet'),
-    make_option("--features_to_remove", help='', default = NULL),
+    make_option("--train_data_file", help='Path to training data matrix (features + binding_class column)'),
+    make_option("--features_to_remove", help='Comma-separated feature columns to drop before training', default = NULL),
     make_option("--nfolds", type="integer", default=5L, help='How many cv folds?'),
-    make_option("--metadata", help='data to train with enet'),
-    make_option("--weights_file", help='data to train with enet'),
-    make_option("--model_rds_file", help='data to train with enet'),
-    make_option("--ncores", default = 12)
+    make_option("--metadata", help='Label used as the column name for the weights output'),
+    make_option("--weights_file", help='Output path for the model weights (gzipped tsv)'),
+    make_option("--model_rds_file", help='Output path to save the trained cv.glmnet model as .rds'),
+    make_option("--ncores", default = 12, help='Number of cores for parallel cross-validation')
 )
 
 opt <- parse_args(OptionParser(option_list=option_list))
@@ -61,6 +61,7 @@ set.seed(seed)
 
 doParallel::registerDoParallel(cl)
 print(glue('INFO - training enet model'))
+# alpha=0.5: elastic net, equal mix of L1/L2 penalty
 cv_model <- glmnet::cv.glmnet(x=X_train, y=y_train$binding_class, family = "binomial", type.measure = "auc", alpha = 0.5, keep=T, parallel=T, nfolds=opt$nfolds, trace.it=F)
 
 print(cv_model)
