@@ -20,6 +20,16 @@ notebooks/recreateAnalysis_cache/*
 notebooks/recreateAnalysis_files/*
 notebooks/prepare-gene-modules_cache/*
 notebooks/prepare-gene-modules_files/*
+TFXcan-analysis-data.tar.gz
+TFXcan_results.height.prca.t2d.xlsx
+metadata/cell_line_annotations.tsv
+metadata/cell_line_cellosaurus_lookup.py
+metadata/cell_line_cellosaurus_lookup.tsv
+notebooks/gather_results.qmd
+src/covariance_builder.sbatch
+tf_tissue_annotations.tsv
+tfxcan_results.xlsx
+zenodo/**
 
 # include
 !scripts/

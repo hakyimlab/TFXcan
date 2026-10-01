@@ -11,8 +11,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --job-name=predict_with_lenpact
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/predict_lenpact_scores.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/predict_lenpact_scores.err
+#SBATCH --output=./logs/predict_lenpact_scores.out
+#SBATCH --error=./logs/predict_lenpact_scores.err
 #SBATCH --time=01:00:00	
 #SBATCH --partition=caslake
 

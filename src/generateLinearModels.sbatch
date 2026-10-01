@@ -11,8 +11,8 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --time=36:00:00
 #SBATCH --mem-per-cpu=1G
-#SBATCH --error=/beagle3/haky/users/temi/projects/Enpact/logs/lEnpact_training.err
-#SBATCH --output=/beagle3/haky/users/temi/projects/Enpact/logs/lEnpact_training.log
+#SBATCH --error=/beagle3/haky/users/temi/projects/alphagenome/logs/lAgEnpact_training.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/alphagenome/logs/lAgEnpact_training.log
 #SBATCH --account=pi-haky
 
 # source ~/.bashrc
@@ -48,8 +48,6 @@ source ~/.bashrc
 # # module unload python
 conda activate ${6} 
 export JAVA_HOME=${6}
-
-
 
 # echo $PATH
 # echo $PYTHONPATH

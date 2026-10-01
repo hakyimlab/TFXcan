@@ -8,14 +8,14 @@
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=6
-#SBATCH --mem-per-cpu=12G
+#SBATCH --cpus-per-task=10
+#SBATCH --mem-per-cpu=20G
 #SBATCH --job-name=tfxcan-association
 #SBATCH --account=pi-haky
-#SBATCH --output=/beagle3/haky/users/temi/projects/TFXcan/logs/tfxcan-association.out
-#SBATCH --error=/beagle3/haky/users/temi/projects/TFXcan/logs/tfxcan-association.err
+#SBATCH --output=/beagle3/haky/users/temi/projects/alphagenome/logs/tfxcan-association.out
+#SBATCH --error=/beagle3/haky/users/temi/projects/alphagenome/logs/tfxcan-association.err
 #SBATCH --time=24:00:00
-#SBATCH --partition=caslake
+#SBATCH --partition=bigmem
 
 # module load openmpi
 # module load parallel
